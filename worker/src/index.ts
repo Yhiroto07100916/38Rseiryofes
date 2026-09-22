@@ -1,6 +1,8 @@
 import { handleUsers } from "./routes/users"
 import { handleAuth } from "./routes/auth"
 import { handleRoles, handleUserRole, handleUserRoles } from "./routes/roles"
+import { handleAccountRoles, handleUserAccountRoles } from "./routes/account-roles"
+import { requireAccountRole } from "./lib/authz"
 
 export default {
   async fetch(request, env): Promise<Response> {
@@ -49,6 +51,57 @@ export default {
         return await handleAuth(request, env, pathParts)
       } catch (error) {
         console.error("Auth API error:", error)
+
+        return Response.json(
+          { error: "Internal Server Error" },
+          { status: 500 },
+        )
+      }
+    }
+
+    if (
+      url.pathname === "/api/account-roles" ||
+      url.pathname.startsWith("/api/account-roles/")
+    ) {
+      const path = url.pathname.slice("/api/account-roles".length)
+      const pathParts = path
+        .split("/")
+        .filter(Boolean)
+
+      try {
+        return await handleAccountRoles(request, env, pathParts)
+      } catch (error) {
+        console.error("Account roles API error:", error)
+
+        return Response.json(
+          { error: "Internal Server Error" },
+          { status: 500 },
+        )
+      }
+    }
+
+    if (
+      url.pathname.startsWith("/api/users/") &&
+      url.pathname.includes("/account-roles")
+    ) {
+      const path = url.pathname.slice("/api/users".length)
+      const pathParts = path
+        .split("/")
+        .filter(Boolean)
+
+      try {
+        if (
+          pathParts[1] === "account-roles" &&
+          (pathParts.length === 2 || pathParts.length === 3)
+        ) {
+          return await handleUserAccountRoles(
+            request,
+            env,
+            [pathParts[0], ...(pathParts.length === 3 ? [pathParts[2]] : [])],
+          )
+        }
+      } catch (error) {
+        console.error("User account roles API error:", error)
 
         return Response.json(
           { error: "Internal Server Error" },
