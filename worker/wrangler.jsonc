@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "38r-seiryofes",
   "main": "src/index.ts",
-  "compatibility_date": "2026-09-16",
+    "compatibility_date": "2026-09-16",
   "observability": {
     "enabled": true
   },
@@ -10,7 +10,8 @@
     {
       "binding": "DB",
       "database_name": "38r-festival-db",
-      "database_id": "289d1209-e2b1-4c79-8ecf-670a69f0c477"
+      "database_id": "289d1209-e2b1-4c79-8ecf-670a69f0c477",
+      "migrations_dir": "../migrations"
     }
   ]
 }
