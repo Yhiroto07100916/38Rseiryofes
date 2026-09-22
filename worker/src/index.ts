@@ -1,4 +1,5 @@
 import { handleUsers } from "./routes/users"
+import { handleAuth } from "./routes/auth"
 import { handleRoles, handleUserRole, handleUserRoles } from "./routes/roles"
 
 export default {
@@ -35,6 +36,27 @@ export default {
       }
     }
 
+    if (
+      url.pathname === "/api/auth" ||
+      url.pathname.startsWith("/api/auth/")
+    ) {
+      const path = url.pathname.slice("/api/auth".length)
+      const pathParts = path
+        .split("/")
+        .filter(Boolean)
+
+      try {
+        return await handleAuth(request, env, pathParts)
+      } catch (error) {
+        console.error("Auth API error:", error)
+
+        return Response.json(
+          { error: "Internal Server Error" },
+          { status: 500 },
+        )
+      }
+    }
+
     if (url.pathname === "/api/roles" || url.pathname.startsWith("/api/roles/")) {
       const path = url.pathname.slice("/api/roles".length)
       const pathParts = path
@@ -63,6 +85,18 @@ export default {
         .filter(Boolean)
 
       try {
+        const { requireAccountRole } = await import("./lib/authz")
+
+        const auth = await requireAccountRole(
+          request,
+          env,
+          "admin",
+        )
+
+        if (auth instanceof Response) {
+          return auth
+        }
+
         if (pathParts[1] === "roles" && pathParts.length === 2) {
           return await handleUserRoles(
             request,

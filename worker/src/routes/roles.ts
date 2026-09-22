@@ -1,3 +1,5 @@
+import { requireAccountRole } from "../lib/authz"
+
 export interface Role {
   id: string
   name: string
@@ -24,6 +26,17 @@ export async function handleRoles(
   env: Env,
   pathParts: string[],
 ): Promise<Response> {
+
+  const auth = await requireAccountRole(
+    request,
+    env,
+    "admin",
+  )
+
+  if (auth instanceof Response) {
+    return auth
+  }
+
   if (request.method === "GET") {
     if (pathParts.length === 0) {
       const result = await env.DB
