@@ -1,3 +1,4 @@
+import { requireAccountRole } from "../lib/authz"
 import { hashPassword, verifyPassword } from "../lib/password"
 import {
   createExpiredSessionCookie,
@@ -126,6 +127,8 @@ async function handleLogin(
     user.id,
   )
 
+  const secure = new URL(request.url).protocol === "https:"
+
   return Response.json(
     {
       user: {
@@ -137,7 +140,10 @@ async function handleLogin(
     },
     {
       headers: {
-        "Set-Cookie": createSessionCookie(sessionId),
+        "Set-Cookie": createSessionCookie(
+          sessionId,
+          secure,
+        ),
       },
     },
   )
@@ -149,11 +155,15 @@ async function handleLogout(
 ): Promise<Response> {
   await deleteSession(request, env)
 
+  const secure = new URL(request.url).protocol === "https:"
+
   return Response.json(
     { message: "Logged out" },
     {
       headers: {
-        "Set-Cookie": createExpiredSessionCookie(),
+        "Set-Cookie": createExpiredSessionCookie(
+          secure,
+        ),
       },
     },
   )
@@ -324,5 +334,80 @@ async function handleChangePassword(
 
   return Response.json({
     message: "Password changed successfully",
+  })
+}
+
+
+export async function handleAdminSetPassword(
+  request: Request,
+  env: Env,
+  userId: string,
+): Promise<Response> {
+  const auth = await requireAccountRole(request, env, "admin")
+  if (auth instanceof Response) {
+    return auth
+  }
+
+  const body = await request.json<{
+    password?: unknown
+  }>()
+
+  if (
+    typeof body.password !== "string" ||
+    body.password.length < 8
+  ) {
+    return Response.json(
+      {
+        error: "パスワードは8文字以上で入力してください",
+      },
+      { status: 400 },
+    )
+  }
+
+  const user = await env.DB
+    .prepare(
+      `
+        SELECT id
+        FROM users
+        WHERE id = ?
+        LIMIT 1
+      `,
+    )
+    .bind(userId)
+    .first<{ id: string }>()
+
+  if (!user) {
+    return Response.json(
+      { error: "User not found" },
+      { status: 404 },
+    )
+  }
+
+  const passwordHash = await hashPassword(body.password)
+
+  await env.DB
+    .prepare(
+      `
+        UPDATE users
+        SET password_hash = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+    )
+    .bind(passwordHash, userId)
+    .run()
+
+  await env.DB
+    .prepare(
+      `
+        DELETE FROM sessions
+        WHERE user_id = ?
+      `,
+    )
+    .bind(userId)
+    .run()
+
+  return Response.json({
+    message: "Password updated",
   })
 }

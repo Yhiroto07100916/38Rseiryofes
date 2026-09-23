@@ -1,18 +1,68 @@
 import { handleUsers } from "./routes/users"
-import { handleAuth } from "./routes/auth"
+import { handleAdminSetPassword, handleAuth } from "./routes/auth"
 import { handleRoles, handleUserRole, handleUserRoles } from "./routes/roles"
 import { handleAccountRoles, handleUserAccountRoles } from "./routes/account-roles"
-import { requireAccountRole } from "./lib/authz"
+
+function getCorsHeaders(request: Request): Headers {
+  const origin = request.headers.get("Origin")
+  const headers = new Headers()
+
+  if (
+    origin === "http://localhost:3000" ||
+    origin === "http://127.0.0.1:3000"
+  ) {
+    headers.set("Access-Control-Allow-Origin", origin)
+    headers.set("Access-Control-Allow-Credentials", "true")
+    headers.set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+    headers.set(
+      "Access-Control-Allow-Headers",
+      "Content-Type",
+    )
+    headers.set("Vary", "Origin")
+  }
+
+  return headers
+}
+
+function withCors(
+  request: Request,
+  response: Response,
+): Response {
+  const headers = new Headers(response.headers)
+  const corsHeaders = getCorsHeaders(request)
+
+  corsHeaders.forEach((value, key) => {
+    headers.set(key, value)
+  })
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
+}
 
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url)
 
+    if (request.method === "OPTIONS") {
+      return withCors(
+        request,
+        new Response(null, {
+          status: 204,
+        }),
+      )
+    }
+
     if (url.pathname === "/health") {
-      return Response.json({
-        status: "ok",
-        service: "38r-seiryofes",
-      })
+      return withCors(
+        request,
+        Response.json({
+          status: "ok",
+          service: "38r-seiryofes",
+        }),
+      )
     }
 
     if (url.pathname === "/health/db") {
@@ -21,19 +71,25 @@ export default {
           .prepare("SELECT 1 AS ok")
           .first<{ ok: number }>()
 
-        return Response.json({
-          status: "ok",
-          database: result?.ok === 1 ? "connected" : "unknown",
-        })
+        return withCors(
+          request,
+          Response.json({
+            status: "ok",
+            database: result?.ok === 1 ? "connected" : "unknown",
+          }),
+        )
       } catch (error) {
         console.error("D1 connection error:", error)
 
-        return Response.json(
-          {
-            status: "error",
-            database: "disconnected",
-          },
-          { status: 500 },
+        return withCors(
+          request,
+          Response.json(
+            {
+              status: "error",
+              database: "disconnected",
+            },
+            { status: 500 },
+          ),
         )
       }
     }
@@ -48,13 +104,19 @@ export default {
         .filter(Boolean)
 
       try {
-        return await handleAuth(request, env, pathParts)
+        return withCors(
+          request,
+          await handleAuth(request, env, pathParts),
+        )
       } catch (error) {
         console.error("Auth API error:", error)
 
-        return Response.json(
-          { error: "Internal Server Error" },
-          { status: 500 },
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
+            { status: 500 },
+          ),
         )
       }
     }
@@ -69,14 +131,57 @@ export default {
         .filter(Boolean)
 
       try {
-        return await handleAccountRoles(request, env, pathParts)
+        return withCors(
+          request,
+          await handleAccountRoles(request, env, pathParts),
+        )
       } catch (error) {
         console.error("Account roles API error:", error)
 
-        return Response.json(
-          { error: "Internal Server Error" },
-          { status: 500 },
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
+            { status: 500 },
+          ),
         )
+      }
+    }
+
+    if (
+      url.pathname.startsWith("/api/users/") &&
+      url.pathname.endsWith("/password")
+    ) {
+      const path = url.pathname.slice("/api/users".length)
+      const pathParts = path
+        .split("/")
+        .filter(Boolean)
+
+      if (
+        request.method === "PATCH" &&
+        pathParts.length === 2 &&
+        pathParts[1] === "password"
+      ) {
+        try {
+          return withCors(
+            request,
+            await handleAdminSetPassword(
+              request,
+              env,
+              pathParts[0],
+            ),
+          )
+        } catch (error) {
+          console.error("Admin password API error:", error)
+
+          return withCors(
+            request,
+            Response.json(
+              { error: "Internal Server Error" },
+              { status: 500 },
+            ),
+          )
+        }
       }
     }
 
@@ -94,36 +199,54 @@ export default {
           pathParts[1] === "account-roles" &&
           (pathParts.length === 2 || pathParts.length === 3)
         ) {
-          return await handleUserAccountRoles(
+          return withCors(
             request,
-            env,
-            [pathParts[0], ...(pathParts.length === 3 ? [pathParts[2]] : [])],
+            await handleUserAccountRoles(
+              request,
+              env,
+              [
+                pathParts[0],
+                ...(pathParts.length === 3 ? [pathParts[2]] : []),
+              ],
+            ),
           )
         }
       } catch (error) {
         console.error("User account roles API error:", error)
 
-        return Response.json(
-          { error: "Internal Server Error" },
-          { status: 500 },
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
+            { status: 500 },
+          ),
         )
       }
     }
 
-    if (url.pathname === "/api/roles" || url.pathname.startsWith("/api/roles/")) {
+    if (
+      url.pathname === "/api/roles" ||
+      url.pathname.startsWith("/api/roles/")
+    ) {
       const path = url.pathname.slice("/api/roles".length)
       const pathParts = path
         .split("/")
         .filter(Boolean)
 
       try {
-        return await handleRoles(request, env, pathParts)
+        return withCors(
+          request,
+          await handleRoles(request, env, pathParts),
+        )
       } catch (error) {
         console.error("Roles API error:", error)
 
-        return Response.json(
-          { error: "Internal Server Error" },
-          { status: 500 },
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
+            { status: 500 },
+          ),
         )
       }
     }
@@ -147,55 +270,76 @@ export default {
         )
 
         if (auth instanceof Response) {
-          return auth
+          return withCors(request, auth)
         }
 
         if (pathParts[1] === "roles" && pathParts.length === 2) {
-          return await handleUserRoles(
+          return withCors(
             request,
-            env,
-            [pathParts[0]],
+            await handleUserRoles(
+              request,
+              env,
+              [pathParts[0]],
+            ),
           )
         }
 
         if (pathParts[1] === "roles" && pathParts.length === 3) {
-          return await handleUserRole(
+          return withCors(
             request,
-            env,
-            [pathParts[0], pathParts[2]],
+            await handleUserRole(
+              request,
+              env,
+              [pathParts[0], pathParts[2]],
+            ),
           )
         }
       } catch (error) {
         console.error("User roles API error:", error)
 
-        return Response.json(
-          { error: "Internal Server Error" },
-          { status: 500 },
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
+            { status: 500 },
+          ),
         )
       }
     }
 
-    if (url.pathname === "/api/users" || url.pathname.startsWith("/api/users/")) {
+    if (
+      url.pathname === "/api/users" ||
+      url.pathname.startsWith("/api/users/")
+    ) {
       const path = url.pathname.slice("/api/users".length)
       const pathParts = path
         .split("/")
         .filter(Boolean)
 
       try {
-        return await handleUsers(request, env, pathParts)
+        return withCors(
+          request,
+          await handleUsers(request, env, pathParts),
+        )
       } catch (error) {
         console.error("Users API error:", error)
 
-        return Response.json(
-          { error: "Internal Server Error" },
-          { status: 500 },
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
+            { status: 500 },
+          ),
         )
       }
     }
 
-    return Response.json(
-      { error: "Not Found" },
-      { status: 404 },
+    return withCors(
+      request,
+      Response.json(
+        { error: "Not Found" },
+        { status: 404 },
+      ),
     )
   },
 } satisfies ExportedHandler<Env>

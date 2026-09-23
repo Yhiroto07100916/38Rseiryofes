@@ -65,6 +65,7 @@ export async function createSession(
 
 export function createSessionCookie(
   sessionId: string,
+  secure: boolean,
 ): string {
   const maxAge = Math.floor(
     SESSION_DURATION_MS / 1000,
@@ -73,18 +74,20 @@ export function createSessionCookie(
   return [
     `${SESSION_COOKIE_NAME}=${encodeURIComponent(sessionId)}`,
     "HttpOnly",
-    "Secure",
+    ...(secure ? ["Secure"] : []),
     "SameSite=Lax",
     "Path=/",
     `Max-Age=${maxAge}`,
   ].join("; ")
 }
 
-export function createExpiredSessionCookie(): string {
+export function createExpiredSessionCookie(
+  secure: boolean,
+): string {
   return [
     `${SESSION_COOKIE_NAME}=`,
     "HttpOnly",
-    "Secure",
+    ...(secure ? ["Secure"] : []),
     "SameSite=Lax",
     "Path=/",
     "Max-Age=0",
