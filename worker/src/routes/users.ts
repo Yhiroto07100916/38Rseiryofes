@@ -1,4 +1,5 @@
 import { requireAccountRole } from "../lib/authz"
+import { hashPassword } from "../lib/password"
 
 export interface User {
   id: string
@@ -13,6 +14,7 @@ interface CreateUserBody {
   student_number?: unknown
   name?: unknown
   nickname?: unknown
+  account_role_id?: unknown
 }
 
 function generateId(): string {
@@ -128,6 +130,16 @@ export async function handleUsers(
       )
     }
 
+    if (
+      typeof body.account_role_id !== "string" ||
+      body.account_role_id.trim() === ""
+    ) {
+      return Response.json(
+        { error: "account_role_id is required" },
+        { status: 400 },
+      )
+    }
+
     const id = generateId()
     const studentNumber = body.student_number.trim()
     const name = body.name.trim()
@@ -135,6 +147,27 @@ export async function handleUsers(
       typeof body.nickname === "string"
         ? body.nickname.trim() || null
         : null
+    const accountRoleId = body.account_role_id.trim()
+
+    const accountRole = await env.DB
+      .prepare(`
+        SELECT
+          id
+        FROM account_roles
+        WHERE id = ?
+        LIMIT 1
+      `)
+      .bind(accountRoleId)
+      .first<{ id: string }>()
+
+    if (!accountRole) {
+      return Response.json(
+        { error: "Account role not found" },
+        { status: 404 },
+      )
+    }
+
+    const passwordHash = await hashPassword(studentNumber)
 
     try {
       await env.DB
@@ -143,14 +176,40 @@ export async function handleUsers(
             id,
             student_number,
             name,
-            nickname
+            nickname,
+            password_hash
           )
-          VALUES (?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?)
         `)
-        .bind(id, studentNumber, name, nickname)
+        .bind(
+          id,
+          studentNumber,
+          name,
+          nickname,
+          passwordHash,
+        )
+        .run()
+
+      await env.DB
+        .prepare(`
+          INSERT INTO user_account_roles (
+            user_id,
+            account_role_id
+          )
+          VALUES (?, ?)
+        `)
+        .bind(id, accountRoleId)
         .run()
     } catch (error) {
       console.error("Failed to create user:", error)
+
+      await env.DB
+        .prepare(`
+          DELETE FROM users
+          WHERE id = ?
+        `)
+        .bind(id)
+        .run()
 
       if (
         error instanceof Error &&
