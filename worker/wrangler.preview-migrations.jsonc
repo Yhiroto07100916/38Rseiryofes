@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "account_id": "b075c6dae1350c9fa806b1935c6a5c25",
+  "d1_databases": [
+    {
+      "binding": "PREVIEW_DB",
+      "database_name": "38r-festival-db-preview",
+      "database_id": "cdc80820-9c96-4e36-b050-ac0c3e98c4e8",
+      "migrations_dir": "../migrations"
+    }
+  ]
+}
