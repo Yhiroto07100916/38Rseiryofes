@@ -100,6 +100,43 @@
           md="4"
         >
           <v-card
+            to="/tasks"
+            rounded="xl"
+            variant="outlined"
+            class="admin-card"
+          >
+            <v-card-item>
+              <template #prepend>
+                <v-icon
+                  icon="mdi-checkbox-marked-circle-outline"
+                  size="32"
+                  color="primary"
+                />
+              </template>
+
+              <v-card-title>
+                タスク管理
+              </v-card-title>
+
+              <v-card-subtitle>
+                星陵祭準備のタスクを管理
+              </v-card-subtitle>
+            </v-card-item>
+
+            <v-card-actions>
+              <v-spacer />
+
+              <v-icon icon="mdi-chevron-right" />
+            </v-card-actions>
+          </v-card>
+        </v-col>
+
+        <v-col
+          cols="12"
+          sm="6"
+          md="4"
+        >
+          <v-card
             to="/admin/roles"
             rounded="xl"
             variant="outlined"
