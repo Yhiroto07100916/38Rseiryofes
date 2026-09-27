@@ -106,7 +106,7 @@
           variant="outlined"
           class="rounded-xl"
           hover
-          @click="navigateTo('/admin/tasks/create')"
+          @click="navigateTo('/tasks/create')"
         >
           <v-card-text class="pa-5">
             <div class="d-flex align-center">
