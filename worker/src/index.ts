@@ -2,6 +2,7 @@ import { handleUsers } from "./routes/users"
 import { handleAdminSetPassword, handleAuth } from "./routes/auth"
 import { handleRoles, handleUserRole, handleUserRoles } from "./routes/roles"
 import { handleAccountRoles, handleUserAccountRoles } from "./routes/account-roles"
+import { handleTasks } from "./routes/tasks"
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -90,6 +91,33 @@ export default {
               status: "error",
               database: "disconnected",
             },
+            { status: 500 },
+          ),
+        )
+      }
+    }
+
+    if (
+      url.pathname === "/api/tasks" ||
+      url.pathname.startsWith("/api/tasks/")
+    ) {
+      const path = url.pathname.slice("/api/tasks".length)
+      const pathParts = path
+        .split("/")
+        .filter(Boolean)
+
+      try {
+        return withCors(
+          request,
+          await handleTasks(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("Tasks API error:", error)
+
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
             { status: 500 },
           ),
         )
