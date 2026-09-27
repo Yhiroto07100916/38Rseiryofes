@@ -340,10 +340,10 @@ export async function handleTasks(
       )
     }
 
-    const params: string[] = [auth.user.id]
+    const params: string[] = []
 
     let query = `
-      SELECT DISTINCT
+      SELECT
         t.id,
         t.title,
         t.description,
@@ -355,21 +355,8 @@ export async function handleTasks(
         t.created_at,
         t.updated_at
       FROM tasks t
-      LEFT JOIN task_assignees ta
-        ON ta.task_id = t.id
-      LEFT JOIN task_roles tr
-        ON tr.task_id = t.id
-      LEFT JOIN user_roles ur
-        ON ur.role_id = tr.role_id
-        AND ur.user_id = ?
-      WHERE (
-        ta.user_id = ?
-        OR ur.user_id IS NOT NULL
-        OR t.created_by = ?
-      )
+      WHERE 1 = 1
     `
-
-    params.push(auth.user.id, auth.user.id)
 
     if (scope !== null) {
       query += ` AND t.scope = ?`
@@ -432,40 +419,6 @@ export async function handleTasks(
       env,
       task.id,
     )
-
-    const access = await env.DB
-      .prepare(`
-        SELECT 1
-        FROM tasks t
-        LEFT JOIN task_assignees ta
-          ON ta.task_id = t.id
-        LEFT JOIN task_roles tr
-          ON tr.task_id = t.id
-        LEFT JOIN user_roles ur
-          ON ur.role_id = tr.role_id
-          AND ur.user_id = ?
-        WHERE t.id = ?
-          AND (
-            ta.user_id = ?
-            OR ur.user_id IS NOT NULL
-            OR t.created_by = ?
-          )
-        LIMIT 1
-      `)
-      .bind(
-        auth.user.id,
-        task.id,
-        auth.user.id,
-        auth.user.id,
-      )
-      .first<{ 1: number }>()
-
-    if (!access) {
-      return Response.json(
-        { error: "Forbidden" },
-        { status: 403 },
-      )
-    }
 
     return Response.json({
       ...task,
@@ -999,9 +952,9 @@ export async function handleTasks(
     pathParts.length === 2 &&
     pathParts[1] === "comments"
   ) {
-    if (!(await hasPermission(env, auth.user.id, "tasks.comment"))) {
+    if (!(await hasPermission(env, auth.user.id, "tasks.view"))) {
       return Response.json(
-        { error: "Forbidden", permission: "tasks.comment" },
+        { error: "Forbidden", permission: "tasks.view" },
         { status: 403 },
       )
     }
@@ -1014,40 +967,6 @@ export async function handleTasks(
       return Response.json(
         { error: "Task not found" },
         { status: 404 },
-      )
-    }
-
-    const access = await env.DB
-      .prepare(`
-        SELECT 1
-        FROM tasks t
-        LEFT JOIN task_assignees ta
-          ON ta.task_id = t.id
-        LEFT JOIN task_roles tr
-          ON tr.task_id = t.id
-        LEFT JOIN user_roles ur
-          ON ur.role_id = tr.role_id
-          AND ur.user_id = ?
-        WHERE t.id = ?
-          AND (
-            ta.user_id = ?
-            OR ur.user_id IS NOT NULL
-            OR t.created_by = ?
-          )
-        LIMIT 1
-      `)
-      .bind(
-        auth.user.id,
-        taskId,
-        auth.user.id,
-        auth.user.id,
-      )
-      .first<{ 1: number }>()
-
-    if (!access) {
-      return Response.json(
-        { error: "Forbidden" },
-        { status: 403 },
       )
     }
 
@@ -1105,40 +1024,6 @@ export async function handleTasks(
       return Response.json(
         { error: "Task not found" },
         { status: 404 },
-      )
-    }
-
-    const access = await env.DB
-      .prepare(`
-        SELECT 1
-        FROM tasks t
-        LEFT JOIN task_assignees ta
-          ON ta.task_id = t.id
-        LEFT JOIN task_roles tr
-          ON tr.task_id = t.id
-        LEFT JOIN user_roles ur
-          ON ur.role_id = tr.role_id
-          AND ur.user_id = ?
-        WHERE t.id = ?
-          AND (
-            ta.user_id = ?
-            OR ur.user_id IS NOT NULL
-            OR t.created_by = ?
-          )
-        LIMIT 1
-      `)
-      .bind(
-        auth.user.id,
-        taskId,
-        auth.user.id,
-        auth.user.id,
-      )
-      .first<{ 1: number }>()
-
-    if (!access) {
-      return Response.json(
-        { error: "Forbidden" },
-        { status: 403 },
       )
     }
 
@@ -1408,13 +1293,6 @@ export async function handleTasks(
       return Response.json(
         { error: "Task not found" },
         { status: 404 },
-      )
-    }
-
-    if (existingTask.created_by !== auth.user.id) {
-      return Response.json(
-        { error: "Forbidden" },
-        { status: 403 },
       )
     }
 
