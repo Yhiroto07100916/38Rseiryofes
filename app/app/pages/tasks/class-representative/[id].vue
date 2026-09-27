@@ -46,7 +46,13 @@
         class="rounded-xl"
       >
         <v-card-text class="pa-4 pa-sm-6">
-          <div class="d-flex justify-end mb-3">
+          <div
+            v-if="
+              auth.hasPermission('tasks.edit') ||
+              auth.hasPermission('tasks.assign')
+            "
+            class="d-flex justify-end mb-3"
+          >
             <v-btn
               variant="tonal"
               prepend-icon="mdi-pencil"
@@ -61,6 +67,7 @@
             <v-text-field
               v-model="editForm.title"
               label="タスク名"
+              :disabled="!auth.hasPermission('tasks.edit')"
               variant="outlined"
               class="mb-3"
             />
@@ -68,6 +75,7 @@
             <v-textarea
               v-model="editForm.description"
               label="詳細"
+              :disabled="!auth.hasPermission('tasks.edit')"
               variant="outlined"
               rows="4"
               auto-grow
@@ -78,6 +86,7 @@
               v-model="editForm.scope"
               :items="scopeItems"
               label="対象"
+              :disabled="!auth.hasPermission('tasks.edit')"
               variant="outlined"
               class="mb-3"
             />
@@ -91,6 +100,7 @@
                   v-model="editForm.status"
                   :items="statusItems"
                   label="ステータス"
+                  :disabled="!auth.hasPermission('tasks.edit')"
                   variant="outlined"
                 />
               </v-col>
@@ -103,6 +113,7 @@
                   v-model="editForm.priority"
                   :items="priorityItems"
                   label="優先度"
+                  :disabled="!auth.hasPermission('tasks.edit')"
                   variant="outlined"
                 />
               </v-col>
@@ -112,6 +123,7 @@
               v-model="editForm.dueAt"
               label="期限"
               type="datetime-local"
+              :disabled="!auth.hasPermission('tasks.edit')"
               variant="outlined"
               class="mt-2"
             />
@@ -119,6 +131,7 @@
             <v-autocomplete
               v-model="editForm.assigneeUserIds"
               :items="users"
+              :disabled="!auth.hasPermission('tasks.assign')"
               item-title="displayName"
               item-value="id"
               label="担当者"
@@ -133,6 +146,7 @@
             <v-autocomplete
               v-model="editForm.assigneeRoleIds"
               :items="roles"
+              :disabled="!auth.hasPermission('tasks.assign')"
               item-title="name"
               item-value="id"
               label="担当係"
@@ -264,6 +278,7 @@
       </v-card>
 
       <v-card
+        v-if="auth.hasPermission('tasks.comment')"
         variant="outlined"
         class="rounded-xl mt-4"
       >
@@ -342,6 +357,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
+import { useAuthStore } from '~/stores/auth'
 import {
   type Task,
   type TaskComment,
@@ -353,6 +369,7 @@ definePageMeta({
 })
 
 const route = useRoute()
+const auth = useAuthStore()
 
 const {
   getTask,
@@ -462,14 +479,22 @@ const loadTask = async () => {
   try {
     const taskId = String(route.params.id)
 
-    const [taskResponse, commentsResponse] =
-      await Promise.all([
-        getTask(taskId),
-        getTaskComments(taskId),
-      ])
+    task.value = await getTask(taskId)
 
-    task.value = taskResponse
-    comments.value = commentsResponse.comments
+    if (auth.hasPermission('tasks.comment')) {
+      try {
+        const commentsResponse =
+          await getTaskComments(taskId)
+
+        comments.value = commentsResponse.comments
+      } catch (error) {
+        console.error(error)
+        commentsError.value =
+          'コメントの取得に失敗しました。'
+      }
+    } else {
+      comments.value = []
+    }
   } catch (error) {
     console.error(error)
     errorMessage.value =
@@ -493,14 +518,14 @@ const loadAssignmentOptions = async () => {
             name: string
             nickname: string | null
           }[]
-        }>('/api/users'),
+        }>('/api/tasks/assignment-users'),
         apiFetch<{
           roles: {
             id: string
             name: string
             description: string | null
           }[]
-        }>('/api/roles'),
+        }>('/api/tasks/assignment-roles'),
       ])
 
     users.value = usersResponse.users.map((user) => ({
@@ -563,8 +588,9 @@ const startEdit = async () => {
   editing.value = true
 
   if (
-    users.value.length === 0 ||
-    roles.value.length === 0
+    auth.hasPermission('tasks.assign') &&
+    (users.value.length === 0 ||
+      roles.value.length === 0)
   ) {
     await loadAssignmentOptions()
   }
@@ -590,25 +616,41 @@ const saveEdit = async () => {
   editLoading.value = true
   errorMessage.value = ''
 
+  const canEdit = auth.hasPermission('tasks.edit')
+  const canAssign = auth.hasPermission('tasks.assign')
+
+  if (!canEdit && !canAssign) {
+    return
+  }
+
+  editLoading.value = true
+  errorMessage.value = ''
+
   try {
+    const body: Record<string, unknown> = {}
+
+    if (canEdit) {
+      body.title = title
+      body.description =
+        editForm.value.description.trim() || null
+      body.scope = editForm.value.scope
+      body.status = editForm.value.status
+      body.priority = editForm.value.priority
+      body.due_at = editForm.value.dueAt || null
+    }
+
+    if (canAssign) {
+      body.assignee_user_ids =
+        editForm.value.assigneeUserIds
+      body.assignee_role_ids =
+        editForm.value.assigneeRoleIds
+    }
+
     const response = await apiFetch<Task>(
       `/api/tasks/${task.value.id}`,
       {
         method: 'PATCH',
-        body: {
-          title,
-          description:
-            editForm.value.description.trim() || null,
-          scope: editForm.value.scope,
-          status: editForm.value.status,
-          priority: editForm.value.priority,
-          due_at:
-            editForm.value.dueAt || null,
-          assignee_user_ids:
-            editForm.value.assigneeUserIds,
-          assignee_role_ids:
-            editForm.value.assigneeRoleIds,
-        },
+        body,
       },
     )
 

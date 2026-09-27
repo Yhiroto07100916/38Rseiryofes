@@ -252,6 +252,72 @@ export async function handleTasks(
     return auth
   }
 
+  if (
+    request.method === "GET" &&
+    pathParts.length === 1 &&
+    pathParts[0] === "assignment-users"
+  ) {
+    if (!(await hasPermission(env, auth.user.id, "tasks.assign"))) {
+      return Response.json(
+        { error: "Forbidden", permission: "tasks.assign" },
+        { status: 403 },
+      )
+    }
+
+    const result = await env.DB
+      .prepare(`
+        SELECT
+          id,
+          student_number,
+          name,
+          nickname
+        FROM users
+        ORDER BY student_number
+      `)
+      .all<{
+        id: string
+        student_number: string
+        name: string
+        nickname: string | null
+      }>()
+
+    return Response.json({
+      users: result.results,
+    })
+  }
+
+  if (
+    request.method === "GET" &&
+    pathParts.length === 1 &&
+    pathParts[0] === "assignment-roles"
+  ) {
+    if (!(await hasPermission(env, auth.user.id, "tasks.assign"))) {
+      return Response.json(
+        { error: "Forbidden", permission: "tasks.assign" },
+        { status: 403 },
+      )
+    }
+
+    const result = await env.DB
+      .prepare(`
+        SELECT
+          id,
+          name,
+          description
+        FROM roles
+        ORDER BY name
+      `)
+      .all<{
+        id: string
+        name: string
+        description: string | null
+      }>()
+
+    return Response.json({
+      roles: result.results,
+    })
+  }
+
   if (request.method === "GET" && pathParts.length === 0) {
     if (!(await hasPermission(env, auth.user.id, "tasks.view"))) {
       return Response.json(
@@ -518,6 +584,19 @@ export async function handleTasks(
         { error: "assignee_role_ids must be an array of strings" },
         { status: 400 },
       )
+    }
+
+    const hasAssignmentInput =
+      body.assignee_user_ids !== undefined ||
+      body.assignee_role_ids !== undefined
+
+    if (hasAssignmentInput) {
+      if (!(await hasPermission(env, auth.user.id, "tasks.assign"))) {
+        return Response.json(
+          { error: "Forbidden", permission: "tasks.assign" },
+          { status: 403 },
+        )
+      }
     }
 
     const id = generateId()

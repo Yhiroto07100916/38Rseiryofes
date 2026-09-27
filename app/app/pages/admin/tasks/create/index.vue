@@ -92,11 +92,12 @@
 
         <v-divider class="my-6" />
 
-        <div class="text-subtitle-1 font-weight-bold mb-3">
-          担当者
-        </div>
+        <template v-if="auth.hasPermission('tasks.assign')">
+          <div class="text-subtitle-1 font-weight-bold mb-3">
+            担当者
+          </div>
 
-        <v-autocomplete
+          <v-autocomplete
           v-model="form.assigneeUserIds"
           :items="users"
           item-title="displayName"
@@ -107,14 +108,14 @@
           chips
           closable-chips
           :loading="usersLoading"
-          no-data-text="担当者が見つかりません"
-        />
+            no-data-text="担当者が見つかりません"
+          />
 
-        <div class="text-subtitle-1 font-weight-bold mb-3 mt-6">
-          担当係
-        </div>
+          <div class="text-subtitle-1 font-weight-bold mb-3 mt-6">
+            担当係
+          </div>
 
-        <v-autocomplete
+          <v-autocomplete
           v-model="form.assigneeRoleIds"
           :items="roles"
           item-title="name"
@@ -125,8 +126,9 @@
           chips
           closable-chips
           :loading="rolesLoading"
-          no-data-text="係が見つかりません"
-        />
+            no-data-text="係が見つかりません"
+          />
+        </template>
 
         <div class="d-flex justify-end ga-2 mt-6">
           <v-btn
@@ -153,6 +155,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
+import { useAuthStore } from '~/stores/auth'
 import {
   type Task,
   type TaskAssignmentRole,
@@ -161,7 +164,7 @@ import {
 } from '~/composables/useApi'
 
 definePageMeta({
-  middleware: 'admin',
+  middleware: 'auth',
 })
 
 interface UserItem extends TaskAssignmentUser {
@@ -171,6 +174,8 @@ interface UserItem extends TaskAssignmentUser {
 const {
   apiFetch,
 } = useApi()
+
+const auth = useAuthStore()
 
 const form = ref({
   title: '',
@@ -248,7 +253,7 @@ const loadUsers = async () => {
   try {
     const response = await apiFetch<{
       users: TaskAssignmentUser[]
-    }>('/api/users')
+    }>('/api/tasks/assignment-users')
 
     users.value = response.users.map((user) => ({
       ...user,
@@ -271,7 +276,7 @@ const loadRoles = async () => {
   try {
     const response = await apiFetch<{
       roles: TaskAssignmentRole[]
-    }>('/api/roles')
+    }>('/api/tasks/assignment-roles')
 
     roles.value = response.roles
   } catch (error) {
@@ -339,8 +344,21 @@ const goBack = () => {
   navigateTo('/admin')
 }
 
-onMounted(() => {
-  loadUsers()
-  loadRoles()
+onMounted(async () => {
+  if (!auth.initialized) {
+    await auth.fetchMe()
+  }
+
+  if (!auth.hasPermission('tasks.create')) {
+    await navigateTo('/tasks')
+    return
+  }
+
+  if (auth.hasPermission('tasks.assign')) {
+    await Promise.all([
+      loadUsers(),
+      loadRoles(),
+    ])
+  }
 })
 </script>

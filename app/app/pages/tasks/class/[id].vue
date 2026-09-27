@@ -46,6 +46,138 @@
         class="rounded-xl"
       >
         <v-card-text class="pa-4 pa-sm-6">
+          <div
+            v-if="
+              auth.hasPermission('tasks.edit') ||
+              auth.hasPermission('tasks.assign')
+            "
+            class="d-flex justify-end mb-3"
+          >
+            <v-btn
+              variant="tonal"
+              prepend-icon="mdi-pencil"
+              :disabled="editLoading"
+              @click="startEdit"
+            >
+              編集
+            </v-btn>
+          </div>
+
+          <template v-if="editing">
+            <v-text-field
+              v-model="editForm.title"
+              label="タスク名"
+              :disabled="!auth.hasPermission('tasks.edit')"
+              variant="outlined"
+              class="mb-3"
+            />
+
+            <v-textarea
+              v-model="editForm.description"
+              label="詳細"
+              :disabled="!auth.hasPermission('tasks.edit')"
+              variant="outlined"
+              rows="4"
+              auto-grow
+              class="mb-3"
+            />
+
+            <v-select
+              v-model="editForm.scope"
+              :items="scopeItems"
+              label="対象"
+              :disabled="!auth.hasPermission('tasks.edit')"
+              variant="outlined"
+              class="mb-3"
+            />
+
+            <v-row>
+              <v-col
+                cols="12"
+                sm="6"
+              >
+                <v-select
+                  v-model="editForm.status"
+                  :items="statusItems"
+                  label="ステータス"
+                  :disabled="!auth.hasPermission('tasks.edit')"
+                  variant="outlined"
+                />
+              </v-col>
+
+              <v-col
+                cols="12"
+                sm="6"
+              >
+                <v-select
+                  v-model="editForm.priority"
+                  :items="priorityItems"
+                  label="優先度"
+                  :disabled="!auth.hasPermission('tasks.edit')"
+                  variant="outlined"
+                />
+              </v-col>
+            </v-row>
+
+            <v-text-field
+              v-model="editForm.dueAt"
+              label="期限"
+              type="datetime-local"
+              :disabled="!auth.hasPermission('tasks.edit')"
+              variant="outlined"
+              class="mt-2"
+            />
+
+            <v-autocomplete
+              v-model="editForm.assigneeUserIds"
+              :items="users"
+              :disabled="!auth.hasPermission('tasks.assign')"
+              item-title="displayName"
+              item-value="id"
+              label="担当者"
+              variant="outlined"
+              multiple
+              chips
+              closable-chips
+              class="mt-3"
+              :loading="usersLoading"
+            />
+
+            <v-autocomplete
+              v-model="editForm.assigneeRoleIds"
+              :items="roles"
+              :disabled="!auth.hasPermission('tasks.assign')"
+              item-title="name"
+              item-value="id"
+              label="担当係"
+              variant="outlined"
+              multiple
+              chips
+              closable-chips
+              class="mt-3"
+              :loading="rolesLoading"
+            />
+
+            <div class="d-flex justify-end ga-2 mt-4">
+              <v-btn
+                variant="text"
+                :disabled="editLoading"
+                @click="cancelEdit"
+              >
+                キャンセル
+              </v-btn>
+
+              <v-btn
+                color="primary"
+                :loading="editLoading"
+                @click="saveEdit"
+              >
+                保存
+              </v-btn>
+            </div>
+
+            <v-divider class="my-5" />
+          </template>
           <div class="d-flex flex-wrap ga-2 mb-4">
             <v-chip
               size="small"
@@ -146,6 +278,7 @@
       </v-card>
 
       <v-card
+        v-if="auth.hasPermission('tasks.comment')"
         variant="outlined"
         class="rounded-xl mt-4"
       >
@@ -224,6 +357,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
+import { useAuthStore } from '~/stores/auth'
 import {
   type Task,
   type TaskComment,
@@ -235,6 +369,7 @@ definePageMeta({
 })
 
 const route = useRoute()
+const auth = useAuthStore()
 
 const {
   getTask,
@@ -252,6 +387,90 @@ const commentsError = ref('')
 const commentContent = ref('')
 const commentSubmitting = ref(false)
 
+const editing = ref(false)
+const editLoading = ref(false)
+
+const users = ref<
+  {
+    id: string
+    student_number: string
+    name: string
+    nickname: string | null
+    displayName: string
+  }[]
+>([])
+
+const roles = ref<
+  {
+    id: string
+    name: string
+    description: string | null
+  }[]
+>([])
+
+const usersLoading = ref(false)
+const rolesLoading = ref(false)
+
+const editForm = ref({
+  title: '',
+  description: '',
+  scope: 'class' as Task['scope'],
+  status: 'todo' as Task['status'],
+  priority: 'medium' as Task['priority'],
+  dueAt: '',
+  assigneeUserIds: [] as string[],
+  assigneeRoleIds: [] as string[],
+})
+
+const scopeItems = [
+  {
+    title: 'クラ代向け',
+    value: 'class_representative',
+  },
+  {
+    title: 'クラス向け',
+    value: 'class',
+  },
+]
+
+const statusItems = [
+  {
+    title: '未着手',
+    value: 'todo',
+  },
+  {
+    title: '進行中',
+    value: 'in_progress',
+  },
+  {
+    title: '確認待ち',
+    value: 'review',
+  },
+  {
+    title: '完了',
+    value: 'done',
+  },
+]
+
+const priorityItems = [
+  {
+    title: '低',
+    value: 'low',
+  },
+  {
+    title: '通常',
+    value: 'medium',
+  },
+  {
+    title: '高',
+    value: 'high',
+  },
+  {
+    title: '緊急',
+    value: 'urgent',
+  },
+]
+
 const loadTask = async () => {
   loading.value = true
   errorMessage.value = ''
@@ -260,20 +479,189 @@ const loadTask = async () => {
   try {
     const taskId = String(route.params.id)
 
-    const [taskResponse, commentsResponse] =
-      await Promise.all([
-        getTask(taskId),
-        getTaskComments(taskId),
-      ])
+    task.value = await getTask(taskId)
 
-    task.value = taskResponse
-    comments.value = commentsResponse.comments
+    if (auth.hasPermission('tasks.comment')) {
+      try {
+        const commentsResponse =
+          await getTaskComments(taskId)
+
+        comments.value = commentsResponse.comments
+      } catch (error) {
+        console.error(error)
+        commentsError.value =
+          'コメントの取得に失敗しました。'
+      }
+    } else {
+      comments.value = []
+    }
   } catch (error) {
     console.error(error)
     errorMessage.value =
       'タスクの取得に失敗しました。'
   } finally {
     loading.value = false
+  }
+}
+
+const loadAssignmentOptions = async () => {
+  usersLoading.value = true
+  rolesLoading.value = true
+
+  try {
+    const [usersResponse, rolesResponse] =
+      await Promise.all([
+        apiFetch<{
+          users: {
+            id: string
+            student_number: string
+            name: string
+            nickname: string | null
+          }[]
+        }>('/api/tasks/assignment-users'),
+        apiFetch<{
+          roles: {
+            id: string
+            name: string
+            description: string | null
+          }[]
+        }>('/api/tasks/assignment-roles'),
+      ])
+
+    users.value = usersResponse.users.map((user) => ({
+      ...user,
+      displayName: user.nickname
+        ? `${user.nickname} (${user.name})`
+        : user.name,
+    }))
+
+    roles.value = rolesResponse.roles
+  } catch (error) {
+    console.error(error)
+  } finally {
+    usersLoading.value = false
+    rolesLoading.value = false
+  }
+}
+
+const toLocalDateTime = (value: string | null) => {
+  if (!value) {
+    return ''
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const offset = date.getTimezoneOffset()
+  const localDate = new Date(
+    date.getTime() - offset * 60 * 1000,
+  )
+
+  return localDate
+    .toISOString()
+    .slice(0, 16)
+}
+
+const startEdit = async () => {
+  if (!task.value) {
+    return
+  }
+
+  editForm.value = {
+    title: task.value.title,
+    description: task.value.description ?? '',
+    scope: task.value.scope,
+    status: task.value.status,
+    priority: task.value.priority,
+    dueAt: toLocalDateTime(task.value.due_at),
+    assigneeUserIds: task.value.assignments.users.map(
+      (user) => user.id,
+    ),
+    assigneeRoleIds: task.value.assignments.roles.map(
+      (role) => role.id,
+    ),
+  }
+
+  editing.value = true
+
+  if (
+    auth.hasPermission('tasks.assign') &&
+    (users.value.length === 0 ||
+      roles.value.length === 0)
+  ) {
+    await loadAssignmentOptions()
+  }
+}
+
+const cancelEdit = () => {
+  editing.value = false
+}
+
+const saveEdit = async () => {
+  if (!task.value) {
+    return
+  }
+
+  const title = editForm.value.title.trim()
+
+  if (!title) {
+    errorMessage.value =
+      'タスク名を入力してください。'
+    return
+  }
+
+  editLoading.value = true
+  errorMessage.value = ''
+
+  const canEdit = auth.hasPermission('tasks.edit')
+  const canAssign = auth.hasPermission('tasks.assign')
+
+  if (!canEdit && !canAssign) {
+    return
+  }
+
+  editLoading.value = true
+  errorMessage.value = ''
+
+  try {
+    const body: Record<string, unknown> = {}
+
+    if (canEdit) {
+      body.title = title
+      body.description =
+        editForm.value.description.trim() || null
+      body.scope = editForm.value.scope
+      body.status = editForm.value.status
+      body.priority = editForm.value.priority
+      body.due_at = editForm.value.dueAt || null
+    }
+
+    if (canAssign) {
+      body.assignee_user_ids =
+        editForm.value.assigneeUserIds
+      body.assignee_role_ids =
+        editForm.value.assigneeRoleIds
+    }
+
+    const response = await apiFetch<Task>(
+      `/api/tasks/${task.value.id}`,
+      {
+        method: 'PATCH',
+        body,
+      },
+    )
+
+    task.value = response
+    editing.value = false
+  } catch (error) {
+    console.error(error)
+    errorMessage.value =
+      'タスクの更新に失敗しました。'
+  } finally {
+    editLoading.value = false
   }
 }
 

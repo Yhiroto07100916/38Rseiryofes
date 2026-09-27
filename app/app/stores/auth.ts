@@ -9,10 +9,12 @@ interface AuthUser {
 
 interface LoginResponse {
   user: AuthUser
+  permissions: string[]
 }
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(null)
+  const permissions = ref<string[]>([])
   const initialized = ref(false)
 
   const isLoggedIn = computed(() => user.value !== null)
@@ -23,9 +25,11 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await apiFetch<LoginResponse>('/api/auth/me')
       user.value = response.user
+      permissions.value = response.permissions
       return user.value
     } catch {
       user.value = null
+      permissions.value = []
       return null
     } finally {
       initialized.value = true
@@ -45,9 +49,14 @@ export const useAuthStore = defineStore('auth', () => {
     })
 
     user.value = response.user
+    permissions.value = response.permissions
     initialized.value = true
 
     return response.user
+  }
+
+  const hasPermission = (permission: string) => {
+    return permissions.value.includes(permission)
   }
 
   const logout = async () => {
@@ -57,14 +66,17 @@ export const useAuthStore = defineStore('auth', () => {
       })
     } finally {
       user.value = null
+      permissions.value = []
       initialized.value = true
     }
   }
 
   return {
     user,
+    permissions,
     initialized,
     isLoggedIn,
+    hasPermission,
     fetchMe,
     login,
     logout,

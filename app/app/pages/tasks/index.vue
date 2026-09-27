@@ -98,7 +98,10 @@
         </v-card>
       </v-col>
 
-      <v-col cols="12">
+      <v-col
+        v-if="auth.hasPermission('tasks.create')"
+        cols="12"
+      >
         <v-card
           variant="outlined"
           class="rounded-xl"
@@ -135,7 +138,11 @@
 </template>
 
 <script setup lang="ts">
+import { useAuthStore } from '~/stores/auth'
+
 definePageMeta({
   middleware: 'auth',
 })
+
+const auth = useAuthStore()
 </script>

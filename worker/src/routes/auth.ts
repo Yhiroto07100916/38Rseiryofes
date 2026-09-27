@@ -1,4 +1,7 @@
-import { requireAccountRole } from "../lib/authz"
+import {
+  getUserPermissions,
+  requireAccountRole,
+} from "../lib/authz"
 import { hashPassword, verifyPassword } from "../lib/password"
 import {
   createExpiredSessionCookie,
@@ -127,6 +130,11 @@ async function handleLogin(
     user.id,
   )
 
+  const permissions = await getUserPermissions(
+    env,
+    user.id,
+  )
+
   const secure = new URL(request.url).protocol === "https:"
 
   return Response.json(
@@ -137,6 +145,7 @@ async function handleLogin(
         name: user.name,
         nickname: user.nickname,
       },
+      permissions,
     },
     {
       headers: {
@@ -185,7 +194,15 @@ async function handleMe(
     )
   }
 
-  return Response.json({ user })
+  const permissions = await getUserPermissions(
+    env,
+    user.id,
+  )
+
+  return Response.json({
+    user,
+    permissions,
+  })
 }
 
 

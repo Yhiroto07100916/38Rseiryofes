@@ -12,7 +12,7 @@
         </h1>
 
         <p class="text-body-2 text-medium-emphasis mt-1">
-          クラス代表に関係するタスク
+          クラス全体に関係するタスク
         </p>
       </div>
 
@@ -186,7 +186,7 @@ const loadTasks = async () => {
 
   try {
     const response = await getTasks(
-      'class_representative',
+      'class',
     )
 
     tasks.value = response.tasks

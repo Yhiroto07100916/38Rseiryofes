@@ -160,6 +160,135 @@ async function getPermissionEffect(
   return accountRoleResult?.effect ?? null
 }
 
+export async function getUserPermissions(
+  env: Env,
+  userId: string,
+): Promise<string[]> {
+  if (await isAdmin(env, userId)) {
+    const result = await env.DB
+      .prepare(`
+        SELECT key
+        FROM permissions
+        ORDER BY key
+      `)
+      .all<{ key: string }>()
+
+    return result.results.map((row) => row.key)
+  }
+
+  const result = await env.DB
+    .prepare(`
+      SELECT
+        p.key,
+        CASE
+          WHEN MAX(
+            CASE
+              WHEN up.effect = 'deny' THEN 3
+              WHEN up.effect = 'allow' THEN 2
+              ELSE 0
+            END
+          ) = 3 THEN 'deny'
+
+          WHEN MAX(
+            CASE
+              WHEN up.effect = 'allow' THEN 2
+              ELSE 0
+            END
+          ) = 2 THEN 'allow'
+
+          ELSE NULL
+        END AS user_effect,
+
+        CASE
+          WHEN MAX(
+            CASE
+              WHEN rp.effect = 'deny' THEN 3
+              WHEN rp.effect = 'allow' THEN 2
+              ELSE 0
+            END
+          ) = 3 THEN 'deny'
+
+          WHEN MAX(
+            CASE
+              WHEN rp.effect = 'allow' THEN 2
+              ELSE 0
+            END
+          ) = 2 THEN 'allow'
+
+          ELSE NULL
+        END AS role_effect,
+
+        CASE
+          WHEN MAX(
+            CASE
+              WHEN arp.effect = 'deny' THEN 3
+              WHEN arp.effect = 'allow' THEN 2
+              ELSE 0
+            END
+          ) = 3 THEN 'deny'
+
+          WHEN MAX(
+            CASE
+              WHEN arp.effect = 'allow' THEN 2
+              ELSE 0
+            END
+          ) = 2 THEN 'allow'
+
+          ELSE NULL
+        END AS account_role_effect
+
+      FROM permissions p
+
+      LEFT JOIN user_permissions up
+        ON up.permission_id = p.id
+        AND up.user_id = ?
+
+      LEFT JOIN role_permissions rp
+        ON rp.permission_id = p.id
+        AND rp.role_id IN (
+          SELECT role_id
+          FROM user_roles
+          WHERE user_id = ?
+        )
+
+      LEFT JOIN account_role_permissions arp
+        ON arp.permission_id = p.id
+        AND arp.account_role_id IN (
+          SELECT account_role_id
+          FROM user_account_roles
+          WHERE user_id = ?
+        )
+
+      GROUP BY p.id, p.key
+      ORDER BY p.key
+    `)
+    .bind(userId, userId, userId)
+    .all<{
+      key: string
+      user_effect: PermissionEffect | null
+      role_effect: PermissionEffect | null
+      account_role_effect: PermissionEffect | null
+    }>()
+
+  return result.results
+    .filter((row) => {
+      if (row.user_effect) {
+        return row.user_effect === "allow"
+      }
+
+      if (row.role_effect) {
+        return row.role_effect === "allow"
+      }
+
+      if (row.account_role_effect) {
+        return row.account_role_effect === "allow"
+      }
+
+      return false
+    })
+    .map((row) => row.key)
+}
+
 export async function hasPermission(
   env: Env,
   userId: string,
