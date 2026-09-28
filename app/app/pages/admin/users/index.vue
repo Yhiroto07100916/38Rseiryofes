@@ -360,6 +360,8 @@ definePageMeta({
 })
 
 const { apiFetch } = useApi()
+const { confirm } = useConfirmDialog()
+const snackbar = useSnackbar()
 
 const users = ref<User[]>([])
 const accountRoles = ref<AccountRole[]>([])
@@ -609,15 +611,16 @@ const fetchAccountRoles = async () => {
 }
 
 const deleteUser = async (user: User) => {
-  const confirmed = window.confirm(
-    `「${user.name}」を削除しますか？\n\nこの操作は元に戻せません。`,
-  )
+  const confirmed = await confirm({
+    title: 'メンバーを削除',
+    message: `「${user.name}」を削除しますか？\n\nこの操作は元に戻せません。`,
+    confirmText: '削除',
+    confirmColor: 'error',
+  })
 
   if (!confirmed) {
     return
   }
-
-  errorMessage.value = ''
 
   try {
     await apiFetch(`/api/users/${user.id}`, {
@@ -627,8 +630,10 @@ const deleteUser = async (user: User) => {
     users.value = users.value.filter(
       (item) => item.id !== user.id,
     )
+
+    snackbar.success('メンバーを削除しました。')
   } catch {
-    errorMessage.value = 'メンバーの削除に失敗しました。'
+    snackbar.error('メンバーの削除に失敗しました。')
   }
 }
 

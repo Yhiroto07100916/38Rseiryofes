@@ -17,15 +17,6 @@
       </div>
     </div>
 
-    <v-alert
-      v-if="errorMessage"
-      type="error"
-      variant="tonal"
-      class="mb-4"
-    >
-      {{ errorMessage }}
-    </v-alert>
-
     <v-card
       variant="outlined"
       class="rounded-xl"
@@ -155,6 +146,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
+import { useSnackbar } from '~/composables/useSnackbar'
 import { useAuthStore } from '~/stores/auth'
 import {
   type Task,
@@ -176,6 +168,7 @@ const {
 } = useApi()
 
 const auth = useAuthStore()
+const snackbar = useSnackbar()
 
 const form = ref({
   title: '',
@@ -195,7 +188,6 @@ const usersLoading = ref(false)
 const rolesLoading = ref(false)
 const submitting = ref(false)
 
-const errorMessage = ref('')
 const titleError = ref('')
 
 const scopeItems = [
@@ -263,8 +255,7 @@ const loadUsers = async () => {
     }))
   } catch (error) {
     console.error(error)
-    errorMessage.value =
-      'メンバー一覧の取得に失敗しました。'
+    snackbar.error('メンバー一覧の取得に失敗しました。')
   } finally {
     usersLoading.value = false
   }
@@ -281,8 +272,7 @@ const loadRoles = async () => {
     roles.value = response.roles
   } catch (error) {
     console.error(error)
-    errorMessage.value =
-      '係一覧の取得に失敗しました。'
+    snackbar.error('係一覧の取得に失敗しました。')
   } finally {
     rolesLoading.value = false
   }
@@ -290,7 +280,6 @@ const loadRoles = async () => {
 
 const createTask = async () => {
   titleError.value = ''
-  errorMessage.value = ''
 
   const title = form.value.title.trim()
 
@@ -333,8 +322,7 @@ const createTask = async () => {
     )
   } catch (error) {
     console.error(error)
-    errorMessage.value =
-      'タスクの作成に失敗しました。'
+    snackbar.error('タスクの作成に失敗しました。')
   } finally {
     submitting.value = false
   }
