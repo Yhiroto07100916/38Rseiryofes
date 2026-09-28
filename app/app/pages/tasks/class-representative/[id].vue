@@ -320,7 +320,6 @@
         </v-card-title>
 
         <v-card-text>
-          </v-alert>
 
           <div
             v-if="comments.length === 0"
