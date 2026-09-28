@@ -13,7 +13,8 @@ function getCorsHeaders(request: Request): Headers {
     origin === "http://127.0.0.1:3000" ||
     origin === "https://5d3f213d.38r-seiryofes.pages.dev" ||
     origin === "https://38r-seiryofes.pages.dev" ||
-    origin === "https://production.38r-seiryofes.pages.dev"
+    origin === "https://production.38r-seiryofes.pages.dev" ||
+    origin === "https://38r-seiryofes.com"
   ) {
     headers.set("Access-Control-Allow-Origin", origin)
     headers.set("Access-Control-Allow-Credentials", "true")
