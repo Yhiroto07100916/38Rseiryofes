@@ -27,15 +27,6 @@
       />
     </div>
 
-    <v-alert
-      v-if="errorMessage"
-      type="error"
-      variant="tonal"
-      class="mb-4"
-    >
-      {{ errorMessage }}
-    </v-alert>
-
     <div v-if="loading">
       <v-skeleton-loader
         v-for="index in 3"
@@ -165,6 +156,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
+import { useSnackbar } from '~/composables/useSnackbar'
 import {
   type Task,
   useApi,
@@ -175,14 +167,13 @@ definePageMeta({
 })
 
 const { getTasks } = useApi()
+const snackbar = useSnackbar()
 
 const tasks = ref<Task[]>([])
 const loading = ref(false)
-const errorMessage = ref('')
 
 const loadTasks = async () => {
   loading.value = true
-  errorMessage.value = ''
 
   try {
     const response = await getTasks(
@@ -192,8 +183,7 @@ const loadTasks = async () => {
     tasks.value = response.tasks
   } catch (error) {
     console.error(error)
-    errorMessage.value =
-      'タスクの取得に失敗しました。'
+    snackbar.error('タスクの取得に失敗しました。')
   } finally {
     loading.value = false
   }
