@@ -1,4 +1,8 @@
 export default defineNuxtRouteMiddleware(async (to) => {
+  if (import.meta.server) {
+    return
+  }
+
   console.log('[auth middleware] start:', to.path)
 
   if (to.path === '/login') {

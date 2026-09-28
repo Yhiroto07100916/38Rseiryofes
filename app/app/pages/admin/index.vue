@@ -63,43 +63,6 @@
           md="4"
         >
           <v-card
-            to="/admin/account-roles"
-            rounded="xl"
-            variant="outlined"
-            class="admin-card"
-          >
-            <v-card-item>
-              <template #prepend>
-                <v-icon
-                  icon="mdi-shield-account-outline"
-                  size="32"
-                  color="primary"
-                />
-              </template>
-
-              <v-card-title>
-                アカウント権限
-              </v-card-title>
-
-              <v-card-subtitle>
-                管理者などのアカウント権限を管理
-              </v-card-subtitle>
-            </v-card-item>
-
-            <v-card-actions>
-              <v-spacer />
-
-              <v-icon icon="mdi-chevron-right" />
-            </v-card-actions>
-          </v-card>
-        </v-col>
-
-        <v-col
-          cols="12"
-          sm="6"
-          md="4"
-        >
-          <v-card
             to="/tasks"
             rounded="xl"
             variant="outlined"
@@ -131,42 +94,6 @@
           </v-card>
         </v-col>
 
-        <v-col
-          cols="12"
-          sm="6"
-          md="4"
-        >
-          <v-card
-            to="/admin/roles"
-            rounded="xl"
-            variant="outlined"
-            class="admin-card"
-          >
-            <v-card-item>
-              <template #prepend>
-                <v-icon
-                  icon="mdi-account-multiple-check-outline"
-                  size="32"
-                  color="primary"
-                />
-              </template>
-
-              <v-card-title>
-                役割管理
-              </v-card-title>
-
-              <v-card-subtitle>
-                38R内の役割・担当を管理
-              </v-card-subtitle>
-            </v-card-item>
-
-            <v-card-actions>
-              <v-spacer />
-
-              <v-icon icon="mdi-chevron-right" />
-            </v-card-actions>
-          </v-card>
-        </v-col>
       </v-row>
   </v-container>
 </template>
