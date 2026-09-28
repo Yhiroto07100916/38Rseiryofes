@@ -74,14 +74,6 @@
           </div>
 
           <template v-if="editing">
-            <v-alert
-              v-if="editError"
-              type="error"
-              variant="tonal"
-              class="mb-4"
-            >
-              {{ editError }}
-            </v-alert>
 
             <template v-if="canEdit">
               <v-text-field
@@ -328,13 +320,6 @@
         </v-card-title>
 
         <v-card-text>
-          <v-alert
-            v-if="commentsError"
-            type="error"
-            variant="tonal"
-            class="mb-4"
-          >
-            {{ commentsError }}
           </v-alert>
 
           <div
@@ -468,6 +453,8 @@ import {
   ref,
 } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
+import { useConfirmDialog } from '~/composables/useConfirmDialog'
+import { useSnackbar } from '~/composables/useSnackbar'
 import {
   type Task,
   type TaskComment,
@@ -481,6 +468,8 @@ definePageMeta({
 
 const route = useRoute()
 const auth = useAuthStore()
+const { confirm } = useConfirmDialog()
+const snackbar = useSnackbar()
 
 const {
   getTask,
@@ -493,14 +482,12 @@ const comments = ref<TaskComment[]>([])
 
 const loading = ref(false)
 const errorMessage = ref('')
-const commentsError = ref('')
 
 const commentContent = ref('')
 const commentSubmitting = ref(false)
 
 const editing = ref(false)
 const editLoading = ref(false)
-const editError = ref('')
 
 const deleteLoading = ref(false)
 
@@ -596,7 +583,6 @@ const priorityItems = [
 const loadTask = async () => {
   loading.value = true
   errorMessage.value = ''
-  commentsError.value = ''
 
   try {
     const taskId = String(route.params.id)
@@ -658,8 +644,7 @@ const loadAssignmentOptions = async () => {
     roles.value = rolesResponse.roles
   } catch (error) {
     console.error(error)
-    editError.value =
-      '担当者・係の一覧を取得できませんでした。'
+    snackbar.error('担当者・係の一覧を取得できませんでした。')
   } finally {
     usersLoading.value = false
     rolesLoading.value = false
@@ -671,7 +656,6 @@ const startEdit = async () => {
     return
   }
 
-  editError.value = ''
 
   editForm.value = {
     title: task.value.title,
@@ -696,7 +680,6 @@ const startEdit = async () => {
 
 const cancelEdit = () => {
   editing.value = false
-  editError.value = ''
 }
 
 const saveEdit = async () => {
@@ -729,7 +712,6 @@ const saveEdit = async () => {
   }
 
   editLoading.value = true
-  editError.value = ''
 
   try {
     const response = await apiFetch<Task>(
@@ -744,8 +726,7 @@ const saveEdit = async () => {
     editing.value = false
   } catch (error) {
     console.error(error)
-    editError.value =
-      'タスクの更新に失敗しました。'
+    snackbar.error('タスクの更新に失敗しました。')
   } finally {
     editLoading.value = false
   }
@@ -756,11 +737,14 @@ const deleteTask = async () => {
     return
   }
 
-  if (
-    !window.confirm(
-      'このタスクを削除しますか？この操作は取り消せません。',
-    )
-  ) {
+  const confirmed = await confirm({
+    title: 'タスクを削除',
+    message: 'このタスクを削除しますか？この操作は取り消せません。',
+    confirmText: '削除',
+    confirmColor: 'error',
+  })
+
+  if (!confirmed) {
     return
   }
 
@@ -775,11 +759,12 @@ const deleteTask = async () => {
       },
     )
 
+    snackbar.success('タスクを削除しました。')
+
     await navigateTo('/tasks/class-representative')
   } catch (error) {
     console.error(error)
-    errorMessage.value =
-      'タスクの削除に失敗しました。'
+    snackbar.error('タスクの削除に失敗しました。')
   } finally {
     deleteLoading.value = false
   }
@@ -793,7 +778,6 @@ const submitComment = async () => {
   }
 
   commentSubmitting.value = true
-  commentsError.value = ''
 
   try {
     const response = await apiFetch<TaskComment>(
@@ -810,8 +794,7 @@ const submitComment = async () => {
     commentContent.value = ''
   } catch (error) {
     console.error(error)
-    commentsError.value =
-      'コメントの投稿に失敗しました。'
+    snackbar.error('コメントの投稿に失敗しました。')
   } finally {
     commentSubmitting.value = false
   }
@@ -831,7 +814,6 @@ const startCommentEdit = (comment: TaskComment) => {
 
   editingCommentId.value = comment.id
   editingCommentContent.value = comment.content
-  commentsError.value = ''
 }
 
 const cancelCommentEdit = () => {
@@ -850,7 +832,6 @@ const saveCommentEdit = async (
   }
 
   commentEditLoading.value = true
-  commentsError.value = ''
 
   try {
     const response =
@@ -875,8 +856,7 @@ const saveCommentEdit = async (
     cancelCommentEdit()
   } catch (error) {
     console.error(error)
-    commentsError.value =
-      'コメントの更新に失敗しました。'
+    snackbar.error('コメントの更新に失敗しました。')
   } finally {
     commentEditLoading.value = false
   }
@@ -889,15 +869,17 @@ const deleteComment = async (
     return
   }
 
-  if (
-    !window.confirm(
-      'このコメントを削除しますか？',
-    )
-  ) {
+  const confirmed = await confirm({
+    title: 'コメントを削除',
+    message: 'このコメントを削除しますか？',
+    confirmText: '削除',
+    confirmColor: 'error',
+  })
+
+  if (!confirmed) {
     return
   }
 
-  commentsError.value = ''
 
   try {
     await apiFetch(
@@ -911,10 +893,11 @@ const deleteComment = async (
       comments.value.filter(
         (item) => item.id !== comment.id,
       )
+
+    snackbar.success('コメントを削除しました。')
   } catch (error) {
     console.error(error)
-    commentsError.value =
-      'コメントの削除に失敗しました。'
+    snackbar.error('コメントの削除に失敗しました。')
   }
 }
 

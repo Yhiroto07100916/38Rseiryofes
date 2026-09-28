@@ -203,15 +203,6 @@
       </v-card-text>
     </v-card>
 
-    <v-alert
-      v-if="errorMessage"
-      type="error"
-      variant="tonal"
-      class="mb-4"
-    >
-      {{ errorMessage }}
-    </v-alert>
-
     <div class="d-flex align-center mb-3">
       <div class="text-subtitle-1 font-weight-bold">
         タスク一覧
@@ -504,6 +495,7 @@ import {
   ref,
 } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
+import { useSnackbar } from '~/composables/useSnackbar'
 import {
   type Task,
   useApi,
@@ -516,10 +508,10 @@ definePageMeta({
 
 const auth = useAuthStore()
 const { getTasks } = useApi()
+const snackbar = useSnackbar()
 
 const tasks = ref<Task[]>([])
 const loading = ref(false)
-const errorMessage = ref('')
 
 const keyword = ref('')
 const scopeFilter = ref<Task['scope'] | null>(null)
@@ -748,15 +740,13 @@ const resetFilters = () => {
 
 const loadTasks = async () => {
   loading.value = true
-  errorMessage.value = ''
 
   try {
     const response = await getTasks()
     tasks.value = response.tasks
   } catch (error) {
     console.error(error)
-    errorMessage.value =
-      'タスクの取得に失敗しました。'
+    snackbar.error('タスクの取得に失敗しました。')
   } finally {
     loading.value = false
   }
@@ -877,9 +867,15 @@ const assigneeLabel = (task: Task) => {
   const users = task.assignments.users
 
   if (users.length === 1) {
-    return users[0].nickname
-      ? `${users[0].name}（${users[0].nickname}）`
-      : users[0].name
+    const user = users[0]
+
+    if (!user) {
+      return ''
+    }
+
+    return user.nickname
+      ? `${user.name}（${user.nickname}）`
+      : user.name
   }
 
   return `${users.length}人`
@@ -889,7 +885,13 @@ const roleLabel = (task: Task) => {
   const roles = task.assignments.roles
 
   if (roles.length === 1) {
-    return roles[0].name
+    const role = roles[0]
+
+    if (!role) {
+      return ''
+    }
+
+    return role.name
   }
 
   return `${roles.length}係`
