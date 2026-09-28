@@ -1,0 +1,5 @@
+.wrangler/
+app/node_modules/
+app/.nuxt/
+app/.output/
+app/.env
