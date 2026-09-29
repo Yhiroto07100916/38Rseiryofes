@@ -27,15 +27,6 @@
       />
     </div>
 
-    <v-alert
-      v-if="errorMessage"
-      type="error"
-      variant="tonal"
-      class="mb-4"
-    >
-      {{ errorMessage }}
-    </v-alert>
-
     <div v-if="loading">
       <v-skeleton-loader type="article" />
       <v-skeleton-loader
@@ -480,7 +471,6 @@ const task = ref<Task | null>(null)
 const comments = ref<TaskComment[]>([])
 
 const loading = ref(false)
-const errorMessage = ref('')
 
 const commentContent = ref('')
 const commentSubmitting = ref(false)
@@ -581,8 +571,6 @@ const priorityItems = [
 
 const loadTask = async () => {
   loading.value = true
-  errorMessage.value = ''
-
   try {
     const taskId = String(route.params.id)
 
@@ -598,8 +586,7 @@ const loadTask = async () => {
     comments.value = commentsResponse.comments
   } catch (error) {
     console.error(error)
-    errorMessage.value =
-      'タスクの取得に失敗しました。'
+    snackbar.error('タスクの取得に失敗しました。')
   } finally {
     loading.value = false
   }
@@ -748,7 +735,6 @@ const deleteTask = async () => {
   }
 
   deleteLoading.value = true
-  errorMessage.value = ''
 
   try {
     await apiFetch(

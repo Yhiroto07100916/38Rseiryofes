@@ -21,15 +21,6 @@
           </v-card-title>
 
           <v-card-text class="pt-6">
-            <v-alert
-              v-if="errorMessage"
-              type="error"
-              variant="tonal"
-              class="mb-4"
-            >
-              {{ errorMessage }}
-            </v-alert>
-
             <v-text-field
               v-model="studentNumber"
               label="学籍番号"
@@ -84,12 +75,12 @@ definePageMeta({
 })
 
 const auth = useAuthStore()
+const snackbar = useSnackbar()
 
 const studentNumber = ref('')
 const password = ref('')
 const showPassword = ref(false)
 const loading = ref(false)
-const errorMessage = ref('')
 
 const handleLogin = async () => {
   if (!studentNumber.value || !password.value || loading.value) {
@@ -97,7 +88,6 @@ const handleLogin = async () => {
   }
 
   loading.value = true
-  errorMessage.value = ''
 
   try {
     await auth.login(
@@ -109,10 +99,11 @@ const handleLogin = async () => {
   } catch (error: any) {
     console.error('Login failed:', error)
 
-    errorMessage.value =
+    snackbar.error(
       error?.data?.detail?.message ||
       error?.data?.detail ||
-      'ログインに失敗しました。学籍番号とパスワードを確認してください。'
+      'ログインに失敗しました。学籍番号とパスワードを確認してください。',
+    )
   } finally {
     loading.value = false
   }
