@@ -88,6 +88,22 @@ export const useApi = () => {
     )
   }
 
+  const updateTask = (
+    taskId: string,
+    data: {
+      status?: Task['status']
+      priority?: Task['priority']
+    },
+  ) => {
+    return apiFetch<Task>(
+      `/api/tasks/${taskId}`,
+      {
+        method: 'PATCH',
+        body: data,
+      },
+    )
+  }
+
   const getTask = (taskId: string) => {
     return apiFetch<Task>(
       `/api/tasks/${taskId}`,
@@ -103,6 +119,7 @@ export const useApi = () => {
   return {
     apiFetch,
     getTasks,
+    updateTask,
     getTask,
     getTaskComments,
   }

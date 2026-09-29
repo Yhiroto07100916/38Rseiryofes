@@ -214,6 +214,16 @@
 
       <v-spacer />
 
+      <v-select
+        v-model="sortOrder"
+        :items="sortItems"
+        label="並び替え"
+        variant="outlined"
+        density="compact"
+        hide-details
+        class="task-sort-select mr-2"
+      />
+
       <v-btn
         icon="mdi-refresh"
         variant="text"
@@ -266,7 +276,22 @@
           <div class="d-flex align-start">
             <div class="flex-grow-1 min-width-0">
               <div class="d-flex flex-wrap ga-2 mb-2">
+                <v-select
+                  v-if="auth.hasPermission('tasks.edit')"
+                  :model-value="task.status"
+                  :items="statusItems"
+                  :color="statusColor(task.status)"
+                  variant="outlined"
+                  density="compact"
+                  hide-details
+                  class="task-status-select"
+                  :loading="updatingTaskId === task.id"
+                  @update:model-value="updateTaskStatus(task, $event)"
+                  @click.stop
+                />
+
                 <v-chip
+                  v-else
                   size="small"
                   :color="statusColor(task.status)"
                   variant="tonal"
@@ -332,6 +357,22 @@
               />
 
               {{ formatDueDate(task.due_at) }}
+            </div>
+
+            <div
+              v-else
+              class="d-flex align-center"
+              :class="isOverdue(task)
+                ? 'text-error'
+                : 'text-medium-emphasis'"
+            >
+              <v-icon
+                icon="mdi-calendar-clock"
+                size="18"
+                class="mr-1"
+              />
+
+              なし
             </div>
 
             <div
@@ -507,7 +548,7 @@ definePageMeta({
 })
 
 const auth = useAuthStore()
-const { getTasks } = useApi()
+const { getTasks, updateTask } = useApi()
 const snackbar = useSnackbar()
 
 const tasks = ref<Task[]>([])
@@ -522,6 +563,15 @@ const roleFilter = ref<string | null>(null)
 const incompleteOnly = ref(false)
 const myTasksOnly = ref(false)
 const overdueOnly = ref(false)
+
+const sortOrder = ref<
+  'due_asc' |
+  'priority_desc' |
+  'updated_desc' |
+  'created_desc'
+>('due_asc')
+
+const updatingTaskId = ref<string | null>(null)
 
 const scopeItems = [
   {
@@ -572,6 +622,25 @@ const priorityItems = [
   },
 ]
 
+const sortItems = [
+  {
+    title: '期限が近い順',
+    value: 'due_asc',
+  },
+  {
+    title: '優先度が高い順',
+    value: 'priority_desc',
+  },
+  {
+    title: '更新が新しい順',
+    value: 'updated_desc',
+  },
+  {
+    title: '作成が新しい順',
+    value: 'created_desc',
+  },
+]
+
 const assigneeItems = computed(() => {
   const map = new Map<string, string>()
 
@@ -615,7 +684,7 @@ const filteredTasks = computed(() => {
   const normalizedKeyword =
     keyword.value.trim().toLowerCase()
 
-  return tasks.value.filter((task) => {
+  const filtered = tasks.value.filter((task) => {
     if (
       scopeFilter.value !== null &&
       task.scope !== scopeFilter.value
@@ -686,6 +755,46 @@ const filteredTasks = computed(() => {
     }
 
     return true
+  })
+
+  const priorityRank: Record<Task['priority'], number> = {
+    low: 1,
+    medium: 2,
+    high: 3,
+    urgent: 4,
+  }
+
+  return [...filtered].sort((a, b) => {
+    switch (sortOrder.value) {
+      case 'due_asc': {
+        if (!a.due_at && !b.due_at) return 0
+        if (!a.due_at) return 1
+        if (!b.due_at) return -1
+
+        return (
+          new Date(a.due_at).getTime() -
+          new Date(b.due_at).getTime()
+        )
+      }
+
+      case 'priority_desc':
+        return (
+          priorityRank[b.priority] -
+          priorityRank[a.priority]
+        )
+
+      case 'updated_desc':
+        return (
+          new Date(b.updated_at).getTime() -
+          new Date(a.updated_at).getTime()
+        )
+
+      case 'created_desc':
+        return (
+          new Date(b.created_at).getTime() -
+          new Date(a.created_at).getTime()
+        )
+    }
   })
 })
 
@@ -793,6 +902,36 @@ const openTask = async (task: Task) => {
   await navigateTo(
     `${basePath}/${task.id}`,
   )
+}
+
+const updateTaskStatus = async (
+  task: Task,
+  status: Task['status'],
+) => {
+  if (
+    status === task.status ||
+    updatingTaskId.value !== null
+  ) {
+    return
+  }
+
+  const previousStatus = task.status
+  updatingTaskId.value = task.id
+
+  try {
+    await updateTask(task.id, {
+      status,
+    })
+
+    task.status = status
+    snackbar.success('ステータスを更新しました。')
+  } catch (error) {
+    console.error(error)
+    task.status = previousStatus
+    snackbar.error('ステータスの更新に失敗しました。')
+  } finally {
+    updatingTaskId.value = null
+  }
 }
 
 const statusLabel = (
@@ -927,6 +1066,24 @@ onMounted(async () => {
 <style scoped>
 .min-width-0 {
   min-width: 0;
+}
+
+.task-sort-select {
+  width: 180px;
+}
+
+.task-status-select {
+  width: 120px;
+}
+
+@media (max-width: 600px) {
+  .task-sort-select {
+    width: 150px;
+  }
+
+  .task-status-select {
+    width: 110px;
+  }
 }
 
 .task-card {
