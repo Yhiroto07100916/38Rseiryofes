@@ -197,7 +197,6 @@
             />
 
             <v-select
-              v-if="!editingUser"
               v-model="form.account_role_id"
               :items="accountRoleOptions"
               item-title="label"
@@ -206,8 +205,8 @@
               variant="outlined"
               rounded="lg"
               density="comfortable"
-              :disabled="saving || accountRolesLoading"
-              :loading="accountRolesLoading"
+              :disabled="saving || accountRolesLoading || accountRoleSaving"
+              :loading="accountRolesLoading || accountRoleSaving"
               class="mb-2"
               required
             />
@@ -367,6 +366,7 @@ const users = ref<User[]>([])
 const accountRoles = ref<AccountRole[]>([])
 const loading = ref(false)
 const accountRolesLoading = ref(false)
+const accountRoleSaving = ref(false)
 const saving = ref(false)
 const dialogOpen = ref(false)
 const errorMessage = ref('')
@@ -436,14 +436,25 @@ const openCreateDialog = () => {
   dialogOpen.value = true
 }
 
-const openEditDialog = (user: User) => {
+const openEditDialog = async (user: User) => {
   editingUser.value = user
 
   form.student_number = user.student_number
   form.name = user.name
   form.nickname = user.nickname ?? ''
+  form.account_role_id = ''
 
   dialogOpen.value = true
+
+  try {
+    const response = await apiFetch<{
+      account_roles: AccountRole[]
+    }>(`/api/users/${user.id}/account-roles`)
+
+    form.account_role_id = response.account_roles[0]?.id || ''
+  } catch {
+    errorMessage.value = 'アカウント権限の取得に失敗しました。'
+  }
 }
 
 const closeDialog = () => {
@@ -552,6 +563,42 @@ const saveUser = async () => {
         },
       )
 
+      const currentRolesResponse = await apiFetch<{
+        account_roles: AccountRole[]
+      }>(`/api/users/${editingUser.value.id}/account-roles`)
+
+      const currentRoleIds = currentRolesResponse.account_roles.map(
+        (role) => role.id,
+      )
+
+      accountRoleSaving.value = true
+
+      for (const roleId of currentRoleIds) {
+        if (roleId !== form.account_role_id) {
+          await apiFetch(
+            `/api/users/${editingUser.value.id}/account-roles/${roleId}`,
+            {
+              method: 'DELETE',
+            },
+          )
+        }
+      }
+
+      if (
+        form.account_role_id &&
+        !currentRoleIds.includes(form.account_role_id)
+      ) {
+        await apiFetch(
+          `/api/users/${editingUser.value.id}/account-roles`,
+          {
+            method: 'POST',
+            body: {
+              account_role_id: form.account_role_id,
+            },
+          },
+        )
+      }
+
       const index = users.value.findIndex(
         (user) => user.id === updatedUser.id,
       )
@@ -590,6 +637,7 @@ const saveUser = async () => {
         : 'メンバーの登録に失敗しました。'
     }
   } finally {
+    accountRoleSaving.value = false
     saving.value = false
   }
 }
