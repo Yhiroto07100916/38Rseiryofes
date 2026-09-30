@@ -44,6 +44,60 @@ export interface CalendarEventAttendance {
   }
 }
 
+
+export interface NewsCalendarEvent {
+  id: string
+  title: string
+  starts_at: string
+  ends_at: string | null
+  is_all_day: number
+  location: string | null
+  color: string | null
+  category_id: string | null
+  category_name: string | null
+  category_color: string | null
+}
+
+export interface NewsTask {
+  id: string
+  title: string
+  description: string | null
+  scope: Task["scope"]
+  status: Task["status"]
+  priority: Task["priority"]
+  due_at: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface NewsAttachment {
+  id: string
+  news_id: string
+  file_name: string
+  file_key: string
+  content_type: string | null
+  file_size: number | null
+  created_at: string
+}
+
+export interface News {
+  id: string
+  title: string
+  detail: string
+  author: string
+  is_important: number
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface NewsWithCalendarEvents extends News {
+  calendar_events: NewsCalendarEvent[]
+  tasks: NewsTask[]
+  attachments: NewsAttachment[]
+}
+
 export interface CalendarEventListResponse {
   events: CalendarEvent[]
 }
@@ -263,6 +317,64 @@ export const useApi = () => {
     )
   }
 
+  const getNews = () => {
+    return apiFetch<{ news: News[] }>(
+      '/api/news',
+    )
+  }
+
+  const getNewsById = (newsId: string) => {
+    return apiFetch<NewsWithCalendarEvents>(
+      `/api/news/${newsId}`,
+    )
+  }
+
+  const createNews = (data: {
+    title: string
+    detail: string
+    author: string
+    is_important?: boolean
+    calendar_event_ids?: string[]
+    task_ids?: string[]
+  }) => {
+    return apiFetch<NewsWithCalendarEvents>(
+      '/api/news',
+      {
+        method: 'POST',
+        body: data,
+      },
+    )
+  }
+
+  const updateNews = (
+    newsId: string,
+    data: {
+      title?: string
+      detail?: string
+      author?: string
+      is_important?: boolean
+      calendar_event_ids?: string[]
+      task_ids?: string[]
+    },
+  ) => {
+    return apiFetch<NewsWithCalendarEvents>(
+      `/api/news/${newsId}`,
+      {
+        method: 'PATCH',
+        body: data,
+      },
+    )
+  }
+
+  const deleteNews = (newsId: string) => {
+    return apiFetch<{ success: boolean; id: string }>(
+      `/api/news/${newsId}`,
+      {
+        method: 'DELETE',
+      },
+    )
+  }
+
   const createCalendarEvent = (data: {
     title: string
     description?: string | null
@@ -329,5 +441,10 @@ export const useApi = () => {
     createCalendarEvent,
     updateCalendarEvent,
     deleteCalendarEvent,
+    getNews,
+    getNewsById,
+    createNews,
+    updateNews,
+    deleteNews,
   }
 }

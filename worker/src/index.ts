@@ -5,6 +5,7 @@ import { handleAccountRoles, handleUserAccountRoles } from "./routes/account-rol
 import { handleTasks } from "./routes/tasks"
 import { handleCalendar } from "./routes/calendar"
 import { handleCalendarCategories } from "./routes/calendar-categories"
+import { handleNews } from "./routes/news"
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -95,6 +96,33 @@ export default {
               status: "error",
               database: "disconnected",
             },
+            { status: 500 },
+          ),
+        )
+      }
+    }
+
+    if (
+      url.pathname === "/api/news" ||
+      url.pathname.startsWith("/api/news/")
+    ) {
+      const path = url.pathname.slice("/api/news".length)
+      const pathParts = path
+        .split("/")
+        .filter(Boolean)
+
+      try {
+        return withCors(
+          request,
+          await handleNews(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("News API error:", error)
+
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
             { status: 500 },
           ),
         )
