@@ -5,12 +5,29 @@
     color="primary"
     class="app-bottom-navigation"
   >
+
+    <v-btn
+      value="/"
+      to="/calendar"
+    >
+      <v-icon icon="mdi-home" />
+      <span>カレンダー</span>
+    </v-btn>
+
     <v-btn
       value="/"
       to="/"
     >
       <v-icon icon="mdi-home" />
       <span>ホーム</span>
+    </v-btn>
+
+    <v-btn
+      value="/"
+      to="/tasks"
+    >
+      <v-icon icon="mdi-home" />
+      <span>タスク</span>
     </v-btn>
   </v-bottom-navigation>
 </template>

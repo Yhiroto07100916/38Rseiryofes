@@ -15,8 +15,7 @@
 
     <AppBottomNavigation />
 
-    <AppSnackbar />
-    <AppConfirmDialog />
+    <CommonAppSnackbar />
   </v-app>
 </template>
 

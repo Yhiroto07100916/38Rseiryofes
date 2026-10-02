@@ -3,6 +3,9 @@ import { handleAdminSetPassword, handleAuth } from "./routes/auth"
 import { handleRoles, handleUserRole, handleUserRoles } from "./routes/roles"
 import { handleAccountRoles, handleUserAccountRoles } from "./routes/account-roles"
 import { handleTasks } from "./routes/tasks"
+import { handleCalendar } from "./routes/calendar"
+import { handleCalendarCategories } from "./routes/calendar-categories"
+import { handleNews } from "./routes/news"
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -18,7 +21,7 @@ function getCorsHeaders(request: Request): Headers {
   ) {
     headers.set("Access-Control-Allow-Origin", origin)
     headers.set("Access-Control-Allow-Credentials", "true")
-    headers.set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+    headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
     headers.set(
       "Access-Control-Allow-Headers",
       "Content-Type",
@@ -100,6 +103,33 @@ export default {
     }
 
     if (
+      url.pathname === "/api/news" ||
+      url.pathname.startsWith("/api/news/")
+    ) {
+      const path = url.pathname.slice("/api/news".length)
+      const pathParts = path
+        .split("/")
+        .filter(Boolean)
+
+      try {
+        return withCors(
+          request,
+          await handleNews(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("News API error:", error)
+
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
+            { status: 500 },
+          ),
+        )
+      }
+    }
+
+    if (
       url.pathname === "/api/tasks" ||
       url.pathname.startsWith("/api/tasks/")
     ) {
@@ -115,6 +145,60 @@ export default {
         )
       } catch (error) {
         console.error("Tasks API error:", error)
+
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
+            { status: 500 },
+          ),
+        )
+      }
+    }
+
+    if (
+      url.pathname === "/api/calendar/categories" ||
+      url.pathname.startsWith("/api/calendar/categories/")
+    ) {
+      const path = url.pathname.slice("/api/calendar/categories".length)
+      const pathParts = path
+        .split("/")
+        .filter(Boolean)
+
+      try {
+        return withCors(
+          request,
+          await handleCalendarCategories(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("Calendar categories API error:", error)
+
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
+            { status: 500 },
+          ),
+        )
+      }
+    }
+
+    if (
+      url.pathname === "/api/calendar" ||
+      url.pathname.startsWith("/api/calendar/")
+    ) {
+      const path = url.pathname.slice("/api/calendar".length)
+      const pathParts = path
+        .split("/")
+        .filter(Boolean)
+
+      try {
+        return withCors(
+          request,
+          await handleCalendar(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("Calendar API error:", error)
 
         return withCors(
           request,

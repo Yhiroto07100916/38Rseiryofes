@@ -3,14 +3,17 @@
     fluid
     class="pa-4 pa-sm-6"
   >
-    <div class="mb-6">
-      <h1 class="text-h5 font-weight-bold">
-        タスク管理
-      </h1>
+    <div class="d-flex align-center mb-6">
+      <BackButton />
+      <div class="mb-6">
+        <h1 class="text-h5 font-weight-bold">
+          タスク管理
+        </h1>
 
-      <p class="text-body-2 text-medium-emphasis mt-1">
-        星陵祭準備に関するタスクを管理します
-      </p>
+        <p class="text-body-2 text-medium-emphasis mt-1">
+          星陵祭準備に関するタスクを管理します
+        </p>
+      </div>
     </div>
 
     <v-row class="mb-2">
