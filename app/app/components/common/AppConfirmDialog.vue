@@ -20,7 +20,7 @@
 
         <v-btn
           variant="text"
-          @click="ui.resolveConfirm(false)"
+          @click="console.log('[Confirm] cancel clicked'); ui.resolveConfirm(false)"
         >
           {{ ui.confirmCancelText }}
         </v-btn>
@@ -28,7 +28,7 @@
         <v-btn
           :color="ui.confirmColor"
           variant="flat"
-          @click="ui.resolveConfirm(true)"
+          @click="console.log('[Confirm] confirm clicked'); ui.resolveConfirm(true)"
         >
           {{ ui.confirmText }}
         </v-btn>
@@ -38,7 +38,23 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted, watch } from 'vue'
 import { useUiStore } from '~/stores/ui'
 
 const ui = useUiStore()
+
+console.log('[ConfirmDialog] component setup', {
+  visible: ui.confirmVisible,
+})
+
+onMounted(() => {
+  console.log('[ConfirmDialog] mounted')
+})
+
+watch(
+  () => ui.confirmVisible,
+  (value) => {
+    console.log('[ConfirmDialog] visible changed:', value)
+  },
+)
 </script>

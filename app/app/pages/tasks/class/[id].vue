@@ -223,6 +223,24 @@
               </span>
             </div>
 
+            <div
+              v-else
+              class="detail-item"
+            >
+              <v-icon
+                icon="mdi-calendar-clock"
+                size="20"
+              />
+
+              <span class="text-medium-emphasis">
+                期限
+              </span>
+
+              <span>
+                なし
+              </span>
+            </div>
+
             <div class="detail-item">
               <v-icon
                 icon="mdi-account"

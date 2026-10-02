@@ -58,7 +58,10 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   const confirm = (options: ConfirmOptions): Promise<boolean> => {
+    console.log('[Confirm] opened:', options.title)
+
     if (confirmResolver) {
+      console.log('[Confirm] previous resolver cancelled')
       confirmResolver(false)
     }
 
@@ -75,11 +78,15 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   const resolveConfirm = (value: boolean) => {
+    console.log('[Confirm] resolved:', value)
+
     confirmVisible.value = false
 
     if (confirmResolver) {
       confirmResolver(value)
       confirmResolver = null
+    } else {
+      console.warn('[Confirm] resolver is missing')
     }
   }
 
