@@ -588,30 +588,43 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   ) => {
     const maxCharacters = getPrintMaxCharacters()
 
-    /*
-     * このページに登場するキャラクターだけを
-     * 上部に重複なしで表示する。
-     *
-     * 配役名は表示しない。
-     */
-    const headerCharacters = Array.from(
-      new Set(
-        blocks
-          .filter(
-            (block) =>
-              block.type === 'dialogue' &&
-              block.character_name,
-          )
-          .map((block) => block.character_name!.trim())
-          .filter(Boolean),
-      ),
-    )
+    const printColumns = blocks.flatMap((block) => {
+      const chunks = splitVerticalText(
+        block.content,
+        maxCharacters,
+      )
 
-    const headerColumns = headerCharacters
+      return chunks.map((chunk, index) => ({
+        block,
+        chunk,
+        isFirst: index === 0,
+        isLast: index === chunks.length - 1,
+      }))
+    })
+
+    /*
+     * ヘッダーと本文で完全に同じ列構成を使う。
+     *
+     * これにより、
+     * 「話者名の列」と「その話者の台詞の列」が
+     * 横方向に正確に揃う。
+     *
+     * 台詞が複数列に分割された場合は、
+     * 最初の列だけ話者名を表示する。
+     */
+    const headerColumns = printColumns
       .map(
-        (characterName) => `
+        ({ block, isFirst }) => `
           <div class="print-header-character">
-            ${escapeHtml(characterName)}
+            <span class="print-header-character-text">
+              ${
+                block.type === 'dialogue' && isFirst
+                  ? escapeHtml(
+                      block.character_name?.trim() || '',
+                    )
+                  : ''
+              }
+            </span>
           </div>
         `,
       )
@@ -620,44 +633,20 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
     /*
      * 本文。
      *
-     * DOM順:
-     *   場面欄
-     *   ↓
-     *   最初の台詞
-     *   ↓
-     *   次の台詞
-     *
-     * direction: rtl により、
-     * 紙面では右 → 左に並ぶ。
+     * DOM上の列順とヘッダーの列順を完全に一致させる。
      */
-    const bodyColumns = blocks
-      .flatMap((block) => {
-        const chunks = splitVerticalText(
-          block.content,
-          maxCharacters,
-        )
-
-        if (!chunks.length) {
-          return []
-        }
+    const bodyColumns = printColumns
+      .map(({ block, chunk, isFirst, isLast }) => {
+        const escapedChunk = escapeHtml(chunk)
 
         if (block.type === 'dialogue') {
-          return chunks.map((chunk, index) => {
-            const isFirst = index === 0
-            const isLast = index === chunks.length - 1
-
-            const content = `
-              ${isFirst ? '「' : ''}
-              ${escapeHtml(chunk)}
-              ${isLast ? '」' : ''}
-            `
-
-            return `
-              <div class="print-script-column print-dialogue-column">
-                ${content}
-              </div>
-            `
-          })
+          return `
+            <div class="print-script-column print-dialogue-column">
+              <span class="print-column-text">
+                ${isFirst ? '「' : ''}${escapedChunk}${isLast ? '」' : ''}
+              </span>
+            </div>
+          `
         }
 
         const className =
@@ -667,13 +656,13 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               ? 'print-sound-column'
               : 'print-lighting-column'
 
-        return chunks.map(
-          (chunk) => `
-            <div class="print-script-column ${className}">
-              ${escapeHtml(chunk)}
-            </div>
-          `,
-        )
+        return `
+          <div class="print-script-column ${className}">
+            <span class="print-column-text">
+              ${escapedChunk}
+            </span>
+          </div>
+        `
       })
       .join('')
 
@@ -682,6 +671,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
         <div class="print-top-rule"></div>
 
         <div class="print-character-area">
+          <div class="print-character-spacer"></div>
           ${headerColumns}
         </div>
 
@@ -955,11 +945,28 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               align-items: flex-start;
               justify-content: flex-start;
 
-              gap: 6mm;
+              gap: 4mm;
 
               overflow: hidden;
 
               direction: rtl;
+            }
+
+            /*
+             * 本文の場面欄と同じ幅。
+             *
+             * これを先頭に置くことで、
+             * ヘッダーの話者名と本文の台詞列を
+             * 同じ横位置に揃える。
+             */
+            .print-character-spacer {
+              flex: 0 0 18mm;
+
+              width: 18mm;
+              height: 23mm;
+
+              padding: 0;
+              margin: 0;
             }
 
             .print-header-character {
@@ -968,11 +975,10 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               width: 13mm;
               height: 23mm;
 
-              display: flex;
-              align-items: flex-start;
-              justify-content: flex-start;
+              position: relative;
 
-              padding-top: 1mm;
+              padding: 0;
+              margin: 0;
 
               writing-mode: vertical-rl;
               text-orientation: mixed;
@@ -982,11 +988,28 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               line-height: 1.25;
 
               white-space: nowrap;
+
+              overflow: hidden;
             }
 
-            /*
-             * 登場人物欄と本文の境界線
-             */
+            .print-header-character-text {
+              position: absolute;
+
+              top: 0;
+              right: 0;
+
+              display: block;
+
+              margin: 0;
+              padding: 0;
+
+              writing-mode: vertical-rl;
+              text-orientation: mixed;
+
+              white-space: nowrap;
+            }
+
+
             .print-scene-rule {
               width: 100%;
               height: 0;
@@ -1034,15 +1057,10 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               width: 18mm;
               height: 100%;
 
-              display: flex;
-              flex-direction: row;
+              position: relative;
 
-              align-items: flex-start;
-              justify-content: flex-start;
-
-              gap: 2mm;
-
-              padding-left: 3mm;
+              padding: 0;
+              margin: 0;
 
               border-left: 1px solid #999;
 
@@ -1052,31 +1070,49 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               font-weight: 700;
 
               white-space: normal;
+
+              overflow: hidden;
             }
 
             .print-act-label {
-              flex: 0 0 auto;
+              position: absolute;
+
+              top: 0;
+              right: 1mm;
 
               font-size: 9pt;
               line-height: 1.4;
+
+              white-space: nowrap;
             }
 
             .print-scene-title {
-              flex: 0 0 auto;
+              position: absolute;
+
+              top: 0;
+              right: 7mm;
 
               font-size: 13pt;
               line-height: 1.5;
+
+              white-space: nowrap;
             }
 
             .print-scene-description {
-              flex: 0 0 auto;
+              position: absolute;
+
+              top: 0;
+              right: 13mm;
 
               font-size: 8pt;
               line-height: 1.5;
 
               color: #555;
               font-weight: 400;
+
+              white-space: nowrap;
             }
+
 
             /*
              * 1本の縦書き列。
@@ -1091,6 +1127,11 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               width: 13mm;
               height: 100%;
 
+              position: relative;
+
+              padding: 0;
+              margin: 0;
+
               writing-mode: vertical-rl;
               text-orientation: mixed;
 
@@ -1103,13 +1144,17 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               font-size: 10.5pt;
               line-height: 1.25;
 
-              padding: 0;
-
               align-self: flex-start;
+
+              vertical-align: top;
             }
 
             /*
              * 台詞
+             *
+             * 台詞だけは必ず本文領域の上端から開始する。
+             * absolute positioning により、
+             * flex / writing-mode の影響で下へ移動するのを防ぐ。
              */
             .print-dialogue-column {
               color: #111;
@@ -1120,7 +1165,45 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               line-height: 1.25;
 
               letter-spacing: 0.02em;
+
+              text-align: start;
+
+              align-self: flex-start;
+
+              vertical-align: top;
+
+              overflow: hidden;
             }
+
+            .print-dialogue-column .print-column-text {
+              position: absolute;
+
+              top: 0;
+              right: 0;
+
+              display: block;
+
+              width: 100%;
+              height: auto;
+              max-height: 100%;
+
+              margin: 0;
+              padding: 0;
+
+              writing-mode: vertical-rl;
+              text-orientation: mixed;
+
+              white-space: pre-wrap;
+
+              overflow: hidden;
+
+              word-break: break-all;
+
+              line-height: 1.25;
+
+              vertical-align: top;
+            }
+
 
             /*
              * ト書き
@@ -1131,7 +1214,11 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               font-size: 9pt;
               font-weight: 400;
 
-              line-height: 1.3;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+
+              height: 100%;
             }
 
             /*
@@ -1143,7 +1230,11 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               font-size: 9pt;
               font-weight: 700;
 
-              line-height: 1.3;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+
+              height: 100%;
             }
 
             /*
@@ -1155,7 +1246,11 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               font-size: 9pt;
               font-weight: 700;
 
-              line-height: 1.3;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+
+              height: 100%;
             }
 
             /*
