@@ -1,205 +1,288 @@
 <template>
-  <div class="home-page">
-    <div class="ambient ambient-one" />
-    <div class="ambient ambient-two" />
-    <div class="ambient ambient-three" />
+  <div class="seiryo-home">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="hero-top">
+        <span class="eyebrow">38R / SEIRYOFES 2027</span>
+        <span class="hero-status">
+          <span class="status-dot"></span>
+          PREPARING
+        </span>
+      </div>
 
-    <section class="hero-section">
-      <div class="hero-grid" />
+      <div class="hero-main">
+        <div>
+          <p class="hero-kicker">38Rの星陵祭ホーム</p>
 
-      <div class="hero-content">
-        <div class="eyebrow">
-          <span class="eyebrow-dot" />
-          38R / SEIRYOFES PREPARATION
-        </div>
-
-        <div class="hero-title-wrap">
-          <div class="hero-small-text">WE ARE</div>
-
-          <h1 class="hero-title">
-            <span class="hero-number">38</span><span class="hero-r">R</span>
+          <h1>
+            今年の星陵祭を、<br />
+            <span>一緒につくろう。</span>
           </h1>
 
-          <div class="hero-side-text">
-            <span>SEIRYOFES</span>
-            <span>2027</span>
-          </div>
-        </div>
-
-        <div class="hero-message">
-          <p class="message-main">
-            一緒につくる。
-          </p>
-
-          <p class="message-sub">
-            一度しかない、38Rの星陵祭。
+          <p class="hero-description">
+            38Rの準備が、ここから少しずつ動き出す。
           </p>
         </div>
 
-        <div class="countdown-area">
-          <div class="countdown-label">
-            <span>COUNTDOWN TO SEIRYOFES</span>
-            <span>09.11.2027</span>
+        <div class="countdown">
+          <p class="countdown-label">SEIRYOFESまで</p>
+
+          <div class="countdown-number">
+            {{ countdownDays }}
+            <span>DAYS</span>
           </div>
 
-          <div class="countdown">
-            <div class="count-item">
-              <strong>{{ displayTime.days }}</strong>
-              <span>DAYS</span>
-            </div>
-
-            <div class="count-divider">:</div>
-
-            <div class="count-item">
-              <strong>{{ displayTime.hours }}</strong>
-              <span>HOURS</span>
-            </div>
-
-            <div class="count-divider">:</div>
-
-            <div class="count-item">
-              <strong>{{ displayTime.minutes }}</strong>
-              <span>MINUTES</span>
-            </div>
-
-            <div class="count-divider">:</div>
-
-            <div class="count-item seconds">
-              <strong>{{ displayTime.seconds }}</strong>
-              <span>SECONDS</span>
-            </div>
-          </div>
+          <p class="countdown-date">
+            2027.09.11
+          </p>
         </div>
-
-        <button class="enter-button" type="button" @click="scrollToNow">
-          <span>ENTER 38R</span>
-          <span class="arrow">↓</span>
-        </button>
       </div>
 
-      <div class="vertical-label left-label">
-        38RSEIRYOFES
-      </div>
-
-      <div class="vertical-label right-label">
-        MAKE IT OURS
-      </div>
-
-      <div class="hero-number-background">
-        38
+      <div class="hero-scroll">
+        <span>SCROLL</span>
+        <div class="scroll-line"></div>
       </div>
     </section>
 
-    <section id="now" class="now-section">
-      <div class="section-header">
+    <!-- TODAY -->
+    <section class="section today-section">
+      <div class="section-heading">
         <div>
-          <span class="section-kicker">01 / NOW</span>
-          <h2>38R IS<br /><em>BUILDING.</em></h2>
+          <span class="section-label">TODAY</span>
+          <h2>今日の38R</h2>
         </div>
 
-        <p class="section-description">
-          ここは、星陵祭までの一年を<br />
-          みんなでつくっていく場所。
-        </p>
+        <span class="section-date">
+          {{ todayText }}
+        </span>
+      </div>
+
+      <div class="today-grid">
+        <div class="today-card schedule-card">
+          <div class="card-top">
+            <span class="card-label">TODAY'S SCHEDULE</span>
+            <span class="card-icon">→</span>
+          </div>
+
+          <div class="schedule-list">
+            <div
+              v-for="item in todaySchedule"
+              :key="`${item.time}-${item.title}`"
+              class="schedule-item"
+            >
+              <span class="schedule-time">{{ item.time }}</span>
+
+              <div class="schedule-content">
+                <strong>{{ item.title }}</strong>
+                <span>{{ item.place }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="today-card message-card">
+          <span class="card-label">TODAY'S WORD</span>
+
+          <div class="message-mark">“</div>
+
+          <p>{{ todayMessage }}</p>
+
+          <span class="message-note">
+            今日も少しずつ。
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- CLASS PLAY -->
+    <section class="section play-section">
+      <div class="section-heading">
+        <div>
+          <span class="section-label">CLASS PLAY</span>
+          <h2>38Rの劇</h2>
+        </div>
+
+        <NuxtLink to="/scripts" class="text-link">
+          台本を見る →
+        </NuxtLink>
+      </div>
+
+      <NuxtLink to="/scripts" class="play-card">
+        <div class="play-poster">
+          <div class="poster-background"></div>
+
+          <div class="poster-content">
+            <span class="poster-small">38R CLASS PLAY</span>
+
+            <h3>COMING<br />SOON</h3>
+
+            <span class="poster-year">SEIRYOFES 2027</span>
+          </div>
+
+          <div class="poster-corner">38R</div>
+        </div>
+
+        <div class="play-info">
+          <span class="play-status">CLASS PLAY</span>
+
+          <h3>まだ名前のない物語。</h3>
+
+          <p>
+            ここからみんなで、ひとつの劇をつくっていく。
+          </p>
+
+          <div class="play-arrow">
+            <span>台本をひらく</span>
+            <span>→</span>
+          </div>
+        </div>
+      </NuxtLink>
+    </section>
+
+    <!-- 38R NOW -->
+    <section class="section now-section">
+      <div class="section-heading">
+        <div>
+          <span class="section-label">38R NOW</span>
+          <h2>今、どこまで来た？</h2>
+        </div>
       </div>
 
       <div class="progress-card">
-        <div class="progress-card-top">
+        <div class="progress-header">
           <div>
-            <span class="mini-label">PREPARATION MODE</span>
-            <h3>THE STORY<br />HAS JUST BEGUN.</h3>
+            <span class="progress-small">CURRENT PHASE</span>
+            <strong>準備開始</strong>
           </div>
 
-          <div class="big-percent">01</div>
+          <span class="progress-percent">01 / 05</span>
         </div>
 
-        <div class="progress-track">
-          <div class="progress-fill" />
+        <div class="timeline">
+          <div
+            v-for="(phase, index) in phases"
+            :key="phase.title"
+            class="timeline-item"
+            :class="{ active: index === currentPhase }"
+          >
+            <div class="timeline-point">
+              <span v-if="index === currentPhase">●</span>
+            </div>
+
+            <div class="timeline-text">
+              <span>{{ phase.icon }}</span>
+              <strong>{{ phase.title }}</strong>
+            </div>
+          </div>
         </div>
 
-        <div class="progress-footer">
-          <span>IDEA</span>
-          <span>PREPARATION</span>
-          <span>REHEARSAL</span>
-          <span>SHOWTIME</span>
+        <div class="progress-bar">
+          <div
+            class="progress-fill"
+            :style="{ width: `${progressPercent}%` }"
+          ></div>
         </div>
       </div>
     </section>
 
-    <section class="words-section">
-      <div class="marquee">
-        <span>IDEA</span>
-        <span>PEOPLE</span>
-        <span>STORY</span>
-        <span>STAGE</span>
-        <span>IDEA</span>
-        <span>PEOPLE</span>
-        <span>STORY</span>
-        <span>STAGE</span>
+    <!-- NEWS -->
+    <section class="section news-section">
+      <div class="section-heading">
+        <div>
+          <span class="section-label">NEWS</span>
+          <h2>38Rからのお知らせ</h2>
+        </div>
+
+        <NuxtLink to="/news" class="text-link">
+          すべて見る →
+        </NuxtLink>
       </div>
 
-      <div class="words-content">
-        <span class="section-kicker">02 / WHAT WE MAKE</span>
+      <div class="news-list">
+        <NuxtLink
+          v-for="item in news"
+          :key="item.date + item.title"
+          to="/news"
+          class="news-item"
+        >
+          <span class="news-date">{{ item.date }}</span>
 
-        <p>
-          文化祭は、<br />
-          <strong>完成したものを見る場所</strong>じゃない。
-        </p>
-
-        <p class="large-word">
-          つくる。
-        </p>
-
-        <p>
-          考えて、迷って、笑って、<br />
-          ときどき失敗して、また進む。
-        </p>
-      </div>
-    </section>
-
-    <section class="base-section">
-      <div class="base-background">38R</div>
-
-      <div class="base-content">
-        <span class="section-kicker">03 / OUR BASE</span>
-
-        <h2>
-          THIS IS<br />
-          <span>OUR BASE.</span>
-        </h2>
-
-        <p>
-          タスクも、予定も、台本も、<br />
-          みんなの活動も。
-        </p>
-
-        <div class="base-links">
-          <NuxtLink to="/scripts" class="base-link">
-            <span>
-              <small>PLAY / 01</small>
-              台本を見る
+          <div class="news-main">
+            <span v-if="item.tag" class="news-tag">
+              {{ item.tag }}
             </span>
-            <strong>→</strong>
-          </NuxtLink>
 
-          <button type="button" class="base-link" @click="scrollToTop">
-            <span>
-              <small>PLAY / 02</small>
-              もう一度、最初から
-            </span>
-            <strong>↑</strong>
-          </button>
+            <strong>{{ item.title }}</strong>
+          </div>
+
+          <span class="news-arrow">→</span>
+        </NuxtLink>
+      </div>
+    </section>
+
+    <!-- ACTIVITY -->
+    <section class="section activity-section">
+      <div class="section-heading">
+        <div>
+          <span class="section-label">RECENT ACTIVITY</span>
+          <h2>最近の38R</h2>
+        </div>
+      </div>
+
+      <div class="activity-grid">
+        <div
+          v-for="item in activities"
+          :key="item.title"
+          class="activity-card"
+        >
+          <span class="activity-icon">{{ item.icon }}</span>
+
+          <div>
+            <strong>{{ item.title }}</strong>
+            <span>{{ item.description }}</span>
+          </div>
         </div>
       </div>
     </section>
 
+    <!-- MENU -->
+    <section class="section menu-section">
+      <div class="section-heading">
+        <div>
+          <span class="section-label">EXPLORE</span>
+          <h2>38Rを見にいく</h2>
+        </div>
+      </div>
+
+      <div class="menu-grid">
+        <NuxtLink
+          v-for="item in menuItems"
+          :key="item.title"
+          :to="item.to"
+          class="menu-item"
+        >
+          <span class="menu-icon">{{ item.icon }}</span>
+
+          <div>
+            <strong>{{ item.title }}</strong>
+            <span>{{ item.description }}</span>
+          </div>
+
+          <span class="menu-arrow">↗</span>
+        </NuxtLink>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
     <footer class="home-footer">
-      <div>
-        <strong>38R</strong>
-        <span>SEIRYOFES PREPARATION SITE</span>
+      <div class="footer-logo">
+        <span>38R</span>
+        <small>SEIRYOFES 2027</small>
       </div>
 
-      <span>WE'LL MAKE IT.</span>
+      <p>
+        みんなでつくる、38Rの星陵祭。
+      </p>
     </footer>
   </div>
 </template>
@@ -211,929 +294,1096 @@ definePageMeta({
   middleware: 'auth',
 })
 
+/*
+ * 星陵祭の日付
+ * 実際の日程が確定したらここだけ変更すればOK
+ */
 const festivalDate = new Date('2027-09-11T09:00:00+09:00')
 
-const remaining = ref({
-  days: 0,
-  hours: 0,
-  minutes: 0,
-  seconds: 0,
-})
+const now = ref(new Date())
 
-const mounted = ref(false)
-
-const updateCountdown = () => {
-  const diff = festivalDate.getTime() - Date.now()
-
-  if (diff <= 0) {
-    remaining.value = {
-      days: 0,
-      hours: 0,
-      minutes: 0,
-      seconds: 0,
-    }
-    return
-  }
-
-  const totalSeconds = Math.floor(diff / 1000)
-
-  remaining.value = {
-    days: Math.floor(totalSeconds / 86400),
-    hours: Math.floor((totalSeconds % 86400) / 3600),
-    minutes: Math.floor((totalSeconds % 3600) / 60),
-    seconds: totalSeconds % 60,
-  }
-}
-
-const displayTime = computed(() => {
-  if (!mounted.value) {
-    return {
-      days: '--',
-      hours: '--',
-      minutes: '--',
-      seconds: '--',
-    }
-  }
-
-  return {
-    days: String(remaining.value.days).padStart(3, '0'),
-    hours: String(remaining.value.hours).padStart(2, '0'),
-    minutes: String(remaining.value.minutes).padStart(2, '0'),
-    seconds: String(remaining.value.seconds).padStart(2, '0'),
-  }
-})
-
-let countdownTimer: ReturnType<typeof setInterval> | undefined
+let timer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
-  mounted.value = true
-  updateCountdown()
-
-  countdownTimer = setInterval(updateCountdown, 1000)
+  timer = setInterval(() => {
+    now.value = new Date()
+  }, 60 * 1000)
 })
 
 onUnmounted(() => {
-  if (countdownTimer) {
-    clearInterval(countdownTimer)
+  if (timer) {
+    clearInterval(timer)
   }
 })
 
-const scrollToNow = () => {
-  document.querySelector('#now')?.scrollIntoView({
-    behavior: 'smooth',
-  })
-}
+const countdownDays = computed(() => {
+  const diff = festivalDate.getTime() - now.value.getTime()
 
-const scrollToTop = () => {
-  window.scrollTo({
-    top: 0,
-    behavior: 'smooth',
-  })
-}
+  if (diff <= 0) return 0
+
+  return Math.ceil(diff / (1000 * 60 * 60 * 24))
+})
+
+const todayText = computed(() => {
+  return new Intl.DateTimeFormat('ja-JP', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(now.value)
+})
+
+const todaySchedule = [
+  {
+    time: '16:00',
+    title: 'クラスミーティング',
+    place: '38R',
+  },
+  {
+    time: '17:00',
+    title: '劇準備',
+    place: '放課後',
+  },
+  {
+    time: '18:00',
+    title: '委員会活動',
+    place: '各担当場所',
+  },
+]
+
+const todayMessage = '準備は、できるところから。'
+
+const phases = [
+  {
+    icon: '🌱',
+    title: '準備開始',
+  },
+  {
+    icon: '🌿',
+    title: '企画決定',
+  },
+  {
+    icon: '🌳',
+    title: '練習開始',
+  },
+  {
+    icon: '🔥',
+    title: '本番直前',
+  },
+  {
+    icon: '⭐',
+    title: '星陵祭',
+  },
+]
+
+const currentPhase = 0
+
+const progressPercent = computed(() => {
+  return ((currentPhase + 1) / phases.length) * 100
+})
+
+const news = [
+  {
+    date: '09.30',
+    tag: 'INFO',
+    title: '38R星陵祭準備サイトがスタートしました',
+  },
+  {
+    date: '09.29',
+    tag: 'PLAY',
+    title: 'クラス劇の準備が始まりました',
+  },
+  {
+    date: '09.25',
+    tag: '38R',
+    title: '今年の星陵祭に向けて動き始めています',
+  },
+]
+
+const activities = [
+  {
+    icon: '🎭',
+    title: 'クラス劇',
+    description: '劇づくりに向けて準備中',
+  },
+  {
+    icon: '📅',
+    title: 'スケジュール',
+    description: 'これから予定を追加していきます',
+  },
+  {
+    icon: '💬',
+    title: '38Rの活動',
+    description: 'みんなの活動を記録していきます',
+  },
+]
+
+const menuItems = [
+  {
+    icon: '🎭',
+    title: '台本',
+    description: 'クラス劇の台本を見る',
+    to: '/scripts',
+  },
+  {
+    icon: '📅',
+    title: 'カレンダー',
+    description: '38Rの予定を見る',
+    to: '/calendar',
+  },
+  {
+    icon: '✓',
+    title: 'タスク',
+    description: 'やることを確認する',
+    to: '/tasks',
+  },
+  {
+    icon: '📦',
+    title: '備品',
+    description: '必要なものを確認する',
+    to: '/supplies',
+  },
+  {
+    icon: '👤',
+    title: 'マイページ',
+    description: '自分の活動を見る',
+    to: '/mypage',
+  },
+]
 </script>
 
 <style scoped>
-.home-page {
-  position: relative;
-  width: 100%;
+.seiryo-home {
+  --navy: #102b43;
+  --blue: #245b7a;
+  --sky: #dfeef4;
+  --cream: #f6f4ee;
+  --paper: #fbfaf7;
+  --text: #17232d;
+  --muted: #71808a;
+  --line: #dce2e5;
+
   min-height: 100%;
+  background: var(--paper);
+  color: var(--text);
   overflow: hidden;
+}
+
+/* =========================
+   HERO
+========================= */
+
+.hero {
+  position: relative;
+  min-height: 610px;
+  padding: 44px clamp(24px, 6vw, 90px) 70px;
   background:
-    radial-gradient(circle at 75% 12%, rgba(87, 132, 255, 0.15), transparent 28%),
-    radial-gradient(circle at 15% 75%, rgba(133, 92, 255, 0.12), transparent 30%),
-    #08090d;
-  color: #f5f5f2;
-}
-
-.home-page::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 20;
-  opacity: 0.055;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.5) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.5) 1px, transparent 1px);
-  background-size: 80px 80px;
-}
-
-.ambient {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(70px);
-  pointer-events: none;
-}
-
-.ambient-one {
-  width: 300px;
-  height: 300px;
-  top: 5%;
-  right: -100px;
-  background: rgba(81, 114, 255, 0.22);
-  animation: float-one 12s ease-in-out infinite;
-}
-
-.ambient-two {
-  width: 250px;
-  height: 250px;
-  top: 55%;
-  left: -100px;
-  background: rgba(156, 82, 255, 0.16);
-  animation: float-two 15s ease-in-out infinite;
-}
-
-.ambient-three {
-  width: 180px;
-  height: 180px;
-  top: 28%;
-  left: 45%;
-  background: rgba(255, 255, 255, 0.06);
-  animation: float-three 10s ease-in-out infinite;
-}
-
-.hero-section {
-  position: relative;
-  min-height: calc(100svh - 20px);
+    radial-gradient(circle at 78% 25%, rgba(255, 255, 255, 0.8), transparent 24%),
+    linear-gradient(135deg, #e8f2f5 0%, #f5f4ee 58%, #e8edf0 100%);
   display: flex;
-  align-items: center;
-  overflow: hidden;
-  isolation: isolate;
+  flex-direction: column;
 }
 
-.hero-grid {
+.hero::after {
+  content: '38R';
   position: absolute;
-  inset: 0;
-  opacity: 0.18;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
-  background-size: 70px 70px;
-  mask-image: linear-gradient(to bottom, black, transparent 90%);
+  right: -4vw;
+  bottom: -6vw;
+  font-size: clamp(180px, 28vw, 440px);
+  font-weight: 900;
+  line-height: 0.8;
+  letter-spacing: -0.08em;
+  color: rgba(16, 43, 67, 0.045);
+  pointer-events: none;
 }
 
-.hero-content {
+.hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   position: relative;
-  z-index: 3;
-  width: min(1180px, calc(100% - 48px));
-  margin: 0 auto;
-  padding: 90px 0 110px;
+  z-index: 1;
 }
 
 .eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 28px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: var(--navy);
 }
 
-.eyebrow-dot {
+.hero-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+}
+
+.status-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.8);
-  animation: pulse 1.8s ease-in-out infinite;
+  background: #5c9b73;
 }
 
-.hero-title-wrap {
+.hero-main {
   position: relative;
-  display: flex;
-  align-items: flex-end;
-}
-
-.hero-small-text {
-  position: absolute;
-  top: 6px;
-  left: 4px;
-  font-size: clamp(14px, 2vw, 22px);
-  font-weight: 800;
-  letter-spacing: 0.25em;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.hero-title {
-  margin: 35px 0 0;
-  font-size: clamp(150px, 27vw, 390px);
-  line-height: 0.72;
-  letter-spacing: -0.09em;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
-.hero-number {
-  background: linear-gradient(145deg, #ffffff 5%, #a9b6ff 48%, #7659ff 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.hero-r {
-  color: rgba(255, 255, 255, 0.16);
-}
-
-.hero-side-text {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0 0 15px 30px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.2em;
-  color: rgba(255, 255, 255, 0.45);
-}
-
-.hero-message {
-  margin-top: 60px;
-}
-
-.message-main {
-  margin: 0;
-  font-size: clamp(32px, 5vw, 68px);
-  font-weight: 800;
-  letter-spacing: -0.06em;
-}
-
-.message-sub {
-  margin: 12px 0 0;
-  font-size: clamp(15px, 2vw, 22px);
-  color: rgba(255, 255, 255, 0.48);
-  letter-spacing: 0.08em;
-}
-
-.countdown-area {
-  width: min(650px, 100%);
-  margin-top: 55px;
-}
-
-.countdown-label {
+  z-index: 1;
   display: flex;
   justify-content: space-between;
-  margin-bottom: 12px;
-  font-size: 9px;
+  align-items: flex-end;
+  gap: 60px;
+  width: min(1180px, 100%);
+  margin: auto auto 40px;
+}
+
+.hero-kicker {
+  margin: 0 0 20px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.18em;
-  color: rgba(255, 255, 255, 0.35);
+  letter-spacing: 0.16em;
+  color: var(--blue);
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(48px, 7vw, 96px);
+  line-height: 1.02;
+  letter-spacing: -0.07em;
+  font-weight: 900;
+  color: var(--navy);
+}
+
+.hero h1 span {
+  color: var(--blue);
+}
+
+.hero-description {
+  margin: 28px 0 0;
+  font-size: 15px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
 }
 
 .countdown {
-  display: flex;
-  align-items: center;
-  gap: clamp(10px, 2vw, 22px);
+  min-width: 245px;
+  padding: 28px 30px;
+  border-left: 1px solid rgba(16, 43, 67, 0.18);
 }
 
-.count-item {
-  display: flex;
-  flex-direction: column;
-  min-width: 75px;
-}
-
-.count-item strong {
-  font-size: clamp(32px, 5vw, 56px);
-  font-weight: 700;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.06em;
-}
-
-.count-item span {
-  margin-top: 8px;
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  color: rgba(255, 255, 255, 0.3);
-}
-
-.count-divider {
-  align-self: flex-start;
-  margin-top: 5px;
-  font-size: 30px;
-  color: rgba(255, 255, 255, 0.18);
-}
-
-.enter-button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 220px;
-  height: 58px;
-  margin-top: 55px;
-  padding: 0 18px 0 24px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.055);
-  color: #fff;
+.countdown-label {
+  margin: 0 0 8px;
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.18em;
-  cursor: pointer;
-  backdrop-filter: blur(16px);
-  transition:
-    transform 0.3s ease,
-    background 0.3s ease,
-    border-color 0.3s ease;
+  letter-spacing: 0.15em;
+  color: var(--muted);
 }
 
-.enter-button:hover {
-  transform: translateY(-3px);
-  background: rgba(255, 255, 255, 0.11);
-  border-color: rgba(255, 255, 255, 0.45);
-}
-
-.enter-button .arrow {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border-radius: 50%;
-  background: #fff;
-  color: #08090d;
-  font-size: 15px;
-}
-
-.vertical-label {
-  position: absolute;
-  z-index: 4;
-  top: 50%;
-  writing-mode: vertical-rl;
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.35em;
-  color: rgba(255, 255, 255, 0.22);
-}
-
-.left-label {
-  left: 20px;
-  transform: translateY(-50%) rotate(180deg);
-}
-
-.right-label {
-  right: 20px;
-  transform: translateY(-50%);
-}
-
-.hero-number-background {
-  position: absolute;
-  z-index: -1;
-  right: -8vw;
-  bottom: -15vw;
-  font-size: min(65vw, 900px);
-  line-height: 0.8;
-  font-weight: 900;
-  letter-spacing: -0.1em;
-  color: rgba(255, 255, 255, 0.018);
-  user-select: none;
-}
-
-.now-section,
-.words-section,
-.base-section {
-  position: relative;
-  width: min(1180px, calc(100% - 48px));
-  margin: 0 auto;
-}
-
-.now-section {
-  padding: 150px 0;
-}
-
-.section-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 40px;
-}
-
-.section-kicker {
-  display: block;
-  margin-bottom: 20px;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.25em;
-  color: rgba(255, 255, 255, 0.3);
-}
-
-.section-header h2 {
-  margin: 0;
-  font-size: clamp(54px, 9vw, 120px);
-  line-height: 0.8;
-  letter-spacing: -0.08em;
-}
-
-.section-header h2 em {
-  font-style: normal;
-  color: #8e8aff;
-}
-
-.section-description {
-  margin: 0 0 4px;
-  font-size: 15px;
-  line-height: 2;
-  color: rgba(255, 255, 255, 0.42);
-}
-
-.progress-card {
-  position: relative;
-  margin-top: 80px;
-  padding: clamp(28px, 5vw, 60px);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 28px;
-  background:
-    radial-gradient(circle at 85% 20%, rgba(103, 87, 255, 0.18), transparent 35%),
-    rgba(255, 255, 255, 0.025);
-  overflow: hidden;
-}
-
-.progress-card::after {
-  content: "38R";
-  position: absolute;
-  right: -20px;
-  bottom: -100px;
-  font-size: 280px;
-  line-height: 1;
-  font-weight: 900;
-  color: rgba(255, 255, 255, 0.025);
-}
-
-.progress-card-top {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-}
-
-.mini-label {
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.25em;
-  color: rgba(255, 255, 255, 0.35);
-}
-
-.progress-card h3 {
-  margin: 18px 0 0;
-  font-size: clamp(30px, 5vw, 62px);
+.countdown-number {
+  font-size: clamp(58px, 8vw, 88px);
   line-height: 0.9;
-  letter-spacing: -0.06em;
-}
-
-.big-percent {
-  font-size: clamp(60px, 10vw, 140px);
   font-weight: 900;
-  line-height: 0.7;
-  letter-spacing: -0.08em;
-  color: rgba(255, 255, 255, 0.1);
+  letter-spacing: -0.07em;
+  color: var(--navy);
 }
 
-.progress-track {
-  position: relative;
-  z-index: 1;
-  height: 3px;
-  margin-top: 80px;
-  background: rgba(255, 255, 255, 0.08);
-  overflow: hidden;
+.countdown-number span {
+  margin-left: 7px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
 }
 
-.progress-fill {
-  width: 18%;
-  height: 100%;
-  background: linear-gradient(90deg, #fff, #8377ff);
-  box-shadow: 0 0 20px rgba(131, 119, 255, 0.7);
-}
-
-.progress-footer {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  justify-content: space-between;
-  margin-top: 16px;
-  font-size: 8px;
+.countdown-date {
+  margin: 14px 0 0;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.14em;
-  color: rgba(255, 255, 255, 0.25);
+  letter-spacing: 0.12em;
+  color: var(--muted);
 }
 
-.words-section {
-  width: 100%;
-  padding: 80px 0 180px;
-  overflow: hidden;
-}
-
-.marquee {
-  display: flex;
-  gap: 45px;
-  width: max-content;
-  margin-bottom: 140px;
-  transform: rotate(-3deg) translateX(-5%);
-  animation: marquee 28s linear infinite;
-}
-
-.marquee span {
-  font-size: clamp(70px, 12vw, 180px);
-  font-weight: 900;
-  line-height: 0.8;
-  letter-spacing: -0.08em;
-  color: transparent;
-  -webkit-text-stroke: 1px rgba(255, 255, 255, 0.18);
-}
-
-.words-content {
-  width: min(850px, calc(100% - 48px));
-  margin: 0 auto;
-}
-
-.words-content > p:not(.large-word) {
-  margin: 0 0 25px;
-  font-size: clamp(22px, 4vw, 44px);
-  line-height: 1.5;
-  letter-spacing: -0.05em;
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.words-content > p strong {
-  color: #fff;
-}
-
-.large-word {
-  margin: 50px 0 40px;
-  font-size: clamp(90px, 18vw, 230px);
-  font-weight: 900;
-  line-height: 0.8;
-  letter-spacing: -0.1em;
-  background: linear-gradient(135deg, #fff, #7e70ff);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.base-section {
-  min-height: 720px;
+.hero-scroll {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
-  overflow: hidden;
+  gap: 12px;
+  width: min(1180px, 100%);
+  margin: 0 auto;
 }
 
-.base-background {
-  position: absolute;
-  right: -5%;
-  bottom: -12%;
-  font-size: min(65vw, 800px);
-  line-height: 0.7;
-  font-weight: 900;
-  letter-spacing: -0.1em;
-  color: rgba(255, 255, 255, 0.025);
-  user-select: none;
+.hero-scroll span {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: var(--muted);
 }
 
-.base-content {
-  position: relative;
-  z-index: 1;
-  width: 100%;
+.scroll-line {
+  width: 45px;
+  height: 1px;
+  background: var(--muted);
+}
+
+/* =========================
+   COMMON
+========================= */
+
+.section {
+  width: min(1180px, calc(100% - 48px));
+  margin: 0 auto;
   padding: 100px 0;
 }
 
-.base-content h2 {
-  margin: 0;
-  font-size: clamp(70px, 12vw, 170px);
-  line-height: 0.78;
-  letter-spacing: -0.09em;
-}
-
-.base-content h2 span {
-  color: #8880ff;
-}
-
-.base-content > p {
-  margin: 55px 0 50px;
-  font-size: 18px;
-  line-height: 1.9;
-  color: rgba(255, 255, 255, 0.42);
-}
-
-.base-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.base-link {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-width: 260px;
-  min-height: 90px;
-  padding: 20px 22px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.035);
-  color: #fff;
-  text-decoration: none;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    transform 0.3s ease,
-    background 0.3s ease;
-}
-
-.base-link:hover {
-  transform: translateY(-4px);
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.base-link span {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.base-link small {
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.2em;
-  color: rgba(255, 255, 255, 0.3);
-}
-
-.base-link strong {
-  font-size: 25px;
-  font-weight: 400;
-}
-
-.home-footer {
+.section-heading {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  width: min(1180px, calc(100% - 48px));
-  margin: 0 auto;
-  padding: 100px 0 40px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.25);
+  gap: 24px;
+  margin-bottom: 34px;
 }
 
-.home-footer div {
+.section-label {
+  display: block;
+  margin-bottom: 9px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  color: var(--blue);
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1;
+  letter-spacing: -0.06em;
+  color: var(--navy);
+}
+
+.section-date {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.text-link {
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.text-link:hover {
+  color: var(--blue);
+}
+
+/* =========================
+   TODAY
+========================= */
+
+.today-section {
+  padding-top: 90px;
+}
+
+.today-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 18px;
+}
+
+.today-card {
+  min-height: 300px;
+  border-radius: 4px;
+}
+
+.schedule-card {
+  padding: 30px;
+  background: white;
+  border: 1px solid var(--line);
+}
+
+.card-top {
+  display: flex;
+  justify-content: space-between;
+}
+
+.card-label {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+}
+
+.card-icon {
+  color: var(--muted);
+}
+
+.schedule-list {
+  margin-top: 40px;
+}
+
+.schedule-item {
+  display: flex;
+  gap: 25px;
+  padding: 19px 0;
+  border-top: 1px solid var(--line);
+}
+
+.schedule-time {
+  width: 48px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--blue);
+}
+
+.schedule-content {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.schedule-content strong {
+  font-size: 15px;
+}
+
+.schedule-content span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.message-card {
+  position: relative;
+  overflow: hidden;
+  padding: 30px;
+  background: var(--navy);
+  color: white;
+}
+
+.message-card .card-label {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.message-mark {
+  position: absolute;
+  right: 20px;
+  top: 25px;
+  font-family: Georgia, serif;
+  font-size: 110px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.08);
+}
+
+.message-card p {
+  position: relative;
+  margin: 85px 0 24px;
+  max-width: 280px;
+  font-size: clamp(25px, 3vw, 34px);
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: -0.05em;
+}
+
+.message-note {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* =========================
+   PLAY
+========================= */
+
+.play-section {
+  padding-top: 70px;
+}
+
+.play-card {
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+  min-height: 450px;
+  background: #eeeae1;
+  color: var(--text);
+  text-decoration: none;
+  overflow: hidden;
+}
+
+.play-poster {
+  position: relative;
+  min-height: 450px;
+  overflow: hidden;
+  background: #203b4c;
+}
+
+.poster-background {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(145deg, transparent 35%, rgba(255, 255, 255, 0.08) 35%),
+    linear-gradient(40deg, transparent 55%, rgba(255, 255, 255, 0.05) 55%),
+    #203b4c;
+}
+
+.poster-content {
+  position: absolute;
+  inset: 50px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: white;
+}
+
+.poster-small {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  opacity: 0.65;
+}
+
+.poster-content h3 {
+  margin: auto 0;
+  font-size: clamp(48px, 7vw, 84px);
+  line-height: 0.84;
+  letter-spacing: -0.07em;
+}
+
+.poster-year {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  opacity: 0.65;
+}
+
+.poster-corner {
+  position: absolute;
+  right: 22px;
+  top: 22px;
+  font-size: 12px;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.play-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(35px, 6vw, 80px);
+}
+
+.play-status {
+  margin-bottom: 22px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  color: var(--blue);
+}
+
+.play-info h3 {
+  margin: 0;
+  font-size: clamp(34px, 5vw, 62px);
+  line-height: 1;
+  letter-spacing: -0.07em;
+  color: var(--navy);
+}
+
+.play-info p {
+  margin: 25px 0 0;
+  max-width: 380px;
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--muted);
+}
+
+.play-arrow {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 55px;
+  padding-top: 17px;
+  border-top: 1px solid rgba(16, 43, 67, 0.18);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+/* =========================
+   NOW
+========================= */
+
+.now-section {
+  padding-bottom: 80px;
+}
+
+.progress-card {
+  padding: 35px;
+  background: white;
+  border: 1px solid var(--line);
+}
+
+.progress-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 45px;
+}
+
+.progress-small {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+}
+
+.progress-header strong {
+  font-size: 28px;
+  letter-spacing: -0.05em;
+}
+
+.progress-percent {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--blue);
+}
+
+.timeline {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0;
+}
+
+.timeline-item {
+  position: relative;
+}
+
+.timeline-point {
+  position: relative;
+  width: 13px;
+  height: 13px;
+  margin-bottom: 17px;
+  border: 2px solid #cbd4d9;
+  border-radius: 50%;
+  background: white;
+  z-index: 1;
+}
+
+.timeline-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: 13px;
+  width: calc(100% - 13px);
+  height: 2px;
+  background: #dce2e5;
+}
+
+.timeline-item.active .timeline-point {
+  border-color: var(--blue);
+  background: var(--blue);
+}
+
+.timeline-item.active:not(:last-child)::after {
+  background: var(--blue);
+}
+
+.timeline-text {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+
+.timeline-text span {
+  font-size: 14px;
+}
+
+.timeline-text strong {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.timeline-item.active .timeline-text strong {
+  color: var(--navy);
+}
+
+.progress-bar {
+  height: 3px;
+  margin-top: 38px;
+  background: #e6eaec;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--blue);
+  transition: width 0.4s ease;
+}
+
+/* =========================
+   NEWS
+========================= */
+
+.news-section {
+  padding-top: 60px;
+}
+
+.news-list {
+  border-top: 1px solid var(--line);
+}
+
+.news-item {
+  display: grid;
+  grid-template-columns: 90px 1fr 25px;
+  align-items: center;
+  gap: 20px;
+  padding: 22px 4px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  text-decoration: none;
+  transition: padding 0.2s ease;
+}
+
+.news-item:hover {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.news-date {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.news-main {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.news-main strong {
+  font-size: 14px;
+}
+
+.news-tag {
+  padding: 4px 7px;
+  background: #e8f0f3;
+  color: var(--blue);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.news-arrow {
+  color: var(--muted);
+}
+
+/* =========================
+   ACTIVITY
+========================= */
+
+.activity-section {
+  padding-top: 60px;
+}
+
+.activity-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.activity-card {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 120px;
+  padding: 24px;
+  background: #eef2f3;
+}
+
+.activity-icon {
+  font-size: 25px;
+}
+
+.activity-card div {
   display: flex;
   flex-direction: column;
   gap: 7px;
 }
 
-.home-footer strong {
-  font-size: 28px;
-  color: #fff;
+.activity-card strong {
+  font-size: 14px;
 }
 
-.home-footer span {
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
+.activity-card span:last-child {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--muted);
 }
 
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 0.4;
-    transform: scale(0.8);
-  }
+/* =========================
+   MENU
+========================= */
 
-  50% {
-    opacity: 1;
-    transform: scale(1.2);
-  }
+.menu-section {
+  padding-top: 60px;
 }
 
-@keyframes float-one {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0);
-  }
-
-  50% {
-    transform: translate3d(-50px, 35px, 0);
-  }
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
 }
 
-@keyframes float-two {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0);
-  }
-
-  50% {
-    transform: translate3d(50px, -40px, 0);
-  }
+.menu-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 190px;
+  padding: 23px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  text-decoration: none;
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
 }
 
-@keyframes float-three {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-
-  50% {
-    transform: translate3d(20px, -30px, 0) scale(1.3);
-  }
+.menu-item:hover {
+  background: white;
+  transform: translateY(-3px);
 }
 
-@keyframes marquee {
-  from {
-    transform: rotate(-3deg) translateX(-5%);
-  }
-
-  to {
-    transform: rotate(-3deg) translateX(-45%);
-  }
+.menu-icon {
+  font-size: 22px;
+  margin-bottom: auto;
 }
 
-@media (max-width: 700px) {
-  .hero-section {
-    min-height: calc(100svh - 10px);
+.menu-item div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.menu-item strong {
+  font-size: 14px;
+}
+
+.menu-item div span {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.menu-arrow {
+  position: absolute;
+  right: 18px;
+  top: 18px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* =========================
+   FOOTER
+========================= */
+
+.home-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 30px;
+  padding: 70px clamp(24px, 6vw, 90px) 100px;
+  background: var(--navy);
+  color: white;
+}
+
+.footer-logo {
+  display: flex;
+  flex-direction: column;
+}
+
+.footer-logo span {
+  font-size: 58px;
+  line-height: 0.9;
+  font-weight: 900;
+  letter-spacing: -0.08em;
+}
+
+.footer-logo small {
+  margin-top: 10px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  opacity: 0.5;
+}
+
+.home-footer p {
+  margin: 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* =========================
+   MOBILE
+========================= */
+
+@media (max-width: 800px) {
+  .hero {
+    min-height: 650px;
+    padding: 28px 22px 45px;
   }
 
-  .hero-content {
-    width: calc(100% - 32px);
-    padding: 65px 0 90px;
+  .hero-main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 45px;
   }
 
-  .eyebrow {
-    font-size: 8px;
-    letter-spacing: 0.16em;
+  .hero h1 {
+    font-size: clamp(45px, 14vw, 70px);
   }
 
-  .hero-title {
-    font-size: clamp(130px, 39vw, 240px);
-  }
-
-  .hero-side-text {
-    display: none;
-  }
-
-  .hero-message {
-    margin-top: 50px;
-  }
-
-  .message-main {
-    font-size: 38px;
-  }
-
-  .message-sub {
+  .hero-description {
     font-size: 13px;
-    line-height: 1.7;
-  }
-
-  .countdown-area {
-    margin-top: 45px;
-  }
-
-  .countdown-label {
-    font-size: 7px;
   }
 
   .countdown {
-    gap: 6px;
-  }
-
-  .count-item {
+    width: 100%;
     min-width: 0;
-    flex: 1;
+    padding: 22px 0 0;
+    border-left: 0;
+    border-top: 1px solid rgba(16, 43, 67, 0.18);
   }
 
-  .count-item strong {
-    font-size: clamp(25px, 9vw, 42px);
-  }
-
-  .count-item span {
-    font-size: 6px;
-  }
-
-  .count-divider {
-    font-size: 20px;
-  }
-
-  .enter-button {
-    width: 190px;
-    margin-top: 40px;
-  }
-
-  .vertical-label {
-    display: none;
-  }
-
-  .now-section,
-  .words-section,
-  .base-section {
-    width: calc(100% - 32px);
-  }
-
-  .now-section {
-    padding: 100px 0;
-  }
-
-  .section-header {
-    display: block;
-  }
-
-  .section-header h2 {
-    font-size: 62px;
-  }
-
-  .section-description {
-    margin-top: 30px;
-    font-size: 13px;
-  }
-
-  .progress-card {
-    margin-top: 55px;
-    padding: 28px 22px;
-    border-radius: 22px;
-  }
-
-  .progress-card h3 {
-    font-size: 34px;
-  }
-
-  .big-percent {
+  .countdown-number {
     font-size: 65px;
   }
 
-  .progress-track {
-    margin-top: 55px;
+  .section {
+    width: calc(100% - 36px);
+    padding: 70px 0;
   }
 
-  .progress-footer {
-    font-size: 6px;
-  }
-
-  .words-section {
-    padding: 40px 0 100px;
-  }
-
-  .marquee {
-    margin-bottom: 90px;
-  }
-
-  .words-content {
-    width: calc(100% - 32px);
-  }
-
-  .words-content > p:not(.large-word) {
-    font-size: 23px;
-  }
-
-  .large-word {
-    margin: 45px 0 35px;
-    font-size: 105px;
-  }
-
-  .base-section {
-    min-height: 650px;
-  }
-
-  .base-content {
-    padding: 80px 0;
-  }
-
-  .base-content h2 {
-    font-size: 75px;
-  }
-
-  .base-content > p {
-    margin: 40px 0;
-    font-size: 14px;
-  }
-
-  .base-links {
-    display: flex;
+  .section-heading {
+    align-items: flex-start;
     flex-direction: column;
+    margin-bottom: 25px;
   }
 
-  .base-link {
-    width: 100%;
-    min-width: 0;
+  .section-heading h2 {
+    font-size: 31px;
+  }
+
+  .today-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .today-card {
+    min-height: auto;
+  }
+
+  .message-card {
+    min-height: 260px;
+  }
+
+  .play-card {
+    grid-template-columns: 1fr;
+  }
+
+  .play-poster {
+    min-height: 390px;
+  }
+
+  .play-info {
+    min-height: 350px;
+    padding: 35px 28px;
+  }
+
+  .progress-card {
+    padding: 25px 20px;
+    overflow-x: auto;
+  }
+
+  .timeline {
+    min-width: 620px;
+  }
+
+  .progress-bar {
+    min-width: 620px;
+  }
+
+  .news-item {
+    grid-template-columns: 55px 1fr 15px;
+    gap: 10px;
+  }
+
+  .news-main {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .news-main strong {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .activity-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-card {
+    min-height: 95px;
+  }
+
+  .menu-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .menu-item {
+    min-height: 160px;
+    padding: 18px;
   }
 
   .home-footer {
-    width: calc(100% - 32px);
-    padding: 70px 0 30px;
-  }
-
-  .home-footer > span {
-    display: none;
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 60px 24px 90px;
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .ambient,
-  .marquee,
-  .eyebrow-dot {
-    animation: none;
+@media (max-width: 430px) {
+  .hero-top {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
   }
 
-  html {
-    scroll-behavior: auto;
+  .hero {
+    min-height: 610px;
+  }
+
+  .hero h1 {
+    font-size: 46px;
+  }
+
+  .schedule-item {
+    gap: 15px;
+  }
+
+  .schedule-time {
+    width: 42px;
+  }
+
+  .menu-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .menu-item {
+    min-height: 145px;
+  }
+
+  .menu-icon {
+    font-size: 19px;
   }
 }
 </style>
