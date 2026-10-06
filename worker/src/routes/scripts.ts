@@ -851,6 +851,32 @@ export async function handleScripts(
       if (request.method === "DELETE") {
         await env.DB
           .prepare(`
+            DELETE FROM script_casts
+            WHERE character_id = ?
+          `)
+          .bind(characterId)
+          .run()
+
+        await env.DB
+          .prepare(`
+            DELETE FROM script_scene_characters
+            WHERE character_id = ?
+          `)
+          .bind(characterId)
+          .run()
+
+        await env.DB
+          .prepare(`
+            UPDATE script_blocks
+            SET character_id = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE character_id = ?
+          `)
+          .bind(characterId)
+          .run()
+
+        await env.DB
+          .prepare(`
             DELETE FROM script_characters
             WHERE id = ?
               AND script_id = ?
@@ -1150,6 +1176,43 @@ export async function handleScripts(
         { status: 405 },
       )
     }
+  }
+
+  if (pathParts[1] === "cast-members") {
+    if (pathParts.length !== 2) {
+      return Response.json(
+        { error: "Not Found" },
+        { status: 404 },
+      )
+    }
+
+    if (request.method === "GET") {
+      const result = await env.DB
+        .prepare(`
+          SELECT
+            id,
+            student_number,
+            name,
+            nickname
+          FROM users
+          ORDER BY student_number ASC
+        `)
+        .all<{
+          id: string
+          student_number: string
+          name: string
+          nickname: string | null
+        }>()
+
+      return Response.json({
+        members: result.results,
+      })
+    }
+
+    return Response.json(
+      { error: "Method Not Allowed" },
+      { status: 405 },
+    )
   }
 
   if (pathParts[1] === "acts") {

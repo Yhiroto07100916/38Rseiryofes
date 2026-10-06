@@ -15,20 +15,36 @@
                 v-model="script.title"
                 class="title-input"
                 aria-label="台本タイトル"
-                @blur="saveScriptMeta"
+                @input="markScriptMetaDirty"
                 @keydown.enter="($event.target as HTMLInputElement).blur()"
               />
   
+              <v-btn
+                size="small"
+                color="primary"
+                variant="flat"
+                prepend-icon="mdi-content-save-outline"
+                :loading="saving"
+                :disabled="!hasUnsavedChanges"
+                @click="saveAllChanges"
+              >
+                保存
+              </v-btn>
+
               <v-chip
                 size="small"
-                :color="saving ? 'primary' : 'success'"
+                :color="hasUnsavedChanges ? 'warning' : 'success'"
                 variant="tonal"
               >
                 <v-icon
                   start
-                  :icon="saving ? 'mdi-cloud-upload-outline' : 'mdi-check-circle-outline'"
+                  :icon="
+                    hasUnsavedChanges
+                      ? 'mdi-circle-edit-outline'
+                      : 'mdi-check-circle-outline'
+                  "
                 />
-                {{ saving ? '保存中' : '保存済み' }}
+                {{ hasUnsavedChanges ? '未保存' : '保存済み' }}
               </v-chip>
             </div>
             <div class="scene-label">
@@ -73,32 +89,78 @@
               class="act-group"
             >
               <div class="act-title">
-                {{ act.title }}
-                <v-btn
-                  icon="mdi-plus"
-                  variant="text"
-                  size="x-small"
-                  @click="addScene(act)"
-                />
+                <span
+                  class="act-title-text"
+                  @dblclick="openEditActDialog(act)"
+                >
+                  {{ act.title }}
+                </span>
+
+                <div class="outline-actions">
+                  <v-btn
+                    icon="mdi-plus"
+                    variant="text"
+                    size="x-small"
+                    aria-label="場を追加"
+                    @click="openCreateSceneDialog(act)"
+                  />
+                  <v-btn
+                    icon="mdi-pencil-outline"
+                    variant="text"
+                    size="x-small"
+                    aria-label="幕を編集"
+                    @click="openEditActDialog(act)"
+                  />
+                  <v-btn
+                    icon="mdi-delete-outline"
+                    variant="text"
+                    size="x-small"
+                    color="error"
+                    aria-label="幕を削除"
+                    @click="deleteAct(act)"
+                  />
+                </div>
               </div>
-  
-              <button
+
+              <div
                 v-for="scene in act.scenes || []"
                 :key="scene.id"
-                class="scene-item"
-                :class="{ active: scene.id === currentScene?.id }"
-                @click="selectScene(act, scene)"
+                class="scene-item-row"
               >
-                {{ scene.title }}
-              </button>
+                <button
+                  class="scene-item"
+                  :class="{ active: scene.id === currentScene?.id }"
+                  @click="selectScene(act, scene)"
+                >
+                  {{ scene.title }}
+                </button>
+
+                <div class="scene-actions">
+                  <v-btn
+                    icon="mdi-pencil-outline"
+                    variant="text"
+                    size="x-small"
+                    aria-label="場を編集"
+                    @click="openEditSceneDialog(act, scene)"
+                  />
+                  <v-btn
+                    icon="mdi-delete-outline"
+                    variant="text"
+                    size="x-small"
+                    color="error"
+                    aria-label="場を削除"
+                    @click="deleteScene(act, scene)"
+                  />
+                </div>
+              </div>
             </div>
-  
+
             <v-btn
               block
               variant="tonal"
               prepend-icon="mdi-plus"
               class="mt-3"
-              @click="addAct"
+              @click="openCreateActDialog"
             >
               幕を追加
             </v-btn>
@@ -120,14 +182,22 @@
               </div>
   
               <div class="toolbar-actions">
-            <v-btn
-              variant="outlined"
-              prepend-icon="mdi-file-pdf-box"
-              @click="openPrintDialog"
-            >
-              PDF出力
-            </v-btn>
-          </div>
+                <v-btn
+                  variant="outlined"
+                  prepend-icon="mdi-account-group-outline"
+                  @click="openSceneCharacterDialog"
+                >
+                  登場人物
+                </v-btn>
+
+                <v-btn
+                  variant="outlined"
+                  prepend-icon="mdi-file-pdf-box"
+                  @click="openPrintDialog"
+                >
+                  PDF出力
+                </v-btn>
+              </div>
           <v-menu>
                 <template #activator="{ props }">
                   <v-btn
@@ -215,6 +285,14 @@
                   />
   
                   <button
+                    class="block-duplicate"
+                    aria-label="ブロックを複製"
+                    @click="duplicateBlock(block)"
+                  >
+                    <v-icon icon="mdi-content-copy" size="15" />
+                  </button>
+
+                  <button
                     class="block-delete"
                     aria-label="ブロックを削除"
                     @click="deleteBlock(block)"
@@ -259,37 +337,91 @@
               @click="charactersDrawer = false"
             />
           </div>
-  
+
           <div class="characters-content">
             <div
               v-for="character in characters"
               :key="character.id"
               class="character-card"
             >
-              <div class="character-name">{{ character.name }}</div>
+              <div class="character-card-header">
+                <div class="character-name">{{ character.name }}</div>
+
+                <v-btn
+                  icon="mdi-pencil-outline"
+                  variant="text"
+                  size="x-small"
+                  aria-label="キャラクターを編集"
+                  @click="openCharacterEditDialog(character)"
+                />
+              </div>
+
+              <div
+                v-if="character.description"
+                class="character-description"
+              >
+                {{ character.description }}
+              </div>
+
+              <div class="cast-section-title">
+                配役
+              </div>
+
               <div
                 v-if="character.casts?.length"
                 class="cast-list"
               >
-                <span
+                <div
                   v-for="cast in character.casts"
                   :key="cast.id"
-                  class="cast-name"
+                  class="cast-row"
                 >
-                  {{ cast.user_name || cast.user_nickname || '配役あり' }}
-                </span>
+                  <span class="cast-name">
+                    {{ cast.user_name || cast.name || cast.user_nickname || cast.nickname || '配役あり' }}
+                  </span>
+
+                  <span
+                    v-if="cast.student_number"
+                    class="cast-student-number"
+                  >
+                    {{ cast.student_number }}
+                  </span>
+
+                  <v-btn
+                    icon="mdi-close"
+                    variant="text"
+                    size="x-small"
+                    aria-label="配役を削除"
+                    @click="removeCast(character, cast)"
+                  />
+                </div>
               </div>
-              <div v-else class="text-caption text-medium-emphasis">
+
+              <div
+                v-else
+                class="text-caption text-medium-emphasis"
+              >
                 配役未設定
               </div>
+
+              <v-btn
+                size="small"
+                variant="text"
+                color="primary"
+                prepend-icon="mdi-account-plus-outline"
+                class="cast-add-button"
+                @click="openCastDialog(character)"
+              >
+                配役を追加
+              </v-btn>
             </div>
-  
+
             <v-btn
               block
               variant="tonal"
               prepend-icon="mdi-account-plus-outline"
               class="mt-3"
-              @click="addCharacter"
+              @click="characterCreateName = ''; characterCreateDialog = true"
             >
               登場人物を追加
             </v-btn>
@@ -297,14 +429,103 @@
         </aside>
       </div>
   
-      <v-dialog v-model="characterDialog" max-width="420">
+      <v-dialog v-model="characterCreateDialog" max-width="420">
         <v-card rounded="xl">
-          <v-card-title class="pa-6 pb-2">キャラクターを選択</v-card-title>
-  
+          <v-card-title class="pa-6 pb-2">
+            登場人物を追加
+          </v-card-title>
+
           <v-card-text class="pa-4">
+            <v-text-field
+              v-model="characterCreateName"
+              label="キャラクター名"
+              variant="outlined"
+              density="comfortable"
+              autofocus
+              @keyup.enter="addCharacter"
+            />
+          </v-card-text>
+
+          <v-card-actions class="px-4 pb-4">
+            <v-spacer />
+
+            <v-btn
+              variant="text"
+              @click="characterCreateDialog = false"
+            >
+              キャンセル
+            </v-btn>
+
+            <v-btn
+              color="primary"
+              variant="flat"
+              :loading="characterCreating"
+              :disabled="!characterCreateName.trim()"
+              @click="addCharacter"
+            >
+              追加
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <v-dialog v-model="sceneCharacterDialog" max-width="520">
+        <v-card rounded="xl">
+          <v-card-title class="pa-6 pb-2">
+            場の登場人物
+          </v-card-title>
+
+          <v-card-text class="pa-4">
+            <div class="text-body-2 mb-3">
+              {{ currentScene?.title }}
+            </div>
+
             <v-list>
               <v-list-item
                 v-for="character in characters"
+                :key="character.id"
+                :title="character.name"
+                :subtitle="character.description || undefined"
+                rounded="lg"
+                @click="toggleSceneCharacter(character)"
+              >
+                <template #prepend>
+                  <v-checkbox-btn
+                    :model-value="sceneCharacterIds.has(character.id)"
+                    :disabled="sceneCharacterSaving"
+                  />
+                </template>
+              </v-list-item>
+            </v-list>
+
+            <div
+              v-if="!characters.length"
+              class="text-body-2 text-medium-emphasis py-4 text-center"
+            >
+              先に登場人物を追加してください。
+            </div>
+          </v-card-text>
+
+          <v-card-actions class="px-4 pb-4">
+            <v-spacer />
+            <v-btn
+              variant="text"
+              @click="sceneCharacterDialog = false"
+            >
+              閉じる
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <v-dialog v-model="characterDialog" max-width="420">
+        <v-card rounded="xl">
+          <v-card-title class="pa-6 pb-2">キャラクターを選択</v-card-title>
+
+          <v-card-text class="pa-4">
+            <v-list>
+              <v-list-item
+                v-for="character in sceneCharacters"
                 :key="character.id"
                 :title="character.name"
                 prepend-icon="mdi-account-outline"
@@ -315,7 +536,209 @@
           </v-card-text>
         </v-card>
       </v-dialog>
+
+      <v-dialog v-model="characterEditDialog" max-width="520">
+        <v-card rounded="xl">
+          <v-card-title class="pa-6 pb-2">
+            キャラクターを編集
+          </v-card-title>
+
+          <v-card-text class="pa-4">
+            <v-text-field
+              v-model="characterEditForm.name"
+              label="キャラクター名"
+              variant="outlined"
+              density="comfortable"
+              class="mb-3"
+            />
+
+            <v-textarea
+              v-model="characterEditForm.description"
+              label="説明"
+              variant="outlined"
+              density="comfortable"
+              rows="3"
+              auto-grow
+            />
+          </v-card-text>
+
+          <v-card-actions class="px-4 pb-4">
+            <v-btn
+              color="error"
+              variant="text"
+              @click="deleteCharacter"
+            >
+              削除
+            </v-btn>
+
+            <v-spacer />
+
+            <v-btn
+              variant="text"
+              @click="characterEditDialog = false"
+            >
+              キャンセル
+            </v-btn>
+
+            <v-btn
+              color="primary"
+              variant="flat"
+              :loading="characterSaving"
+              @click="saveCharacter"
+            >
+              保存
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <v-dialog v-model="castDialog" max-width="520">
+        <v-card rounded="xl">
+          <v-card-title class="pa-6 pb-2">
+            配役を追加
+          </v-card-title>
+
+          <v-card-text class="pa-4">
+            <div class="text-body-2 mb-3">
+              {{ castTargetCharacter?.name }}
+            </div>
+
+            <v-text-field
+              v-model="castSearch"
+              label="名前・出席番号で検索"
+              prepend-inner-icon="mdi-magnify"
+              variant="outlined"
+              density="comfortable"
+              clearable
+              class="mb-2"
+            />
+
+            <v-list
+              v-if="filteredCastMembers.length"
+              class="cast-member-list"
+            >
+              <v-list-item
+                v-for="member in filteredCastMembers"
+                :key="member.id"
+                rounded="lg"
+                :disabled="isCastAssigned(member.id)"
+                @click="addCast(member)"
+              >
+                <template #prepend>
+                  <v-avatar size="34">
+                    <span class="text-caption">
+                      {{ member.student_number }}
+                    </span>
+                  </v-avatar>
+                </template>
+
+                <v-list-item-title>
+                  {{ member.name }}
+                </v-list-item-title>
+
+                <v-list-item-subtitle v-if="member.nickname">
+                  {{ member.nickname }}
+                </v-list-item-subtitle>
+
+                <template #append>
+                  <v-icon
+                    v-if="isCastAssigned(member.id)"
+                    icon="mdi-check"
+                    size="18"
+                  />
+                </template>
+              </v-list-item>
+            </v-list>
+
+            <div
+              v-else
+              class="text-body-2 text-medium-emphasis py-6 text-center"
+            >
+              該当するメンバーがいません
+            </div>
+          </v-card-text>
+
+          <v-card-actions class="px-4 pb-4">
+            <v-spacer />
+
+            <v-btn
+              variant="text"
+              @click="castDialog = false"
+            >
+              閉じる
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
     </div>
+      <v-dialog v-model="outlineDialog" max-width="520">
+        <v-card rounded="xl">
+          <v-card-title class="pa-6 pb-2">
+            {{
+              outlineDialogMode === 'create-act'
+                ? '幕を追加'
+                : outlineDialogMode === 'edit-act'
+                  ? '幕を編集'
+                  : outlineDialogMode === 'create-scene'
+                    ? '場を追加'
+                    : '場を編集'
+            }}
+          </v-card-title>
+
+          <v-card-text class="pa-4">
+            <div
+              v-if="
+                outlineDialogMode === 'create-scene' ||
+                outlineDialogMode === 'edit-scene'
+              "
+              class="text-body-2 mb-3"
+            >
+              {{ outlineDialogAct?.title }}
+            </div>
+
+            <v-text-field
+              v-model="outlineDialogForm.title"
+              label="名前"
+              variant="outlined"
+              density="comfortable"
+              autofocus
+              class="mb-3"
+              @keyup.enter="saveOutlineDialog"
+            />
+
+            <v-textarea
+              v-model="outlineDialogForm.description"
+              label="説明"
+              variant="outlined"
+              density="comfortable"
+              rows="3"
+              auto-grow
+            />
+          </v-card-text>
+
+          <v-card-actions class="px-4 pb-4">
+            <v-spacer />
+
+            <v-btn
+              variant="text"
+              @click="outlineDialog = false"
+            >
+              キャンセル
+            </v-btn>
+
+            <v-btn
+              color="primary"
+              variant="flat"
+              :loading="outlineDialogSaving"
+              :disabled="!outlineDialogForm.title.trim()"
+              @click="saveOutlineDialog"
+            >
+              保存
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
       <v-dialog v-model="printDialog" max-width="520">
       <v-card rounded="xl">
         <v-card-title class="text-h6">
@@ -362,6 +785,8 @@
   
   <script setup lang="ts">
   const { apiFetch } = useApi()
+  const { confirm } = useConfirmDialog()
+  const snackbar = useSnackbar()
 
 definePageMeta({
     middleware: ['auth'],
@@ -379,9 +804,19 @@ definePageMeta({
   interface Cast {
     id: string
     user_id: string
+    student_number?: string | null
+    name?: string | null
+    nickname?: string | null
     user_name?: string | null
     user_nickname?: string | null
     cast_order: number
+  }
+
+  interface CastMember {
+    id: string
+    student_number: string
+    name: string
+    nickname: string | null
   }
   
   interface Character {
@@ -439,10 +874,37 @@ definePageMeta({
   
   const loading = ref(true)
   const saving = ref(false)
+  const savingCount = ref(0)
+
+  const startSaving = () => {
+    savingCount.value += 1
+    saving.value = true
+  }
+
+  const endSaving = () => {
+    savingCount.value = Math.max(0, savingCount.value - 1)
+    saving.value = savingCount.value > 0
+  }
   const outlineDrawer = ref(true)
   const charactersDrawer = ref(false)
   const characterDialog = ref(false)
-const printDialog = ref(false)
+  const sceneCharacterDialog = ref(false)
+  const sceneCharacterSaving = ref(false)
+  const characterCreateDialog = ref(false)
+  const characterCreating = ref(false)
+  const characterCreateName = ref('')
+  const characterEditDialog = ref(false)
+  const characterSaving = ref(false)
+  const castDialog = ref(false)
+  const castMembers = ref<CastMember[]>([])
+  const castSearch = ref('')
+  const castTargetCharacter = ref<Character | null>(null)
+  const characterEditTarget = ref<Character | null>(null)
+  const characterEditForm = reactive({
+    name: '',
+    description: '',
+  })
+  const printDialog = ref(false)
 const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   const selectedBlockId = ref<string | null>(null)
   const pendingBlockType = ref<BlockType | null>(null)
@@ -513,6 +975,102 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   const selectScene = (act: Act, scene: Scene) => {
     currentAct.value = act
     currentScene.value = scene
+  }
+
+  const sceneCharacterIds = computed(() => {
+    return new Set(
+      (currentScene.value?.characters || []).map(
+        (character) => character.character_id,
+      ),
+    )
+  })
+
+  const sceneCharacters = computed(() => {
+    return characters.value.filter((character) =>
+      sceneCharacterIds.value.has(character.id),
+    )
+  })
+
+  const loadSceneCharacters = async () => {
+    if (!currentAct.value || !currentScene.value) return
+
+    const response = await apiFetch<{
+      characters: Scene["characters"]
+    }>(
+      `/api/scripts/${scriptId.value}/acts/${currentAct.value.id}/scenes/${currentScene.value.id}/characters`,
+    )
+
+    currentScene.value.characters = response.characters || []
+  }
+
+  const openSceneCharacterDialog = async () => {
+    if (!currentAct.value || !currentScene.value) return
+
+    try {
+      await loadSceneCharacters()
+      sceneCharacterDialog.value = true
+    } catch (error) {
+      console.error('場面登場人物の取得エラー:', error)
+      snackbar.error('場面登場人物の取得に失敗しました。')
+    }
+  }
+
+  const toggleSceneCharacter = async (character: Character) => {
+    if (!currentAct.value || !currentScene.value || sceneCharacterSaving.value) {
+      return
+    }
+
+    const scene = currentScene.value
+    const exists = (scene.characters || []).some(
+      (item) => item.character_id === character.id,
+    )
+
+    sceneCharacterSaving.value = true
+
+    try {
+      if (exists) {
+        await apiFetch(
+          `/api/scripts/${scriptId.value}/acts/${currentAct.value.id}/scenes/${scene.id}/characters/${character.id}`,
+          {
+            method: 'DELETE',
+          },
+        )
+
+        scene.characters = (scene.characters || []).filter(
+          (item) => item.character_id !== character.id,
+        )
+      } else {
+        const response = await apiFetch<{
+          character: {
+            scene_id: string
+            character_id: string
+            character_name: string
+          }
+        }>(
+          `/api/scripts/${scriptId.value}/acts/${currentAct.value.id}/scenes/${scene.id}/characters`,
+          {
+            method: 'POST',
+            body: {
+              character_id: character.id,
+            },
+          },
+        )
+
+        if (!scene.characters) {
+          scene.characters = []
+        }
+
+        scene.characters.push({
+          character_id: response.character.character_id,
+          character_name: response.character.character_name,
+        })
+      }
+    } catch (error) {
+      console.error('場面登場人物の更新エラー:', error)
+      snackbar.error('場面登場人物の更新に失敗しました。')
+    } finally {
+      sceneCharacterSaving.value = false
+    }
   }
   
   const openPrintDialog = () => {
@@ -1336,104 +1894,662 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
     }, 700)
   }
 
+  const scriptMetaDirty = ref(false)
+  const dirtyBlockIds = ref(new Set<string>())
+
+  const hasUnsavedChanges = computed(() => {
+    return (
+      scriptMetaDirty.value ||
+      dirtyBlockIds.value.size > 0
+    )
+  })
+
+  const unsavedChangesMessage =
+    '保存していない変更があります。このページを離れますか？'
+
+  const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+    if (!hasUnsavedChanges.value) {
+      return
+    }
+
+    event.preventDefault()
+    event.returnValue = ''
+  }
+
+  onMounted(() => {
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload,
+    )
+  })
+
+  onUnmounted(() => {
+    window.removeEventListener(
+      'beforeunload',
+      handleBeforeUnload,
+    )
+  })
+
+  onBeforeRouteLeave(async () => {
+    if (!hasUnsavedChanges.value) {
+      return true
+    }
+
+    return await confirm({
+      title: '未保存の変更があります',
+      message:
+        '保存していない変更があります。このページを離れますか？',
+      confirmText: '離れる',
+      cancelText: 'キャンセル',
+      confirmColor: 'error',
+    })
+  })
+
+  const markScriptMetaDirty = () => {
+    scriptMetaDirty.value = true
+  }
+
   const saveScriptMeta = async () => {
     if (!script.id || !script.title.trim()) return
-  
-    saving.value = true
-  
-    try {
-      await apiFetch(`/api/scripts/${script.id}`, {
+
+    await apiFetch(`/api/scripts/${script.id}`, {
+      method: 'PATCH',
+      body: {
+        title: script.title.trim(),
+        description: script.description,
+      },
+    })
+
+    scriptMetaDirty.value = false
+  }
+
+  const saveBlockContent = async (block: Block) => {
+    if (!currentAct.value || !currentScene.value) return
+
+    await apiFetch(
+      `/api/scripts/${scriptId.value}/acts/${currentAct.value.id}/scenes/${currentScene.value.id}/blocks/${block.id}`,
+      {
         method: 'PATCH',
         body: {
-          title: script.title.trim(),
-          description: script.description,
+          content: block.content,
+          type: block.type,
+          character_id: block.character_id,
+          sort_order: block.sort_order,
         },
-      })
-    } catch (error) {
-      console.error(error)
-    } finally {
-      saving.value = false
-    }
-  }
-  
-  const addAct = async () => {
-    const title = window.prompt('幕の名前', `第${acts.value.length + 1}幕`)
-    if (!title?.trim()) return
-  
-    try {
-      const response = await apiFetch<{ act: Act }>(
-        `/api/scripts/${scriptId.value}/acts`,
-        {
-          method: 'POST',
-          body: {
-            title: title.trim(),
-            sort_order: acts.value.length,
-          },
-        },
-      )
-  
-      response.act.scenes = []
-      acts.value.push(response.act)
-      currentAct.value = response.act
-    } catch (error) {
-      console.error(error)
-    }
-  }
-  
-  const addScene = async (act: Act) => {
-    const title = window.prompt(
-      '場の名前',
-      `第${(act.scenes?.length || 0) + 1}場`,
+      },
     )
-    if (!title?.trim()) return
-  
+
+    dirtyBlockIds.value.delete(block.id)
+  }
+
+  const saveAllChanges = async () => {
+    if (!hasUnsavedChanges.value || saving.value) return
+
+    startSaving()
+
     try {
-      const response = await apiFetch<{ scene: Scene }>(
-        `/api/scripts/${scriptId.value}/acts/${act.id}/scenes`,
-        {
-          method: 'POST',
-          body: {
-            title: title.trim(),
-            sort_order: act.scenes?.length || 0,
-          },
-        },
+      if (scriptMetaDirty.value) {
+        await saveScriptMeta()
+      }
+
+      const blocks = acts.value.flatMap((act) =>
+        (act.scenes || []).flatMap(
+          (scene) => scene.blocks || [],
+        ),
       )
-  
-      if (!act.scenes) act.scenes = []
-      act.scenes.push(response.scene)
-      currentAct.value = act
-      currentScene.value = response.scene
+
+      const dirtyBlocks = blocks.filter((block) =>
+        dirtyBlockIds.value.has(block.id),
+      )
+
+      for (const block of dirtyBlocks) {
+        await saveBlockContent(block)
+      }
+
+      dirtyBlockIds.value = new Set(dirtyBlockIds.value)
+      snackbar.success('台本を保存しました。')
     } catch (error) {
-      console.error(error)
+      console.error('台本保存エラー:', error)
+      snackbar.error('台本の保存に失敗しました。')
+    } finally {
+      endSaving()
     }
   }
   
+  type OutlineDialogMode =
+    | 'create-act'
+    | 'edit-act'
+    | 'create-scene'
+    | 'edit-scene'
+
+  const outlineDialog = ref(false)
+  const outlineDialogMode = ref<OutlineDialogMode>('create-act')
+  const outlineDialogSaving = ref(false)
+  const outlineDialogAct = ref<Act | null>(null)
+  const outlineDialogActTarget = ref<Act | null>(null)
+  const outlineDialogSceneTarget = ref<Scene | null>(null)
+
+  const outlineDialogForm = reactive({
+    title: '',
+    description: '',
+  })
+
+  const openCreateActDialog = () => {
+    outlineDialogMode.value = 'create-act'
+    outlineDialogAct.value = null
+    outlineDialogActTarget.value = null
+    outlineDialogSceneTarget.value = null
+    outlineDialogForm.title = `第${acts.value.length + 1}幕`
+    outlineDialogForm.description = ''
+    outlineDialog.value = true
+  }
+
+  const openCreateSceneDialog = (act: Act) => {
+    outlineDialogMode.value = 'create-scene'
+    outlineDialogAct.value = act
+    outlineDialogActTarget.value = null
+    outlineDialogSceneTarget.value = null
+    outlineDialogForm.title = `第${(act.scenes?.length || 0) + 1}場`
+    outlineDialogForm.description = ''
+    outlineDialog.value = true
+  }
+
+  const openEditActDialog = (act: Act) => {
+    outlineDialogMode.value = 'edit-act'
+    outlineDialogAct.value = act
+    outlineDialogActTarget.value = act
+    outlineDialogSceneTarget.value = null
+    outlineDialogForm.title = act.title
+    outlineDialogForm.description = act.description || ''
+    outlineDialog.value = true
+  }
+
+  const openEditSceneDialog = (act: Act, scene: Scene) => {
+    outlineDialogMode.value = 'edit-scene'
+    outlineDialogAct.value = act
+    outlineDialogActTarget.value = null
+    outlineDialogSceneTarget.value = scene
+    outlineDialogForm.title = scene.title
+    outlineDialogForm.description = scene.description || ''
+    outlineDialog.value = true
+  }
+
+  const saveOutlineDialog = async () => {
+    const title = outlineDialogForm.title.trim()
+
+    if (!title || outlineDialogSaving.value) {
+      return
+    }
+
+    outlineDialogSaving.value = true
+
+    try {
+      if (outlineDialogMode.value === 'create-act') {
+        const response = await apiFetch<{ act: Act }>(
+          `/api/scripts/${scriptId.value}/acts`,
+          {
+            method: 'POST',
+            body: {
+              title,
+              description:
+                outlineDialogForm.description.trim() || null,
+              sort_order: acts.value.length,
+            },
+          },
+        )
+
+        response.act.scenes = []
+        acts.value.push(response.act)
+        currentAct.value = response.act
+        currentScene.value = null
+
+        snackbar.success('幕を追加しました。')
+      } else if (outlineDialogMode.value === 'create-scene') {
+        const act = outlineDialogAct.value
+
+        if (!act) return
+
+        const response = await apiFetch<{ scene: Scene }>(
+          `/api/scripts/${scriptId.value}/acts/${act.id}/scenes`,
+          {
+            method: 'POST',
+            body: {
+              title,
+              description:
+                outlineDialogForm.description.trim() || null,
+              sort_order: act.scenes?.length || 0,
+            },
+          },
+        )
+
+        if (!act.scenes) {
+          act.scenes = []
+        }
+
+        response.scene.characters = []
+        response.scene.blocks = []
+
+        act.scenes.push(response.scene)
+
+        currentAct.value = act
+        currentScene.value = response.scene
+
+        snackbar.success('場を追加しました。')
+      } else if (outlineDialogMode.value === 'edit-act') {
+        const act = outlineDialogActTarget.value
+
+        if (!act) return
+
+        const response = await apiFetch<{ act: Act }>(
+          `/api/scripts/${scriptId.value}/acts/${act.id}`,
+          {
+            method: 'PATCH',
+            body: {
+              title,
+              description:
+                outlineDialogForm.description.trim() || null,
+            },
+          },
+        )
+
+        Object.assign(act, response.act)
+
+        currentAct.value = act
+
+        snackbar.success('幕を更新しました。')
+      } else {
+        const act = outlineDialogAct.value
+        const scene = outlineDialogSceneTarget.value
+
+        if (!act || !scene) return
+
+        const response = await apiFetch<{ scene: Scene }>(
+          `/api/scripts/${scriptId.value}/acts/${act.id}/scenes/${scene.id}`,
+          {
+            method: 'PATCH',
+            body: {
+              title,
+              description:
+                outlineDialogForm.description.trim() || null,
+            },
+          },
+        )
+
+        Object.assign(scene, response.scene)
+
+        currentAct.value = act
+        currentScene.value = scene
+
+        snackbar.success('場を更新しました。')
+      }
+
+      outlineDialog.value = false
+    } catch (error) {
+      console.error('幕・場の保存エラー:', error)
+      snackbar.error('幕・場の保存に失敗しました。')
+    } finally {
+      outlineDialogSaving.value = false
+    }
+  }
+
+  const deleteAct = async (act: Act) => {
+    const confirmed = await confirm({
+      title: '幕を削除',
+      message: `「${act.title}」を削除しますか？`,
+    })
+
+    if (!confirmed) return
+
+    try {
+      await apiFetch(
+        `/api/scripts/${scriptId.value}/acts/${act.id}`,
+        {
+          method: 'DELETE',
+        },
+      )
+
+      const index = acts.value.findIndex(
+        (item) => item.id === act.id,
+      )
+
+      acts.value = acts.value.filter(
+        (item) => item.id !== act.id,
+      )
+
+      const nextAct =
+        acts.value[index] ||
+        acts.value[index - 1] ||
+        acts.value[0] ||
+        null
+
+      currentAct.value = nextAct
+      currentScene.value = nextAct?.scenes?.[0] || null
+
+      snackbar.success('幕を削除しました。')
+    } catch (error) {
+      console.error('幕の削除エラー:', error)
+      snackbar.error('幕の削除に失敗しました。')
+    }
+  }
+
+  const deleteScene = async (act: Act, scene: Scene) => {
+    const confirmed = await confirm({
+      title: '場を削除',
+      message: `「${scene.title}」を削除しますか？`,
+    })
+
+    if (!confirmed) return
+
+    try {
+      await apiFetch(
+        `/api/scripts/${scriptId.value}/acts/${act.id}/scenes/${scene.id}`,
+        {
+          method: 'DELETE',
+        },
+      )
+
+      const index = (act.scenes || []).findIndex(
+        (item) => item.id === scene.id,
+      )
+
+      act.scenes = (act.scenes || []).filter(
+        (item) => item.id !== scene.id,
+      )
+
+      if (currentScene.value?.id === scene.id) {
+        currentAct.value = act
+        currentScene.value =
+          act.scenes[index] ||
+          act.scenes[index - 1] ||
+          act.scenes[0] ||
+          null
+      }
+
+      snackbar.success('場を削除しました。')
+    } catch (error) {
+      console.error('場の削除エラー:', error)
+      snackbar.error('場の削除に失敗しました。')
+    }
+  }
+
   const addCharacter = async () => {
-    const name = window.prompt('キャラクター名')
-    if (!name?.trim()) return
-  
+    const name = characterCreateName.value.trim()
+
+    if (!name || characterCreating.value) {
+      return
+    }
+
+    characterCreating.value = true
+
     try {
       const response = await apiFetch<{ character: Character }>(
         `/api/scripts/${scriptId.value}/characters`,
         {
           method: 'POST',
           body: {
-            name: name.trim(),
+            name,
             sort_order: characters.value.length,
           },
         },
       )
-  
+
+      response.character.casts = []
       characters.value.push(response.character)
+
+      characterCreateName.value = ''
+      characterCreateDialog.value = false
+
+      snackbar.success('登場人物を追加しました。')
+    } catch (error) {
+      console.error(error)
+      snackbar.error('登場人物の追加に失敗しました。')
+    } finally {
+      characterCreating.value = false
+    }
+  }
+
+  const openCharacterEditDialog = (character: Character) => {
+    characterEditTarget.value = character
+    characterEditForm.name = character.name
+    characterEditForm.description = character.description || ''
+    characterEditDialog.value = true
+  }
+
+  const saveCharacter = async () => {
+    const character = characterEditTarget.value
+
+    if (!character || !characterEditForm.name.trim() || characterSaving.value) {
+      return
+    }
+
+    characterSaving.value = true
+
+    try {
+      const response = await apiFetch<{ character: Character }>(
+        `/api/scripts/${scriptId.value}/characters/${character.id}`,
+        {
+          method: 'PATCH',
+          body: {
+            name: characterEditForm.name.trim(),
+            description: characterEditForm.description.trim() || null,
+          },
+        },
+      )
+
+      const index = characters.value.findIndex(
+        (item) => item.id === character.id,
+      )
+
+      if (index >= 0) {
+        characters.value[index] = {
+          ...response.character,
+          casts: character.casts || [],
+        }
+      }
+
+      characterEditDialog.value = false
+      snackbar.success('キャラクターを更新しました。')
+    } catch (error) {
+      console.error(error)
+      snackbar.error('キャラクターの更新に失敗しました。')
+    } finally {
+      characterSaving.value = false
+    }
+  }
+
+  const deleteCharacter = async () => {
+    const character = characterEditTarget.value
+
+    if (!character) {
+      return
+    }
+
+    const confirmed = await confirm({
+      title: 'キャラクターを削除',
+      message: `「${character.name}」を削除しますか？\n\nこのキャラクターに紐づく配役や台詞の参照も削除される可能性があります。`,
+      confirmText: '削除',
+      confirmColor: 'error',
+    })
+
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      await apiFetch(
+        `/api/scripts/${scriptId.value}/characters/${character.id}`,
+        {
+          method: 'DELETE',
+        },
+      )
+
+      characters.value = characters.value.filter(
+        (item) => item.id !== character.id,
+      )
+
+      characterEditDialog.value = false
+      snackbar.success('キャラクターを削除しました。')
+    } catch (error) {
+      console.error(error)
+      snackbar.error('キャラクターの削除に失敗しました。')
+    }
+  }
+
+  const loadCastMembers = async () => {
+    try {
+      const response = await apiFetch<{ members: CastMember[] }>(
+        `/api/scripts/${scriptId.value}/cast-members`,
+      )
+
+      castMembers.value = response.members
     } catch (error) {
       console.error(error)
     }
   }
-  
+
+  const openCastDialog = async (character: Character) => {
+    castTargetCharacter.value = character
+    castSearch.value = ''
+
+    if (!castMembers.value.length) {
+      await loadCastMembers()
+    }
+
+    castDialog.value = true
+  }
+
+  const filteredCastMembers = computed(() => {
+    const keyword = castSearch.value.trim().toLowerCase()
+
+    if (!keyword) {
+      return castMembers.value
+    }
+
+    return castMembers.value.filter((member) => {
+      return (
+        member.student_number.toLowerCase().includes(keyword) ||
+        member.name.toLowerCase().includes(keyword) ||
+        (member.nickname || '').toLowerCase().includes(keyword)
+      )
+    })
+  })
+
+  const isCastAssigned = (userId: string) => {
+    return Boolean(
+      castTargetCharacter.value?.casts?.some(
+        (cast) => cast.user_id === userId,
+      ),
+    )
+  }
+
+  const addCast = async (member: CastMember) => {
+    const character = castTargetCharacter.value
+
+    if (!character || isCastAssigned(member.id)) {
+      return
+    }
+
+    try {
+      const response = await apiFetch<{ cast: Cast }>(
+        `/api/scripts/${scriptId.value}/characters/${character.id}/casts`,
+        {
+          method: 'POST',
+          body: {
+            user_id: member.id,
+            cast_order: character.casts?.length || 0,
+          },
+        },
+      )
+
+      if (!character.casts) {
+        character.casts = []
+      }
+
+      character.casts.push({
+        ...response.cast,
+        student_number:
+          response.cast.student_number ?? member.student_number,
+        name: response.cast.name ?? member.name,
+        nickname:
+          response.cast.nickname ?? member.nickname,
+      })
+
+      castDialog.value = false
+      snackbar.success(`「${member.name}」を配役に追加しました。`)
+    } catch (error) {
+      console.error(error)
+      snackbar.error('配役の追加に失敗しました。')
+    }
+  }
+
+  const removeCast = async (
+    character: Character,
+    cast: Cast,
+  ) => {
+    const castName =
+      cast.name ||
+      cast.user_name ||
+      cast.nickname ||
+      cast.user_nickname ||
+      'この配役'
+
+    const confirmed = await confirm({
+      title: '配役を削除',
+      message: `「${castName}」を「${character.name}」の配役から外しますか？`,
+      confirmText: '外す',
+      confirmColor: 'error',
+    })
+
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      await apiFetch(
+        `/api/scripts/${scriptId.value}/characters/${character.id}/casts/${cast.id}`,
+        {
+          method: 'DELETE',
+        },
+      )
+
+      character.casts = (character.casts || []).filter(
+        (item) => item.id !== cast.id,
+      )
+
+      snackbar.success(`「${castName}」を配役から外しました。`)
+    } catch (error) {
+      console.error(error)
+      snackbar.error('配役の削除に失敗しました。')
+    }
+  }
+
+  const saveBlockOrder = async (blocks: Block[]) => {
+    if (!currentAct.value || !currentScene.value) return
+
+    blocks.forEach((block, index) => {
+      block.sort_order = index
+    })
+
+    await Promise.all(
+      blocks.map((block) =>
+        apiFetch(
+          `/api/scripts/${scriptId.value}/acts/${currentAct.value!.id}/scenes/${currentScene.value!.id}/blocks/${block.id}`,
+          {
+            method: 'PATCH',
+            body: {
+              sort_order: block.sort_order,
+            },
+          },
+        ),
+      ),
+    )
+  }
+
   const createBlock = async (
     type: BlockType,
     characterId: string | null = null,
     afterBlock?: Block,
+    content = '',
   ) => {
     if (!currentScene.value || !currentAct.value) return
 
@@ -1451,7 +2567,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
           body: {
             type,
             character_id: characterId,
-            content: '',
+            content,
             sort_order: insertIndex,
           },
         },
@@ -1465,15 +2581,23 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 
       currentScene.value.blocks = blocks
 
+      await saveBlockOrder(blocks)
+
       await nextTick()
 
       const element = blockRefs.get(response.block.id)
       element?.focus()
+
+      return true
     } catch (error) {
       console.error('ブロック作成エラー:', error)
-      window.alert(
-        `台詞ブロックの作成に失敗しました。\n${error instanceof Error ? error.message : String(error)}`
+      snackbar.error(
+        `ブロックの作成に失敗しました。${
+          error instanceof Error ? ` ${error.message}` : ''
+        }`,
       )
+
+      return false
     }
   }
 
@@ -1485,8 +2609,14 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 
     if (type === 'dialogue') {
       if (!characters.value.length) {
-        window.alert('先に登場人物を追加してください。')
+        snackbar.warning('先に登場人物を追加してください。')
         charactersDrawer.value = true
+        return
+      }
+
+      if (!sceneCharacters.value.length) {
+        snackbar.warning('先にこの場の登場人物を追加してください。')
+        sceneCharacterDialog.value = true
         return
       }
 
@@ -1507,6 +2637,21 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
     }
 
     await addBlock(block.type, block)
+  }
+
+  const duplicateBlock = async (block: Block) => {
+    if (!currentScene.value || !currentAct.value) return
+
+    const duplicated = await createBlock(
+      block.type,
+      block.character_id,
+      block,
+      block.content,
+    )
+
+    if (duplicated) {
+      snackbar.success('ブロックを複製しました。')
+    }
   }
   
   const handleBlockDragStart = (block: Block, event: DragEvent) => {
@@ -1553,27 +2698,15 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
       return
     }
 
-    saving.value = true
+    startSaving()
 
     try {
-      for (const [index, item] of blocks.entries()) {
-        await apiFetch(
-          `/api/scripts/${scriptId.value}/acts/${currentAct.value?.id}/scenes/${currentScene.value?.id}/blocks/${item.id}`,
-          {
-            method: 'PATCH',
-            body: {
-              content: item.content,
-              type: item.type,
-              character_id: item.character_id,
-              sort_order: index,
-            },
-          },
-        )
-      }
+      await saveBlockOrder(blocks)
     } catch (error) {
-      console.error(error)
+      console.error('ブロック並び順保存エラー:', error)
+      snackbar.error('ブロックの並び順の保存に失敗しました。')
     } finally {
-      saving.value = false
+      endSaving()
       draggingBlockId.value = null
     }
   }
@@ -1581,47 +2714,24 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   const onBlockInput = (block: Block, event: Event) => {
     const target = event.target as HTMLTextAreaElement
     block.content = target.value
-    debounceSaveBlock(block)
-  }
-  
-  const saveTimers = new Map<string, ReturnType<typeof setTimeout>>()
-  
-  const debounceSaveBlock = (block: Block) => {
-    const existing = saveTimers.get(block.id)
-    if (existing) clearTimeout(existing)
-  
-    saveTimers.set(
-      block.id,
-      setTimeout(async () => {
-        saving.value = true
-  
-        try {
-          await apiFetch(
-            `/api/scripts/${scriptId.value}/acts/${currentAct.value?.id}/scenes/${currentScene.value?.id}/blocks/${block.id}`,
-            {
-              method: 'PATCH',
-              body: {
-                content: block.content,
-                type: block.type,
-                character_id: block.character_id,
-                sort_order: block.sort_order,
-              },
-            },
-          )
-        } catch (error) {
-          console.error(error)
-        } finally {
-          saving.value = false
-        }
-      }, 700),
-    )
+
+    const nextDirtyBlockIds = new Set(dirtyBlockIds.value)
+    nextDirtyBlockIds.add(block.id)
+    dirtyBlockIds.value = nextDirtyBlockIds
   }
   
   const deleteBlock = async (block: Block) => {
     if (!currentAct.value || !currentScene.value) return
-  
-    if (!window.confirm('このブロックを削除しますか？')) return
-  
+
+    const confirmed = await confirm({
+      title: 'ブロックを削除',
+      message: 'このブロックを削除しますか？',
+      confirmText: '削除',
+      confirmColor: 'error',
+    })
+
+    if (!confirmed) return
+
     try {
       await apiFetch(
         `/api/scripts/${scriptId.value}/acts/${currentAct.value.id}/scenes/${currentScene.value.id}/blocks/${block.id}`,
@@ -1629,12 +2739,17 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
           method: 'DELETE',
         },
       )
-  
+
       currentScene.value.blocks = (currentScene.value.blocks || []).filter(
         (item) => item.id !== block.id,
       )
+
+      await saveBlockOrder(currentScene.value.blocks || [])
+
+      snackbar.success('ブロックを削除しました。')
     } catch (error) {
-      console.error(error)
+      console.error('ブロック削除エラー:', error)
+      snackbar.error('ブロックの削除に失敗しました。')
     }
   }
   
@@ -1646,6 +2761,14 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   const selectCharacter = async (characterId: string) => {
     const character = characters.value.find((item) => item.id === characterId)
     if (!character) return
+
+    if (
+      currentScene.value &&
+      !sceneCharacterIds.value.has(character.id)
+    ) {
+      snackbar.warning('この場に登録されている登場人物から選択してください。')
+      return
+    }
 
     if (
       pendingBlockType.value &&
@@ -1671,6 +2794,9 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 
     if (!block) return
 
+    const previousCharacterId = block.character_id
+    const previousCharacterName = block.character_name
+
     block.character_id = character.id
     block.character_name = character.name
     characterDialog.value = false
@@ -1688,8 +2814,13 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
           },
         },
       )
+
+      snackbar.success('キャラクターを変更しました。')
     } catch (error) {
-      console.error(error)
+      block.character_id = previousCharacterId
+      block.character_name = previousCharacterName
+      console.error('キャラクター変更エラー:', error)
+      snackbar.error('キャラクターの変更に失敗しました。')
     }
   }
 
@@ -2044,10 +3175,10 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   font-weight: 600;
 }
 
+.block-duplicate,
 .block-delete {
   position: absolute;
   bottom: 8px;
-  right: 8px;
   width: 26px;
   height: 26px;
   padding: 0;
@@ -2060,9 +3191,24 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   transition: opacity 0.15s ease, background 0.15s ease;
 }
 
+.block-duplicate {
+  right: 38px;
+}
+
+.block-delete {
+  right: 8px;
+}
+
+.script-block:hover .block-duplicate,
+.block-duplicate:focus,
 .script-block:hover .block-delete,
 .block-delete:focus {
   opacity: 0.7;
+}
+
+.block-duplicate:hover {
+  opacity: 1;
+  background: rgba(18, 58, 92, 0.12);
 }
 
 .block-delete:hover {
@@ -2122,22 +3268,70 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   margin-bottom: 8px;
 }
 
+.character-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
 .character-name {
   font-weight: 700;
 }
 
+.character-description {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #777;
+  line-height: 1.5;
+}
+
+.cast-section-title {
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #777;
+}
+
 .cast-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 4px;
   margin-top: 6px;
 }
 
+.cast-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
 .cast-name {
+  flex: 1;
+  min-width: 0;
   font-size: 11px;
   padding: 3px 6px;
   background: #f1f3f5;
   border-radius: 999px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cast-student-number {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: #888;
+}
+
+.cast-add-button {
+  margin-top: 4px;
+}
+
+.cast-member-list {
+  max-height: 360px;
+  overflow-y: auto;
 }
 
 @media (max-width: 900px) {

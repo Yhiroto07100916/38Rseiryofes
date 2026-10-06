@@ -3,4 +3,5 @@
     <NuxtPage />
   </NuxtLayout>
   <CommonAppConfirmDialog />
+  <CommonAppSnackbar />
 </template>
