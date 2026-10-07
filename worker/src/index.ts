@@ -2,6 +2,7 @@ import { handleUsers } from "./routes/users"
 import { handleAdminSetPassword, handleAuth } from "./routes/auth"
 import { handleRoles, handleUserRole, handleUserRoles } from "./routes/roles"
 import { handleAccountRoles, handleUserAccountRoles } from "./routes/account-roles"
+import { handlePermissions } from "./routes/permissions"
 import { handleTasks } from "./routes/tasks"
 import { handleCalendar } from "./routes/calendar"
 import { handleCalendarCategories } from "./routes/calendar-categories"
@@ -254,6 +255,33 @@ export default {
         )
       } catch (error) {
         console.error("Auth API error:", error)
+
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
+            { status: 500 },
+          ),
+        )
+      }
+    }
+
+    if (
+      url.pathname === "/api/permissions" ||
+      url.pathname.startsWith("/api/permissions/")
+    ) {
+      const path = url.pathname.slice("/api/permissions".length)
+      const pathParts = path
+        .split("/")
+        .filter(Boolean)
+
+      try {
+        return withCors(
+          request,
+          await handlePermissions(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("Permissions API error:", error)
 
         return withCors(
           request,
