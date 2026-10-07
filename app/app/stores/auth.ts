@@ -7,14 +7,25 @@ interface AuthUser {
   nickname: string | null
 }
 
+interface AuthRole {
+  id: string
+  name: string
+  description: string | null
+  created_at: string
+}
+
 interface LoginResponse {
   user: AuthUser
   permissions: string[]
+  roles: AuthRole[]
+  account_roles: AuthRole[]
 }
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(null)
   const permissions = ref<string[]>([])
+  const roles = ref<AuthRole[]>([])
+  const accountRoles = ref<AuthRole[]>([])
   const initialized = ref(false)
 
   const isLoggedIn = computed(() => user.value !== null)
@@ -26,10 +37,14 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await apiFetch<LoginResponse>('/api/auth/me')
       user.value = response.user
       permissions.value = response.permissions
+      roles.value = response.roles
+      accountRoles.value = response.account_roles
       return user.value
     } catch {
       user.value = null
       permissions.value = []
+      roles.value = []
+      accountRoles.value = []
       return null
     } finally {
       initialized.value = true
@@ -50,6 +65,8 @@ export const useAuthStore = defineStore('auth', () => {
 
     user.value = response.user
     permissions.value = response.permissions
+    roles.value = response.roles
+    accountRoles.value = response.account_roles
     initialized.value = true
 
     return response.user
@@ -67,6 +84,8 @@ export const useAuthStore = defineStore('auth', () => {
     } finally {
       user.value = null
       permissions.value = []
+      roles.value = []
+      accountRoles.value = []
       initialized.value = true
     }
   }
@@ -74,6 +93,8 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     user,
     permissions,
+    roles,
+    accountRoles,
     initialized,
     isLoggedIn,
     hasPermission,

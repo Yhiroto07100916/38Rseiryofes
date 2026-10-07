@@ -24,6 +24,10 @@ interface ChangePasswordBody {
   new_password_confirmation?: unknown
 }
 
+interface UpdateProfileBody {
+  nickname?: unknown
+}
+
 export async function handleAuth(
   request: Request,
   env: Env,
@@ -48,6 +52,10 @@ export async function handleAuth(
   if (request.method === "PATCH" && pathParts.length === 1) {
     if (pathParts[0] === "password") {
       return handleChangePassword(request, env)
+    }
+
+    if (pathParts[0] === "profile") {
+      return handleUpdateProfile(request, env)
     }
   }
 
@@ -199,12 +207,144 @@ async function handleMe(
     user.id,
   )
 
+  const roles = await env.DB
+    .prepare(`
+      SELECT
+        r.id,
+        r.name,
+        r.description,
+        r.created_at
+      FROM roles r
+      INNER JOIN user_roles ur
+        ON ur.role_id = r.id
+      WHERE ur.user_id = ?
+      ORDER BY r.name
+    `)
+    .bind(user.id)
+    .all<{
+      id: string
+      name: string
+      description: string | null
+      created_at: string
+    }>()
+
+  const accountRoles = await env.DB
+    .prepare(`
+      SELECT
+        ar.id,
+        ar.name,
+        ar.description,
+        ar.created_at
+      FROM account_roles ar
+      INNER JOIN user_account_roles uar
+        ON uar.account_role_id = ar.id
+      WHERE uar.user_id = ?
+      ORDER BY ar.name
+    `)
+    .bind(user.id)
+    .all<{
+      id: string
+      name: string
+      description: string | null
+      created_at: string
+    }>()
+
   return Response.json({
     user,
     permissions,
+    roles: roles.results,
+    account_roles: accountRoles.results,
   })
 }
 
+
+async function handleUpdateProfile(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  const sessionUser = await getSessionUser(
+    request,
+    env,
+  )
+
+  if (!sessionUser) {
+    return Response.json(
+      { error: "Unauthorized" },
+      { status: 401 },
+    )
+  }
+
+  let body: UpdateProfileBody
+
+  try {
+    body = await request.json<UpdateProfileBody>()
+  } catch {
+    return Response.json(
+      { error: "Invalid JSON" },
+      { status: 400 },
+    )
+  }
+
+  if (typeof body.nickname !== "string") {
+    return Response.json(
+      { error: "nickname is required" },
+      { status: 400 },
+    )
+  }
+
+  const nickname = body.nickname.trim()
+
+  if (nickname.length > 30) {
+    return Response.json(
+      { error: "nickname must be 30 characters or less" },
+      { status: 400 },
+    )
+  }
+
+  const updatedAt = new Date().toISOString()
+
+  await env.DB
+    .prepare(`
+      UPDATE users
+      SET
+        nickname = ?,
+        updated_at = ?
+      WHERE id = ?
+    `)
+    .bind(
+      nickname || null,
+      updatedAt,
+      sessionUser.id,
+    )
+    .run()
+
+  const user = await env.DB
+    .prepare(`
+      SELECT
+        id,
+        student_number,
+        name,
+        nickname
+      FROM users
+      WHERE id = ?
+    `)
+    .bind(sessionUser.id)
+    .first<{
+      id: string
+      student_number: string
+      name: string
+      nickname: string | null
+    }>()
+
+  if (!user) {
+    return Response.json(
+      { error: "User not found" },
+      { status: 404 },
+    )
+  }
+
+  return Response.json({ user })
+}
 
 async function handleChangePassword(
   request: Request,

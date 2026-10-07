@@ -32,6 +32,37 @@
           </div>
 
           <div class="d-flex flex-column ga-2">
+
+            <v-btn
+              v-if="isAdmin"
+              block
+              variant="outlined"
+              rounded="xl"
+              color="primary"
+              class="font-weight-bold"
+              size="large"
+              density="comfortable"
+              prepend-icon="mdi-shield-crown"
+              to="/admin"
+            >
+              管理者設定
+            </v-btn>
+
+            <v-btn
+              v-if="isAdmin || isclassrepresentative"
+              block
+              variant="outlined"
+              rounded="xl"
+              color="primary"
+              class="font-weight-bold"
+              size="large"
+              density="comfortable"
+              prepend-icon="mdi-key-variant"
+              to="/class-representative"
+            >
+              クラ代ページ
+            </v-btn>
+
             <v-btn
               block
               variant="outlined"
@@ -44,21 +75,6 @@
               @click="handleLogout"
             >
               ログアウト
-            </v-btn>
-
-            <v-btn
-              v-if="isAdmin"
-              block
-              variant="outlined"
-              rounded="xl"
-              color="primary"
-              class="font-weight-bold"
-              size="large"
-              density="comfortable"
-              prepend-icon="mdi-key-variant"
-              to="/admin"
-            >
-              管理者設定
             </v-btn>
           </div>
         </template>
@@ -131,6 +147,7 @@ const route = useRoute()
 const auth = useAuthStore()
 
 const isAdmin = ref(false)
+const isclassrepresentative = ref(false)
 
 const fetchAccountRole = async () => {
   if (!auth.user) {
@@ -155,7 +172,9 @@ const fetchAccountRole = async () => {
   }
 }
 
-const items: NavigationItem[] = []
+const items: NavigationItem[] = [
+  {icon: "mdi-bullhorn", title:"お知らせ", to:"/news"},
+]
 
 watch(
   () => auth.user?.id,
