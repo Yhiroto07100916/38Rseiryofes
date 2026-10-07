@@ -1,19 +1,10 @@
 <template>
-  <div class="seiryo-home">
-    <!-- HERO -->
-    <section class="hero">
-      <div class="hero-top">
-        <span class="eyebrow">38R / SEIRYOFES 2027</span>
-        <span class="hero-status">
-          <span class="status-dot"></span>
-          PREPARING
-        </span>
-      </div>
+
 
     <p>
       38Rの活動をまとめるサイトです。うお
     </p>
-  </div>
+
 </template>
 
 <script setup lang="ts">
