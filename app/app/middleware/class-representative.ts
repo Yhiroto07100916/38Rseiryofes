@@ -14,7 +14,7 @@ export default defineNuxtRouteMiddleware(async () => {
   }
 
   const isClassRepresentative = auth.accountRoles.some(
-    (role) => role.name === 'class_representative',
+    (role) => role.name === 'class_representative' || "admin",
   )
 
   if (!isClassRepresentative) {

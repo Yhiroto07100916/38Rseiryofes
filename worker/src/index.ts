@@ -6,6 +6,7 @@ import { handleTasks } from "./routes/tasks"
 import { handleCalendar } from "./routes/calendar"
 import { handleCalendarCategories } from "./routes/calendar-categories"
 import { handleNews } from "./routes/news"
+import { handleScripts } from "./routes/scripts"
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -96,6 +97,33 @@ export default {
               status: "error",
               database: "disconnected",
             },
+            { status: 500 },
+          ),
+        )
+      }
+    }
+
+    if (
+      url.pathname === "/api/scripts" ||
+      url.pathname.startsWith("/api/scripts/")
+    ) {
+      const path = url.pathname.slice("/api/scripts".length)
+      const pathParts = path
+        .split("/")
+        .filter(Boolean)
+
+      try {
+        return withCors(
+          request,
+          await handleScripts(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("Scripts API error:", error)
+
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
             { status: 500 },
           ),
         )
