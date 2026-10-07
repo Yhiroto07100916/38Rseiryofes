@@ -79,11 +79,11 @@ export async function handlePermissions(
           id,
           name,
           nickname,
-          user_id
+          student_number AS user_id
         FROM users
         ORDER BY
-          COALESCE(NULLIF(nickname, ''), NULLIF(name, ''), user_id),
-          user_id
+          COALESCE(NULLIF(nickname, ''), NULLIF(name, ''), student_number),
+          student_number
       `)
       .all<{
         id: string
