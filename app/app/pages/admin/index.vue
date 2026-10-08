@@ -13,9 +13,7 @@
             管理者画面
           </h1>
 
-          <p class="page-description">
-            38Rサイトのメンバーや権限などを管理できます。
-          </p>
+          
         </div>
       </div>
 
@@ -194,6 +192,43 @@
 
               <v-card-subtitle>
                 委員会や担当などの役割を管理
+              </v-card-subtitle>
+            </v-card-item>
+
+            <v-card-actions>
+              <v-spacer />
+
+              <v-icon icon="mdi-chevron-right" />
+            </v-card-actions>
+          </v-card>
+        </v-col>
+
+        <v-col
+          cols="12"
+          sm="6"
+          md="4"
+        >
+          <v-card
+            to="/admin/permissions"
+            rounded="xl"
+            variant="outlined"
+            class="admin-card"
+          >
+            <v-card-item>
+              <template #prepend>
+                <v-icon
+                  icon="mdi-account-multiple-outline"
+                  size="32"
+                  color="primary"
+                />
+              </template>
+
+              <v-card-title>
+                権限管理
+              </v-card-title>
+
+              <v-card-subtitle>
+                係や個人への細かい権限を管理
               </v-card-subtitle>
             </v-card-item>
 
