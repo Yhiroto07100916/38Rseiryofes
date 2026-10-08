@@ -9,6 +9,7 @@ import { handleCalendarCategories } from "./routes/calendar-categories"
 import { handleNews } from "./routes/news"
 import { handleScripts } from "./routes/scripts"
 import { handleEquipment } from "./routes/equipment"
+import { handleAccounting } from "./routes/accounting"
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -137,13 +138,24 @@ export default {
       url.pathname.startsWith("/api/equipment/")
     ) {
       const path = url.pathname.slice("/api/equipment".length)
-      const pathParts = path
-        .split("/")
-        .filter(Boolean)
+      const pathParts = path.split("/").filter(Boolean)
 
       return withCors(
         request,
         await handleEquipment(request, env, pathParts),
+      )
+    }
+
+    if (
+      url.pathname === "/api/accounting" ||
+      url.pathname.startsWith("/api/accounting/")
+    ) {
+      const path = url.pathname.slice("/api/accounting".length)
+      const pathParts = path.split("/").filter(Boolean)
+
+      return withCors(
+        request,
+        await handleAccounting(request, env, pathParts),
       )
     }
 

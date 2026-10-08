@@ -1,0 +1,1674 @@
+<template>
+  <v-container class="py-6" style="max-width: 1200px">
+    <BackButton />
+
+    <div class="d-flex align-center justify-space-between flex-wrap ga-3 mb-5">
+      <div>
+        <h1 class="text-h4 font-weight-bold">会計</h1>
+        <p class="text-body-2 text-medium-emphasis mt-1">
+          38Rの予算・購入・立替を管理します
+        </p>
+      </div>
+
+      <v-btn
+        v-if="canCreate"
+        color="primary"
+        prepend-icon="mdi-receipt-text-plus"
+        size="large"
+        rounded="lg"
+        @click="openReceiptCreate"
+      >
+        レシートを登録
+      </v-btn>
+    </div>
+
+    <v-alert
+      v-if="errorMessage"
+      type="error"
+      variant="tonal"
+      closable
+      class="mb-5"
+      @click:close="errorMessage = ''"
+    >
+      {{ errorMessage }}
+    </v-alert>
+
+    <v-progress-linear
+      v-if="loading"
+      indeterminate
+      color="primary"
+      class="mb-5"
+    />
+
+    <template v-if="canView">
+      <v-row class="mb-2">
+        <v-col cols="12" sm="6" md="3">
+          <v-card rounded="xl" variant="outlined" class="h-100">
+            <v-card-text>
+              <div class="text-body-2 text-medium-emphasis">総予算</div>
+              <div class="text-h5 font-weight-bold mt-2">
+                {{ yen(summary.totalBudget) }}
+              </div>
+            </v-card-text>
+          </v-card>
+        </v-col>
+
+        <v-col cols="12" sm="6" md="3">
+          <v-card rounded="xl" variant="outlined" class="h-100">
+            <v-card-text>
+              <div class="text-body-2 text-medium-emphasis">購入額</div>
+              <div class="text-h5 font-weight-bold mt-2">
+                {{ yen(summary.totalPurchased) }}
+              </div>
+            </v-card-text>
+          </v-card>
+        </v-col>
+
+        <v-col cols="12" sm="6" md="3">
+          <v-card rounded="xl" variant="outlined" class="h-100">
+            <v-card-text>
+              <div class="text-body-2 text-medium-emphasis">残予算</div>
+              <div
+                class="text-h5 font-weight-bold mt-2"
+                :class="remainingBudget < 0 ? 'text-error' : 'text-success'"
+              >
+                {{ yen(remainingBudget) }}
+              </div>
+            </v-card-text>
+          </v-card>
+        </v-col>
+
+        <v-col cols="12" sm="6" md="3">
+          <v-card rounded="xl" variant="outlined" class="h-100">
+            <v-card-text>
+              <div class="text-body-2 text-medium-emphasis">未精算の立替</div>
+              <div class="text-h5 font-weight-bold mt-2 text-warning">
+                {{ yen(summary.pendingReimbursements) }}
+              </div>
+            </v-card-text>
+          </v-card>
+        </v-col>
+      </v-row>
+
+      <v-tabs v-model="tab" color="primary" class="mb-4">
+        <v-tab value="receipts">購入記録</v-tab>
+        <v-tab value="budgets">予算</v-tab>
+        <v-tab value="reimbursements">立替精算</v-tab>
+      </v-tabs>
+
+      <v-window v-model="tab">
+        <v-window-item value="receipts">
+          <v-card rounded="xl" variant="outlined">
+            <v-card-title class="d-flex align-center justify-space-between flex-wrap ga-3 py-4">
+              <span>購入記録</span>
+
+              <div class="d-flex align-center flex-wrap ga-2">
+                <v-text-field
+                  v-model="receiptSearch"
+                  prepend-inner-icon="mdi-magnify"
+                  label="検索"
+                  placeholder="店名・商品名"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                  clearable
+                  style="min-width: 220px; max-width: 280px"
+                />
+
+                <v-select
+                  v-model="receiptPaymentFilter"
+                  :items="receiptPaymentFilterItems"
+                  label="支払方法"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                  style="min-width: 150px; max-width: 180px"
+                />
+
+                <v-select
+                  v-model="receiptReimbursementFilter"
+                  :items="receiptReimbursementFilterItems"
+                  label="立替状態"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                  style="min-width: 150px; max-width: 180px"
+                />
+              </div>
+            </v-card-title>
+
+            <v-divider />
+
+            <v-card-text class="pa-4">
+              <v-card variant="outlined" rounded="lg">
+                <v-card-title class="text-subtitle-1 font-weight-bold py-3">
+                  会計集計
+                </v-card-title>
+
+                <v-card-text class="pt-1">
+                  <v-row>
+                    <v-col cols="12" sm="6" md="3">
+                      <v-text-field
+                        v-model="aggregationMonth"
+                        label="月別集計"
+                        type="month"
+                        variant="outlined"
+                        density="comfortable"
+                        hide-details
+                      />
+                    </v-col>
+
+                    <v-col cols="12" sm="6" md="3">
+                      <v-text-field
+                        v-model="aggregationStartDate"
+                        label="期間開始"
+                        type="date"
+                        variant="outlined"
+                        density="comfortable"
+                        hide-details
+                        clearable
+                      />
+                    </v-col>
+
+                    <v-col cols="12" sm="6" md="3">
+                      <v-text-field
+                        v-model="aggregationEndDate"
+                        label="期間終了"
+                        type="date"
+                        variant="outlined"
+                        density="comfortable"
+                        hide-details
+                        clearable
+                      />
+                    </v-col>
+
+                    <v-col cols="12" sm="6" md="3" class="d-flex align-center">
+                      <v-btn
+                        variant="text"
+                        @click="resetAggregationPeriod"
+                      >
+                        今月に戻す
+                      </v-btn>
+                    </v-col>
+                  </v-row>
+
+                  <v-row class="mt-1">
+                    <v-col cols="12" sm="6" md="4">
+                      <div class="text-body-2 text-medium-emphasis">
+                        今月の支出
+                      </div>
+                      <div class="text-h5 font-weight-bold mt-1">
+                        {{ yen(currentMonthPurchased) }}
+                      </div>
+                    </v-col>
+
+                    <v-col cols="12" sm="6" md="4">
+                      <div class="text-body-2 text-medium-emphasis">
+                        指定期間の支出
+                      </div>
+                      <div class="text-h5 font-weight-bold mt-1">
+                        {{ yen(aggregationPurchased) }}
+                      </div>
+                    </v-col>
+
+                    <v-col cols="12" sm="6" md="4">
+                      <div class="text-body-2 text-medium-emphasis">
+                        指定期間の購入件数
+                      </div>
+                      <div class="text-h5 font-weight-bold mt-1">
+                        {{ aggregationReceiptCount }}件
+                      </div>
+                    </v-col>
+                  </v-row>
+
+                  <v-divider class="my-4" />
+
+                  <div class="text-subtitle-2 font-weight-bold mb-2">
+                    指定期間の月別支出
+                  </div>
+
+                  <v-list
+                    v-if="monthlyAggregation.length > 0"
+                    density="compact"
+                    class="pa-0"
+                  >
+                    <v-list-item
+                      v-for="item in monthlyAggregation"
+                      :key="item.month"
+                      class="px-0"
+                    >
+                      <v-list-item-title>
+                        {{ item.label }}
+                      </v-list-item-title>
+
+                      <template #append>
+                        <span class="font-weight-bold">
+                          {{ yen(item.amount) }}
+                        </span>
+                      </template>
+                    </v-list-item>
+                  </v-list>
+
+                  <div
+                    v-else
+                    class="text-body-2 text-medium-emphasis"
+                  >
+                    指定期間の購入記録はありません
+                  </div>
+
+                  <v-divider class="my-4" />
+
+                  <div class="text-subtitle-2 font-weight-bold mb-2">
+                    立替中の金額
+                  </div>
+
+                  <v-list
+                    v-if="pendingAdvanceByUser.length > 0"
+                    density="compact"
+                    class="pa-0"
+                  >
+                    <v-list-item
+                      v-for="item in pendingAdvanceByUser"
+                      :key="item.userId"
+                      class="px-0"
+                    >
+                      <v-list-item-title>
+                        {{ item.name }}
+                      </v-list-item-title>
+
+                      <template #append>
+                        <span class="font-weight-bold text-warning">
+                          {{ yen(item.amount) }}
+                        </span>
+                      </template>
+                    </v-list-item>
+                  </v-list>
+
+                  <div
+                    v-else
+                    class="text-body-2 text-medium-emphasis"
+                  >
+                    現在、未精算の立替はありません
+                  </div>
+                </v-card-text>
+              </v-card>
+            </v-card-text>
+
+            <v-card-text v-if="filteredReceipts.length === 0" class="py-12 text-center">
+              <v-icon size="52" color="grey">mdi-receipt-text-outline</v-icon>
+              <div class="text-body-1 mt-3">購入記録がありません</div>
+              <div class="text-body-2 text-medium-emphasis mt-1">
+                レシートを登録するとここに表示されます
+              </div>
+            </v-card-text>
+
+            <div v-else>
+              <v-list lines="two">
+                <template
+                  v-for="(receipt, index) in filteredReceipts"
+                  :key="receipt.id"
+                >
+                  <v-list-item @click="openReceiptEdit(receipt)">
+                    <template #prepend>
+                      <v-avatar color="primary" variant="tonal" class="mr-3">
+                        <v-icon>mdi-receipt</v-icon>
+                      </v-avatar>
+                    </template>
+
+                    <v-list-item-title class="font-weight-medium">
+                      {{ receipt.store_name || '購入先未設定' }}
+                    </v-list-item-title>
+
+                    <v-list-item-subtitle>
+                      {{ formatDate(receipt.purchased_at) }}
+                      <span class="mx-1">·</span>
+                      {{ receiptItemSummary(receipt) }}
+                    </v-list-item-subtitle>
+
+                    <template #append>
+                      <div class="text-right mr-3">
+                        <div class="font-weight-bold">
+                          {{ yen(receipt.total_amount) }}
+                        </div>
+                        <v-chip
+                          size="x-small"
+                          class="mt-1"
+                          :color="receipt.payment_method === 'advance' ? 'warning' : 'primary'"
+                          variant="tonal"
+                        >
+                          {{ receipt.payment_method === 'advance' ? '立替' : '予算' }}
+                        </v-chip>
+                      </div>
+
+                      <v-btn
+                        v-if="canEdit"
+                        icon="mdi-pencil"
+                        variant="text"
+                        @click.stop="openReceiptEdit(receipt)"
+                      />
+                    </template>
+                  </v-list-item>
+
+                  <v-divider v-if="index < filteredReceipts.length - 1" />
+                </template>
+              </v-list>
+            </div>
+          </v-card>
+        </v-window-item>
+
+        <v-window-item value="budgets">
+          <v-card rounded="xl" variant="outlined" class="mb-4">
+            <v-card-title class="py-4">
+              予算原資
+            </v-card-title>
+
+            <v-divider />
+
+            <v-card-text class="pa-5">
+              <v-row>
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model.number="budgetSourceForm.class_collection"
+                    label="クラス徴収金"
+                    type="number"
+                    min="0"
+                    variant="outlined"
+                    suffix="円"
+                    :disabled="!canCreate && !canEdit"
+                  />
+                </v-col>
+
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model.number="budgetSourceForm.organization_subsidy"
+                    label="団体補助費"
+                    type="number"
+                    min="0"
+                    variant="outlined"
+                    suffix="円"
+                    :disabled="!canCreate && !canEdit"
+                  />
+                </v-col>
+              </v-row>
+
+              <v-divider class="my-2" />
+
+              <div class="d-flex align-center justify-space-between">
+                <span class="text-body-1 font-weight-medium">
+                  総予算
+                </span>
+
+                <span class="text-h6 font-weight-bold">
+                  {{ yen(budgetSourceTotal) }}
+                </span>
+              </div>
+
+              <div class="d-flex justify-end mt-4">
+                <v-btn
+                  v-if="canCreate || canEdit"
+                  color="primary"
+                  variant="tonal"
+                  :loading="budgetSourceSaving"
+                  @click="saveBudgetSources"
+                >
+                  原資を保存
+                </v-btn>
+              </div>
+            </v-card-text>
+          </v-card>
+
+          <v-card rounded="xl" variant="outlined">
+            <v-card-title class="d-flex align-center justify-space-between flex-wrap ga-3 py-4">
+              <span>予算内訳</span>
+
+              <v-btn
+                v-if="canCreate"
+                variant="tonal"
+                prepend-icon="mdi-plus"
+                @click="openBudgetDialog()"
+              >
+                予算を登録
+              </v-btn>
+            </v-card-title>
+
+            <v-divider />
+
+            <v-card-text v-if="budgetItems.length === 0" class="py-12 text-center">
+              <v-icon size="52" color="grey">mdi-wallet-outline</v-icon>
+              <div class="text-body-1 mt-3">予算項目がありません</div>
+            </v-card-text>
+
+            <v-list v-else>
+              <template
+                v-for="(item, index) in budgetItems"
+                :key="item.id"
+              >
+                <v-list-item>
+                  <v-list-item-title class="font-weight-medium">
+                    {{ item.name }}
+                  </v-list-item-title>
+
+                  <v-list-item-subtitle class="mt-1">
+                    予算 {{ yen(item.budget_amount) }}
+                    <span class="mx-1">·</span>
+                    使用 {{ yen(item.used_amount) }}
+                  </v-list-item-subtitle>
+
+                  <template #append>
+                    <div class="text-right mr-2">
+                      <div
+                        class="font-weight-bold"
+                        :class="budgetRemaining(item) < 0 ? 'text-error' : ''"
+                      >
+                        <template v-if="budgetRemaining(item) < 0">
+                          予算超過 {{ yen(Math.abs(budgetRemaining(item))) }}
+                        </template>
+                        <template v-else>
+                          残 {{ yen(budgetRemaining(item)) }}
+                        </template>
+                      </div>
+                    </div>
+
+                    <v-btn
+                      v-if="canEdit"
+                      icon="mdi-pencil"
+                      variant="text"
+                      @click="openBudgetDialog(item)"
+                    />
+                  </template>
+                </v-list-item>
+
+                <v-divider v-if="index < budgetItems.length - 1" />
+              </template>
+            </v-list>
+          </v-card>
+        </v-window-item>
+
+        <v-window-item value="reimbursements">
+          <v-card rounded="xl" variant="outlined">
+            <v-card-title class="py-4">
+              立替精算
+            </v-card-title>
+
+            <v-divider />
+
+            <v-card-text v-if="reimbursements.length === 0" class="py-12 text-center">
+              <v-icon size="52" color="grey">mdi-cash-check</v-icon>
+              <div class="text-body-1 mt-3">立替精算はありません</div>
+            </v-card-text>
+
+            <v-list v-else>
+              <template
+                v-for="(item, index) in reimbursements"
+                :key="item.id"
+              >
+                <v-list-item>
+                  <v-list-item-title class="font-weight-medium">
+                    {{ item.user_name || item.user_nickname || '支払者未設定' }}
+                  </v-list-item-title>
+
+                  <v-list-item-subtitle class="mt-1">
+                    {{ item.store_name || '購入先未設定' }}
+                    <span class="mx-1">·</span>
+                    {{ formatDate(item.purchased_at) }}
+                  </v-list-item-subtitle>
+
+                  <template #append>
+                    <div class="text-right mr-3">
+                      <div class="font-weight-bold">
+                        {{ yen(item.amount) }}
+                      </div>
+                      <v-chip
+                        size="x-small"
+                        class="mt-1"
+                        :color="reimbursementColor(item.status)"
+                        variant="tonal"
+                      >
+                        {{ reimbursementLabel(item.status) }}
+                      </v-chip>
+                    </div>
+
+                    <v-btn
+                      v-if="canApprove && item.status === 'pending'"
+                      color="success"
+                      variant="tonal"
+                      size="small"
+                      @click="markReimbursementPaid(item)"
+                    >
+                      精算済みとして記録
+                    </v-btn>
+                  </template>
+                </v-list-item>
+
+                <v-divider v-if="index < reimbursements.length - 1" />
+              </template>
+            </v-list>
+          </v-card>
+        </v-window-item>
+      </v-window>
+    </template>
+
+    <v-alert
+      v-else
+      type="warning"
+      variant="tonal"
+      class="mt-4"
+    >
+      会計を閲覧する権限がありません。
+    </v-alert>
+
+    <v-dialog v-model="receiptDialog" max-width="760" scrollable>
+      <v-card rounded="xl">
+        <v-card-title class="pa-5">
+          {{ editingReceipt ? '購入記録を編集' : 'レシートを登録' }}
+        </v-card-title>
+
+        <v-divider />
+
+        <v-card-text class="pa-5">
+          <v-row>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="receiptForm.purchased_at"
+                label="購入日"
+                type="date"
+                variant="outlined"
+              />
+            </v-col>
+
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="receiptForm.store_name"
+                label="購入先"
+                variant="outlined"
+                placeholder="例：Amazon、東急ハンズ"
+              />
+            </v-col>
+
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="receiptForm.payment_method"
+                label="支払い方法"
+                :items="paymentMethodItems"
+                variant="outlined"
+              />
+            </v-col>
+
+            <v-col
+              v-if="receiptForm.payment_method === 'advance'"
+              cols="12"
+              sm="6"
+            >
+              <v-select
+                v-model="receiptForm.paid_by_user_id"
+                label="立替者"
+                :items="receiptUserItems"
+                item-title="title"
+                item-value="value"
+                variant="outlined"
+                clearable
+              />
+            </v-col>
+
+            <v-col cols="12">
+              <v-textarea
+                v-model="receiptForm.description"
+                label="メモ"
+                variant="outlined"
+                rows="2"
+                auto-grow
+              />
+            </v-col>
+          </v-row>
+
+          <div class="d-flex align-center justify-space-between mb-3">
+            <div class="text-subtitle-1 font-weight-bold">商品</div>
+
+            <v-btn
+              variant="tonal"
+              prepend-icon="mdi-plus"
+              @click="addReceiptItem"
+            >
+              商品を追加
+            </v-btn>
+          </div>
+
+          <v-card
+            v-for="(item, index) in receiptForm.items"
+            :key="item.localId"
+            variant="outlined"
+            rounded="lg"
+            class="mb-3"
+          >
+            <v-card-text>
+              <div class="d-flex justify-space-between align-center mb-2">
+                <div class="text-body-2 font-weight-medium">
+                  商品 {{ index + 1 }}
+                </div>
+
+                <v-btn
+                  v-if="receiptForm.items.length > 1"
+                  icon="mdi-delete-outline"
+                  variant="text"
+                  color="error"
+                  @click="removeReceiptItem(index)"
+                />
+              </div>
+
+              <v-row>
+                <v-col cols="12">
+                  <v-text-field
+                    v-model="item.name"
+                    label="商品名"
+                    variant="outlined"
+                    density="comfortable"
+                  />
+                </v-col>
+
+                <v-col cols="12">
+                  <v-select
+                    v-model="item.budget_item_id"
+                    label="支出元予算"
+                    :items="budgetItemSelectItems"
+                    item-title="title"
+                    item-value="value"
+                    variant="outlined"
+                    density="comfortable"
+                    clearable
+                  />
+                </v-col>
+
+                <v-col cols="6" sm="3">
+                  <v-text-field
+                    v-model.number="item.unit_price"
+                    label="単価"
+                    type="number"
+                    min="0"
+                    variant="outlined"
+                    density="comfortable"
+                    suffix="円"
+                  />
+                </v-col>
+
+                <v-col cols="6" sm="3">
+                  <v-text-field
+                    v-model.number="item.quantity"
+                    label="数量"
+                    type="number"
+                    min="1"
+                    step="1"
+                    variant="outlined"
+                    density="comfortable"
+                  />
+                </v-col>
+
+                <v-col cols="6" sm="3">
+                  <v-text-field
+                    v-model.number="item.discount_rate"
+                    label="割引"
+                    type="number"
+                    min="0"
+                    max="100"
+                    variant="outlined"
+                    density="comfortable"
+                    suffix="%"
+                  />
+                </v-col>
+
+                <v-col cols="6" sm="3">
+                  <v-text-field
+                    v-model.number="item.tax_rate"
+                    label="税率"
+                    type="number"
+                    min="0"
+                    max="100"
+                    variant="outlined"
+                    density="comfortable"
+                    suffix="%"
+                  />
+                </v-col>
+              </v-row>
+
+              <div class="text-right font-weight-bold">
+                {{ yen(calculateItemAmount(item)) }}
+              </div>
+            </v-card-text>
+          </v-card>
+
+          <div class="d-flex justify-end mt-4">
+            <div class="text-right">
+              <div class="text-body-2 text-medium-emphasis">レシート合計</div>
+              <div class="text-h5 font-weight-bold">
+                {{ yen(receiptTotal) }}
+              </div>
+            </div>
+          </div>
+        </v-card-text>
+
+        <v-divider />
+
+        <v-card-actions class="pa-4">
+          <v-spacer />
+
+          <v-btn variant="text" @click="receiptDialog = false">
+            キャンセル
+          </v-btn>
+
+          <v-btn
+            v-if="editingReceipt && canEdit"
+            color="error"
+            variant="text"
+            @click="deleteReceipt"
+          >
+            削除
+          </v-btn>
+
+          <v-btn
+            v-if="!editingReceipt && !canCreate"
+            disabled
+          >
+            保存
+          </v-btn>
+
+          <v-btn
+            v-else-if="editingReceipt && !canEdit"
+            disabled
+          >
+            保存
+          </v-btn>
+
+          <v-btn
+            v-else
+            color="primary"
+            :loading="saving"
+            @click="saveReceipt"
+          >
+            保存
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="budgetDialog" max-width="520">
+      <v-card rounded="xl">
+        <v-card-title class="pa-5">
+          {{ editingBudget ? '予算項目を編集' : '予算項目を登録' }}
+        </v-card-title>
+
+        <v-divider />
+
+        <v-card-text class="pa-5">
+          <v-text-field
+            v-model="budgetForm.name"
+            label="項目名"
+            variant="outlined"
+            class="mb-2"
+          />
+
+          <v-text-field
+            v-model.number="budgetForm.budget_amount"
+            label="予算額"
+            type="number"
+            min="0"
+            variant="outlined"
+            suffix="円"
+          />
+        </v-card-text>
+
+        <v-card-actions class="pa-4">
+          <v-spacer />
+
+          <v-btn variant="text" @click="budgetDialog = false">
+            キャンセル
+          </v-btn>
+
+          <v-btn
+            color="primary"
+            :loading="saving"
+            @click="saveBudget"
+          >
+            保存
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+  </v-container>
+</template>
+
+<script setup lang="ts">
+definePageMeta({
+  middleware: ['auth'],
+})
+
+type PaymentMethod = 'budget' | 'advance'
+type ReimbursementStatus = 'pending' | 'paid' | 'cancelled'
+
+interface ReceiptItem {
+  id?: string
+  localId: string
+  receipt_id?: string
+  budget_item_id?: string | null
+  name: string
+  unit_price: number
+  quantity: number
+  discount_rate: number
+  tax_rate: number
+  amount?: number
+}
+
+interface Receipt {
+  id: string
+  purchased_at: string
+  store_name: string
+  total_amount: number
+  payment_method: PaymentMethod
+  paid_by_user_id?: string | null
+  paid_by_name?: string | null
+  paid_by_nickname?: string | null
+  description?: string | null
+  reimbursement_status?: ReimbursementStatus | null
+  items: ReceiptItem[]
+}
+
+interface ReceiptUser {
+  id: string
+  student_number: string
+  name: string
+  nickname: string | null
+}
+
+interface BudgetItem {
+  id: string
+  budget_id: string
+  name: string
+  budget_amount: number
+  used_amount: number
+}
+
+interface Reimbursement {
+  id: string
+  receipt_id: string
+  user_id?: string | null
+  user_name?: string | null
+  user_nickname?: string | null
+  amount: number
+  status: ReimbursementStatus
+  store_name?: string | null
+  purchased_at?: string | null
+}
+
+const auth = useAuthStore()
+const { apiFetch } = useApi()
+
+const tab = ref('receipts')
+const loading = ref(false)
+const saving = ref(false)
+const errorMessage = ref('')
+
+const receipts = ref<Receipt[]>([])
+const budgetItems = ref<BudgetItem[]>([])
+const reimbursements = ref<Reimbursement[]>([])
+
+const summary = reactive({
+  totalBudget: 0,
+  totalPurchased: 0,
+  pendingReimbursements: 0,
+})
+
+const receiptSearch = ref('')
+const receiptPaymentFilter = ref<'all' | PaymentMethod>('all')
+const receiptReimbursementFilter = ref<'all' | ReimbursementStatus>('all')
+const aggregationMonth = ref(new Date().toISOString().slice(0, 7))
+const aggregationStartDate = ref('')
+const aggregationEndDate = ref('')
+const receiptDialog = ref(false)
+const editingReceipt = ref<Receipt | null>(null)
+
+const budgetDialog = ref(false)
+const editingBudget = ref<BudgetItem | null>(null)
+
+const currentBudgetId = ref<string | null>(null)
+const budgetSourceSaving = ref(false)
+
+const budgetSourceForm = reactive({
+  class_collection: 0,
+  organization_subsidy: 0,
+})
+
+const receiptForm = reactive({
+  purchased_at: new Date().toISOString().slice(0, 10),
+  store_name: '',
+  payment_method: 'budget' as PaymentMethod,
+  paid_by_user_id: null as string | null,
+  description: '',
+  items: [] as ReceiptItem[],
+})
+
+const receiptUsers = ref<ReceiptUser[]>([])
+
+const budgetForm = reactive({
+  name: '',
+  budget_amount: 0,
+})
+
+const canView = computed(() => auth.hasPermission('accounting.view'))
+const canCreate = computed(() => auth.hasPermission('accounting.create'))
+const canEdit = computed(() => auth.hasPermission('accounting.edit'))
+const canApprove = computed(() => auth.hasPermission('accounting.approve'))
+
+const paymentMethodItems = [
+  { title: '予算から支払い', value: 'budget' },
+  { title: '立替', value: 'advance' },
+]
+
+const receiptPaymentFilterItems = [
+  { title: 'すべて', value: 'all' },
+  { title: '予算', value: 'budget' },
+  { title: '立替', value: 'advance' },
+]
+
+const receiptReimbursementFilterItems = [
+  { title: 'すべて', value: 'all' },
+  { title: '未精算', value: 'pending' },
+  { title: '精算済み', value: 'paid' },
+  { title: '取消', value: 'cancelled' },
+]
+
+const receiptUserItems = computed(() =>
+  receiptUsers.value.map((user) => ({
+    title: user.nickname
+      ? `${user.nickname}（${user.name}）`
+      : user.name,
+    value: user.id,
+  })),
+)
+
+const budgetItemSelectItems = computed(() =>
+  budgetItems.value.map((item) => {
+    const remaining = Number(item.budget_amount || 0) - Number(item.used_amount || 0)
+
+    return {
+      title:
+        remaining < 0
+          ? `${item.name}（予算超過 ${yen(Math.abs(remaining))}）`
+          : `${item.name}（残り ${yen(remaining)}）`,
+      value: item.id,
+    }
+  }),
+)
+
+const remainingBudget = computed(
+  () => summary.totalBudget - summary.totalPurchased,
+)
+
+const budgetSourceTotal = computed(
+  () =>
+    Number(budgetSourceForm.class_collection || 0) +
+    Number(budgetSourceForm.organization_subsidy || 0),
+)
+
+const filteredReceipts = computed(() => {
+  const query = receiptSearch.value.trim().toLowerCase()
+
+  return receipts.value.filter((receipt) => {
+    const store = receipt.store_name?.toLowerCase() ?? ''
+    const items = receipt.items
+      .map((item) => item.name?.toLowerCase() ?? '')
+      .join(' ')
+
+    const matchesSearch =
+      !query ||
+      store.includes(query) ||
+      items.includes(query)
+
+    const matchesPayment =
+      receiptPaymentFilter.value === 'all' ||
+      receipt.payment_method === receiptPaymentFilter.value
+
+    const matchesReimbursement =
+      receiptReimbursementFilter.value === 'all' ||
+      receipt.reimbursement_status === receiptReimbursementFilter.value
+
+    return matchesSearch && matchesPayment && matchesReimbursement
+  })
+})
+
+const receiptDate = (receipt: Receipt) =>
+  receipt.purchased_at?.slice(0, 10) ?? ''
+
+const isReceiptInPeriod = (
+  receipt: Receipt,
+  startDate: string,
+  endDate: string,
+) => {
+  const date = receiptDate(receipt)
+
+  if (!date) return false
+  if (startDate && date < startDate) return false
+  if (endDate && date > endDate) return false
+
+  return true
+}
+
+const currentMonthPurchased = computed(() => {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const monthPrefix = `${year}-${month}`
+
+  return receipts.value
+    .filter((receipt) => receiptDate(receipt).startsWith(monthPrefix))
+    .reduce((total, receipt) => total + Number(receipt.total_amount || 0), 0)
+})
+
+const aggregationRange = computed(() => {
+  if (aggregationStartDate.value || aggregationEndDate.value) {
+    return {
+      start: aggregationStartDate.value,
+      end: aggregationEndDate.value,
+    }
+  }
+
+  if (!aggregationMonth.value) {
+    return {
+      start: '',
+      end: '',
+    }
+  }
+
+  const [year = 0, month = 0] = aggregationMonth.value.split('-').map(Number)
+  const lastDay = new Date(year, month, 0).getDate()
+
+  return {
+    start: `${year}-${String(month).padStart(2, '0')}-01`,
+    end: `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+  }
+})
+
+const aggregationReceipts = computed(() => {
+  const range = aggregationRange.value
+
+  return receipts.value.filter((receipt) =>
+    isReceiptInPeriod(receipt, range.start, range.end),
+  )
+})
+
+const aggregationPurchased = computed(() =>
+  aggregationReceipts.value.reduce(
+    (total, receipt) => total + Number(receipt.total_amount || 0),
+    0,
+  ),
+)
+
+const aggregationReceiptCount = computed(
+  () => aggregationReceipts.value.length,
+)
+
+const monthlyAggregation = computed(() => {
+  const totals = new Map<string, number>()
+
+  for (const receipt of aggregationReceipts.value) {
+    const date = receiptDate(receipt)
+
+    if (!date) continue
+
+    const month = date.slice(0, 7)
+    totals.set(
+      month,
+      (totals.get(month) ?? 0) + Number(receipt.total_amount || 0),
+    )
+  }
+
+  return [...totals.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, amount]) => ({
+      month,
+      label: month.replace('-', '年') + '月',
+      amount,
+    }))
+})
+
+const pendingAdvanceByUser = computed(() => {
+  const totals = new Map<
+    string,
+    { userId: string; name: string; amount: number }
+  >()
+
+  for (const reimbursement of reimbursements.value) {
+    if (reimbursement.status !== 'pending') continue
+
+    const userId = reimbursement.user_id ?? `unknown-${reimbursement.id}`
+    const name =
+      reimbursement.user_nickname ||
+      reimbursement.user_name ||
+      '支払者未設定'
+
+    const current = totals.get(userId)
+
+    if (current) {
+      current.amount += Number(reimbursement.amount || 0)
+    } else {
+      totals.set(userId, {
+        userId,
+        name,
+        amount: Number(reimbursement.amount || 0),
+      })
+    }
+  }
+
+  return [...totals.values()].sort((a, b) => b.amount - a.amount)
+})
+
+const resetAggregationPeriod = () => {
+  aggregationMonth.value = new Date().toISOString().slice(0, 7)
+  aggregationStartDate.value = ''
+  aggregationEndDate.value = ''
+}
+
+const receiptTotal = computed(() =>
+  receiptForm.items.reduce(
+    (total, item) => total + calculateItemAmount(item),
+    0,
+  ),
+)
+
+const yen = (value: number | null | undefined) =>
+  `¥${Number(value ?? 0).toLocaleString('ja-JP')}`
+
+const formatDate = (value: string | null | undefined) => {
+  if (!value) return '-'
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleDateString('ja-JP')
+}
+
+const calculateItemAmount = (item: ReceiptItem) => {
+  const base = Number(item.unit_price || 0) * Number(item.quantity || 0)
+  const discounted = base * (1 - Number(item.discount_rate || 0) / 100)
+  const taxed = discounted * (1 + Number(item.tax_rate || 0) / 100)
+
+  return Math.round(taxed)
+}
+
+const receiptItemSummary = (receipt: Receipt) => {
+  if (!receipt.items?.length) return '商品なし'
+
+  const first = receipt.items[0]?.name || '商品'
+  const extra = receipt.items.length - 1
+
+  return extra > 0 ? `${first} ほか${extra}件` : first
+}
+
+const budgetRemaining = (item: BudgetItem) =>
+  Number(item.budget_amount || 0) - Number(item.used_amount || 0)
+
+const reimbursementLabel = (status: ReimbursementStatus) => {
+  if (status === 'paid') return '精算済み'
+  if (status === 'cancelled') return '取消'
+  return '未精算'
+}
+
+const reimbursementColor = (status: ReimbursementStatus) => {
+  if (status === 'paid') return 'success'
+  if (status === 'cancelled') return 'grey'
+  return 'warning'
+}
+
+const normalizeReceipt = (receipt: Receipt): Receipt => ({
+  ...receipt,
+  items: Array.isArray(receipt.items)
+    ? receipt.items.map((item) => ({
+        ...item,
+        localId: item.id ?? crypto.randomUUID(),
+      }))
+    : [],
+})
+
+const loadAll = async () => {
+  if (!canView.value) return
+
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    const [
+      summaryResponse,
+      receiptsResponse,
+      budgetsResponse,
+      reimbursementsResponse,
+      usersResponse,
+    ] = await Promise.all([
+        apiFetch<any>('/api/accounting/summary'),
+        apiFetch<any>('/api/accounting/receipts'),
+        apiFetch<any>('/api/accounting/budgets'),
+        apiFetch<any>('/api/accounting/reimbursements'),
+    apiFetch<{ users: ReceiptUser[] }>('/api/accounting/users'),
+      ])
+
+    const summaryData = summaryResponse?.summary ?? summaryResponse ?? {}
+
+    summary.totalBudget = Number(
+      summaryData.total_budget ??
+        summaryData.totalBudget ??
+        summaryData.budget_amount ??
+        0,
+    )
+
+    summary.totalPurchased = Number(
+      summaryData.purchase_amount ??
+        summaryData.total_purchased ??
+        summaryData.totalPurchased ??
+        summaryData.total_expenses ??
+        0,
+    )
+
+    summary.pendingReimbursements = Number(
+      summaryData.pending_reimbursement ??
+        summaryData.pending_reimbursements ??
+        summaryData.pendingReimbursements ??
+        0,
+    )
+
+    const receiptData =
+      receiptsResponse?.receipts ??
+      (Array.isArray(receiptsResponse) ? receiptsResponse : [])
+
+    receipts.value = receiptData.map(normalizeReceipt)
+    receiptUsers.value = usersResponse?.users ?? []
+
+    const budgets = Array.isArray(budgetsResponse?.budgets)
+      ? budgetsResponse.budgets
+      : []
+
+    if (budgets.length > 0 && budgets[0]?.id) {
+      currentBudgetId.value = budgets[0].id
+
+      budgetSourceForm.class_collection = Number(
+        budgets[0].class_collection_amount ?? 0,
+      )
+
+      budgetSourceForm.organization_subsidy = Number(
+        budgets[0].organization_subsidy_amount ?? 0,
+      )
+
+      const budgetItemsResponse = await apiFetch<any>(
+        `/api/accounting/budgets/${budgets[0].id}/items`,
+      )
+
+      const budgetData = Array.isArray(budgetItemsResponse?.items)
+        ? budgetItemsResponse.items
+        : []
+
+      budgetItems.value = budgetData.map((item: any) => ({
+        id: item.id,
+        budget_id: item.budget_id,
+        name: item.name,
+        budget_amount: Number(item.budgeted_amount ?? 0),
+        used_amount: Number(item.used_amount ?? 0),
+      }))
+    } else {
+      currentBudgetId.value = null
+      budgetSourceForm.class_collection = 0
+      budgetSourceForm.organization_subsidy = 0
+      budgetItems.value = []
+    }
+
+    const reimbursementData =
+      reimbursementsResponse?.reimbursements ??
+      (Array.isArray(reimbursementsResponse)
+        ? reimbursementsResponse
+        : [])
+
+    reimbursements.value = reimbursementData
+  } catch (error: any) {
+    errorMessage.value =
+      error?.data?.message ??
+      error?.data?.error ??
+      error?.message ??
+      '会計情報の取得に失敗しました。'
+  } finally {
+    loading.value = false
+  }
+}
+
+const resetReceiptForm = () => {
+  receiptForm.purchased_at = new Date().toISOString().slice(0, 10)
+  receiptForm.store_name = ''
+  receiptForm.payment_method = 'budget'
+  receiptForm.description = ''
+  receiptForm.items = [
+    {
+      localId: crypto.randomUUID(),
+      name: '',
+      unit_price: 0,
+      quantity: 1,
+      discount_rate: 0,
+      tax_rate: 10,
+    },
+  ]
+}
+
+const openReceiptCreate = () => {
+  editingReceipt.value = null
+  resetReceiptForm()
+  receiptDialog.value = true
+}
+
+const openReceiptEdit = (receipt: Receipt) => {
+  editingReceipt.value = receipt
+
+  receiptForm.purchased_at = receipt.purchased_at?.slice(0, 10) ?? ''
+  receiptForm.store_name = receipt.store_name ?? ''
+  receiptForm.payment_method = receipt.payment_method ?? 'budget'
+  receiptForm.paid_by_user_id = receipt.paid_by_user_id ?? null
+  receiptForm.description = receipt.description ?? ''
+  receiptForm.items = receipt.items.map((item) => ({
+    ...item,
+    localId: item.id ?? crypto.randomUUID(),
+  }))
+
+  if (receiptForm.items.length === 0) {
+    addReceiptItem()
+  }
+
+  receiptDialog.value = true
+}
+
+const addReceiptItem = () => {
+  receiptForm.items.push({
+    localId: crypto.randomUUID(),
+    name: '',
+    unit_price: 0,
+    quantity: 1,
+    budget_item_id: null,
+    discount_rate: 0,
+    tax_rate: 10,
+  })
+}
+
+const removeReceiptItem = (index: number) => {
+  receiptForm.items.splice(index, 1)
+}
+
+const saveReceipt = async () => {
+  if (!receiptForm.purchased_at || !receiptForm.store_name.trim()) {
+    errorMessage.value = '購入日と購入先を入力してください。'
+    return
+  }
+
+  if (
+    receiptForm.items.length === 0 ||
+    receiptForm.items.some((item) => !item.name.trim())
+  ) {
+    errorMessage.value = '商品を1件以上入力してください。'
+    return
+  }
+
+  saving.value = true
+  errorMessage.value = ''
+
+  try {
+    const body = {
+      purchased_at: receiptForm.purchased_at,
+      store_name: receiptForm.store_name.trim(),
+      payment_method: receiptForm.payment_method,
+      description: receiptForm.description.trim() || null,
+      total_amount: receiptTotal.value,
+      paid_by_user_id:
+        receiptForm.payment_method === 'advance'
+          ? receiptForm.paid_by_user_id
+          : null,
+      items: receiptForm.items.map((item) => ({
+        budget_item_id: item.budget_item_id ?? null,
+        name: item.name.trim(),
+        unit_price: Number(item.unit_price || 0),
+        quantity: Number(item.quantity || 0),
+        discount_rate: Number(item.discount_rate || 0),
+        tax_rate: Number(item.tax_rate || 0),
+        amount: calculateItemAmount(item),
+      })),
+    }
+
+    if (editingReceipt.value) {
+      await apiFetch(
+        `/api/accounting/receipts/${editingReceipt.value.id}`,
+        {
+          method: 'PATCH',
+          body,
+        },
+      )
+    } else {
+      await apiFetch('/api/accounting/receipts', {
+        method: 'POST',
+        body,
+      })
+    }
+
+    receiptDialog.value = false
+    await loadAll()
+  } catch (error: any) {
+    errorMessage.value =
+      error?.data?.message ??
+      error?.data?.error ??
+      error?.message ??
+      '購入記録の保存に失敗しました。'
+  } finally {
+    saving.value = false
+  }
+}
+
+const deleteReceipt = async () => {
+  if (!editingReceipt.value) return
+
+  if (!window.confirm('この購入記録を削除しますか？')) {
+    return
+  }
+
+  saving.value = true
+
+  try {
+    await apiFetch(
+      `/api/accounting/receipts/${editingReceipt.value.id}`,
+      {
+        method: 'DELETE',
+      },
+    )
+
+    receiptDialog.value = false
+    await loadAll()
+  } catch (error: any) {
+    errorMessage.value =
+      error?.data?.message ??
+      error?.data?.error ??
+      error?.message ??
+      '購入記録の削除に失敗しました。'
+  } finally {
+    saving.value = false
+  }
+}
+
+const saveBudgetSources = async () => {
+  budgetSourceSaving.value = true
+  errorMessage.value = ''
+
+  try {
+    let budgetId = currentBudgetId.value
+
+    if (!budgetId) {
+      if (!canCreate.value) {
+        throw new Error('予算登録権限がありません。')
+      }
+
+      const created = await apiFetch<any>(
+        '/api/accounting/budgets',
+        {
+          method: 'POST',
+          body: {
+            name: '38R 星陵祭予算',
+          },
+        },
+      )
+
+      budgetId = created?.budget?.id ?? created?.id ?? null
+
+      if (!budgetId) {
+        throw new Error('予算IDを取得できませんでした。')
+      }
+
+      currentBudgetId.value = budgetId
+    } else if (!canEdit.value) {
+      throw new Error('予算編集権限がありません。')
+    }
+
+    await apiFetch(
+      `/api/accounting/budgets/${budgetId}/sources`,
+      {
+        method: 'PATCH',
+        body: {
+          class_collection: Number(
+            budgetSourceForm.class_collection || 0,
+          ),
+          organization_subsidy: Number(
+            budgetSourceForm.organization_subsidy || 0,
+          ),
+        },
+      },
+    )
+
+    await loadAll()
+  } catch (error: any) {
+    errorMessage.value =
+      error?.data?.message ??
+      error?.data?.error ??
+      error?.message ??
+      '予算原資の保存に失敗しました。'
+  } finally {
+    budgetSourceSaving.value = false
+  }
+}
+
+const openBudgetDialog = (item?: BudgetItem) => {
+  editingBudget.value = item ?? null
+  budgetForm.name = item?.name ?? ''
+  budgetForm.budget_amount = Number(item?.budget_amount ?? 0)
+  budgetDialog.value = true
+}
+
+const saveBudget = async () => {
+  if (!budgetForm.name.trim()) {
+    errorMessage.value = '予算項目名を入力してください。'
+    return
+  }
+
+  saving.value = true
+
+  try {
+    const budgetAmount = Number(budgetForm.budget_amount || 0)
+
+    if (editingBudget.value) {
+      await apiFetch(
+        `/api/accounting/budget-items/${editingBudget.value.id}`,
+        {
+          method: 'PATCH',
+          body: {
+            budget_id: editingBudget.value.budget_id,
+            name: budgetForm.name.trim(),
+            budgeted_amount: budgetAmount,
+          },
+        },
+      )
+    } else {
+      const budgetsResponse = await apiFetch<any>(
+        '/api/accounting/budgets',
+      )
+
+      const budgets = Array.isArray(budgetsResponse?.budgets)
+        ? budgetsResponse.budgets
+        : []
+
+      let budgetId = budgets[0]?.id
+
+      if (!budgetId) {
+        const created = await apiFetch<any>(
+          '/api/accounting/budgets',
+          {
+            method: 'POST',
+            body: {
+              name: '38R 星陵祭予算',
+              amount: budgetAmount,
+            },
+          },
+        )
+
+        budgetId = created?.budget?.id ?? created?.id
+      }
+
+      if (!budgetId) {
+        throw new Error('予算IDを取得できませんでした。')
+      }
+
+      await apiFetch(
+        `/api/accounting/budgets/${budgetId}/items`,
+        {
+          method: 'POST',
+          body: {
+            name: budgetForm.name.trim(),
+            budgeted_amount: budgetAmount,
+          },
+        },
+      )
+    }
+
+    budgetDialog.value = false
+    await loadAll()
+  } catch (error: any) {
+    errorMessage.value =
+      error?.data?.message ??
+      error?.data?.error ??
+      error?.message ??
+      '予算の保存に失敗しました。'
+  } finally {
+    saving.value = false
+  }
+}
+
+const markReimbursementPaid = async (item: Reimbursement) => {
+  if (!canApprove.value) return
+
+  const confirmed = await confirm('この立替を精算済みにしますか？')
+
+  if (!confirmed) {
+    return
+  }
+
+  try {
+    await apiFetch(
+      `/api/accounting/reimbursements/${item.id}`,
+      {
+        method: 'PATCH',
+        body: {
+          status: 'paid',
+        },
+      },
+    )
+
+    await loadAll()
+  } catch (error: any) {
+    errorMessage.value =
+      error?.data?.message ??
+      error?.data?.error ??
+      error?.message ??
+      '立替精算の更新に失敗しました。'
+  }
+}
+
+onMounted(async () => {
+  await nextTick()
+  await loadAll()
+})
+</script>
