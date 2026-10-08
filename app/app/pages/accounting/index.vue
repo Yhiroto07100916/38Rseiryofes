@@ -134,6 +134,14 @@
                   hide-details
                   style="min-width: 150px; max-width: 180px"
                 />
+
+                <v-btn
+                  variant="outlined"
+                  prepend-icon="mdi-file-delimited-outline"
+                  @click="exportReceiptsCsv"
+                >
+                  CSV出力
+                </v-btn>
               </div>
             </v-card-title>
 
@@ -220,6 +228,16 @@
                       </div>
                     </v-col>
                   </v-row>
+
+                  <div class="d-flex justify-end mt-2">
+                    <v-btn
+                      variant="outlined"
+                      prepend-icon="mdi-file-pdf-box"
+                      @click="printAccountingReport"
+                    >
+                      PDF出力
+                    </v-btn>
+                  </div>
 
                   <v-divider class="my-4" />
 
@@ -836,6 +854,8 @@
 </template>
 
 <script setup lang="ts">
+import { useConfirmDialog } from '~/composables/useConfirmDialog'
+
 definePageMeta({
   middleware: ['auth'],
 })
@@ -899,6 +919,7 @@ interface Reimbursement {
 
 const auth = useAuthStore()
 const { apiFetch } = useApi()
+const { confirm } = useConfirmDialog()
 
 const tab = ref('receipts')
 const loading = ref(false)
@@ -1159,6 +1180,374 @@ const pendingAdvanceByUser = computed(() => {
   return [...totals.values()].sort((a, b) => b.amount - a.amount)
 })
 
+const printAccountingReport = () => {
+  const range = aggregationRange.value
+
+  const periodLabel =
+    range.start || range.end
+      ? `${range.start || '指定なし'} ～ ${range.end || '指定なし'}`
+      : '全期間'
+
+  const monthlyRows = monthlyAggregation.value.length
+    ? monthlyAggregation.value
+        .map(
+          (item) => `
+            <tr>
+              <td>${item.label}</td>
+              <td class="amount">${yen(item.amount)}</td>
+            </tr>
+          `,
+        )
+        .join('')
+    : `
+        <tr>
+          <td colspan="2" class="empty">指定期間の購入記録はありません</td>
+        </tr>
+      `
+
+  const advanceRows = pendingAdvanceByUser.value.length
+    ? pendingAdvanceByUser.value
+        .map(
+          (item) => `
+            <tr>
+              <td>${item.name}</td>
+              <td class="amount">${yen(item.amount)}</td>
+            </tr>
+          `,
+        )
+        .join('')
+    : `
+        <tr>
+          <td colspan="2" class="empty">立替中の金額はありません</td>
+        </tr>
+      `
+
+  const purchaseRows = aggregationReceipts.value
+    .flatMap((receipt) =>
+      receipt.items.map(
+        (item) => `
+          <tr>
+            <td>${receiptDate(receipt)}</td>
+            <td>${item.name || '-'}</td>
+            <td class="amount">${yen(item.unit_price)}</td>
+            <td class="quantity">${item.quantity ?? 0}</td>
+            <td class="rate">
+              割引 ${Number(item.discount_rate ?? 0)}%<br />
+              税 ${Number(item.tax_rate ?? 0)}%
+            </td>
+            <td class="amount">${yen(calculateItemAmount(item))}</td>
+          </tr>
+        `,
+      ),
+    )
+    .join('')
+
+  const printedAt = new Date().toLocaleString('ja-JP')
+
+  const printWindow = window.open('', '_blank', 'width=900,height=1200')
+
+  if (!printWindow) {
+    errorMessage.value =
+      'PDF出力画面を開けませんでした。ブラウザのポップアップブロックを確認してください。'
+    return
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html lang="ja">
+      <head>
+        <meta charset="UTF-8" />
+        <title>38R 会計報告書</title>
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 16mm;
+          }
+
+          * {
+            box-sizing: border-box;
+          }
+
+          body {
+            margin: 0;
+            color: #222;
+            background: #fff;
+            font-family:
+              -apple-system,
+              BlinkMacSystemFont,
+              "Hiragino Kaku Gothic ProN",
+              "Hiragino Sans",
+              "Yu Gothic",
+              "Meiryo",
+              sans-serif;
+            font-size: 10pt;
+            line-height: 1.5;
+          }
+
+          .report {
+            width: 100%;
+          }
+
+          h1 {
+            margin: 0;
+            font-size: 22pt;
+            line-height: 1.3;
+          }
+
+          .subtitle {
+            margin-top: 4px;
+            color: #666;
+            font-size: 9pt;
+          }
+
+          .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #222;
+          }
+
+          .header-right {
+            text-align: right;
+            color: #666;
+            font-size: 8pt;
+          }
+
+          .summary {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin: 14px 0;
+          }
+
+          .summary-card {
+            padding: 9px 12px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+          }
+
+          .summary-label {
+            color: #666;
+            font-size: 8pt;
+          }
+
+          .summary-value {
+            margin-top: 2px;
+            font-size: 15pt;
+            font-weight: 700;
+          }
+
+          section {
+            margin-top: 18px;
+            break-inside: avoid;
+          }
+
+          h2 {
+            margin: 0 0 7px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #999;
+            font-size: 12pt;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+
+          th,
+          td {
+            padding: 5px 7px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+          }
+
+          th {
+            background: #f5f5f5;
+            font-weight: 700;
+          }
+
+          .amount {
+            text-align: right;
+            white-space: nowrap;
+            font-weight: 600;
+          }
+
+          .quantity {
+            text-align: right;
+            white-space: nowrap;
+          }
+
+          .rate {
+            text-align: right;
+            white-space: nowrap;
+            font-size: 8.5pt;
+          }
+
+          .empty {
+            color: #777;
+            text-align: center;
+          }
+
+          .purchase-detail {
+            break-inside: auto;
+          }
+
+          .purchase-detail thead {
+            display: table-header-group;
+          }
+
+          .purchase-detail tr {
+            break-inside: avoid;
+          }
+
+          .footer {
+            margin-top: 24px;
+            padding-top: 7px;
+            border-top: 1px solid #ccc;
+            color: #777;
+            font-size: 8pt;
+            text-align: right;
+          }
+        </style>
+      </head>
+
+      <body>
+        <main class="report">
+          <header class="header">
+            <div>
+              <h1>38R 会計報告書</h1>
+              <div class="subtitle">
+                集計期間：${periodLabel}
+              </div>
+            </div>
+
+            <div class="header-right">
+              出力日時<br />
+              ${printedAt}
+            </div>
+          </header>
+
+          <div class="summary">
+            <div class="summary-card">
+              <div class="summary-label">指定期間の支出</div>
+              <div class="summary-value">
+                ${yen(aggregationPurchased.value)}
+              </div>
+            </div>
+
+            <div class="summary-card">
+              <div class="summary-label">指定期間の購入件数</div>
+              <div class="summary-value">
+                ${aggregationReceiptCount.value}件
+              </div>
+            </div>
+
+            <div class="summary-card">
+              <div class="summary-label">今月の支出</div>
+              <div class="summary-value">
+                ${yen(currentMonthPurchased.value)}
+              </div>
+            </div>
+
+            <div class="summary-card">
+              <div class="summary-label">立替中の金額</div>
+              <div class="summary-value">
+                ${yen(
+                  pendingAdvanceByUser.value.reduce(
+                    (total, item) => total + Number(item.amount || 0),
+                    0,
+                  ),
+                )}
+              </div>
+            </div>
+          </div>
+
+          <section class="purchase-detail">
+            <h2>購入明細</h2>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>購入日</th>
+                  <th>商品名</th>
+                  <th class="amount">単価</th>
+                  <th class="quantity">個数</th>
+                  <th class="rate">割引・税率</th>
+                  <th class="amount">合計額</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                ${
+                  purchaseRows ||
+                  `
+                    <tr>
+                      <td colspan="5" class="empty">
+                        指定期間の購入記録はありません
+                      </td>
+                    </tr>
+                  `
+                }
+              </tbody>
+            </table>
+          </section>
+
+          <section>
+            <h2>月別支出</h2>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>月</th>
+                  <th class="amount">支出額</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                ${monthlyRows}
+              </tbody>
+            </table>
+          </section>
+
+          <section>
+            <h2>立替中の金額</h2>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>支払者</th>
+                  <th class="amount">立替額</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                ${advanceRows}
+              </tbody>
+            </table>
+          </section>
+
+          <div class="footer">
+            38R 星陵祭準備サイト　会計報告書
+          </div>
+        </main>
+      </body>
+    </html>
+  `)
+
+  printWindow.document.close()
+
+  printWindow.addEventListener('afterprint', () => {
+    printWindow.close()
+  })
+
+  printWindow.focus()
+
+  setTimeout(() => {
+    printWindow.print()
+  }, 300)
+}
+
 const resetAggregationPeriod = () => {
   aggregationMonth.value = new Date().toISOString().slice(0, 7)
   aggregationStartDate.value = ''
@@ -1336,7 +1725,84 @@ const loadAll = async () => {
   }
 }
 
+const csvEscape = (value: unknown) => {
+  const text = String(value ?? '')
+  return `"${text.replace(/"/g, '""')}"`
+}
+
+const downloadCsv = (filename: string, rows: string[][]) => {
+  const csv = '\uFEFF' + rows.map((row) => row.map(csvEscape).join(',')).join('\r\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = filename
+  link.click()
+
+  URL.revokeObjectURL(url)
+}
+
+const exportReceiptsCsv = () => {
+  const rows: string[][] = [
+    [
+      '購入日',
+      '購入先',
+      '支払方法',
+      '支払者',
+      '商品名',
+      '単価',
+      '数量',
+      '割引率',
+      '税率',
+      '金額',
+      '精算状況',
+    ],
+  ]
+
+  for (const receipt of filteredReceipts.value) {
+    const paymentMethod =
+      receipt.payment_method === 'advance' ? '立替' : '予算'
+
+    const payer =
+      receipt.paid_by_nickname ||
+      receipt.paid_by_name ||
+      ''
+
+    const reimbursement =
+      receipt.reimbursement_status
+        ? reimbursementLabel(receipt.reimbursement_status)
+        : ''
+
+    for (const item of receipt.items) {
+      rows.push([
+        receiptDate(receipt),
+        receipt.store_name,
+        paymentMethod,
+        payer,
+        item.name,
+        String(item.unit_price ?? 0),
+        String(item.quantity ?? 0),
+        String(item.discount_rate ?? 0),
+        String(item.tax_rate ?? 0),
+        String(calculateItemAmount(item)),
+        reimbursement,
+      ])
+    }
+  }
+
+  const date = new Date()
+    .toISOString()
+    .slice(0, 10)
+
+  downloadCsv(
+    `38R会計_購入記録_${date}.csv`,
+    rows,
+  )
+}
+
 const resetReceiptForm = () => {
+
   receiptForm.purchased_at = new Date().toISOString().slice(0, 10)
   receiptForm.store_name = ''
   receiptForm.payment_method = 'budget'
@@ -1465,7 +1931,14 @@ const saveReceipt = async () => {
 const deleteReceipt = async () => {
   if (!editingReceipt.value) return
 
-  if (!window.confirm('この購入記録を削除しますか？')) {
+  const confirmed = await confirm({
+    title: '購入記録の削除',
+    message: 'この購入記録を削除しますか？',
+    confirmText: '削除',
+    confirmColor: 'error',
+  })
+
+  if (!confirmed) {
     return
   }
 
@@ -1640,7 +2113,12 @@ const saveBudget = async () => {
 const markReimbursementPaid = async (item: Reimbursement) => {
   if (!canApprove.value) return
 
-  const confirmed = await confirm('この立替を精算済みにしますか？')
+  const confirmed = await confirm({
+    title: '立替の精算',
+    message: 'この立替を精算済みにしますか？',
+    confirmText: '精算済みにする',
+    confirmColor: 'primary',
+  })
 
   if (!confirmed) {
     return
