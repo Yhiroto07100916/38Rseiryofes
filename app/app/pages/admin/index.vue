@@ -217,7 +217,7 @@
             <v-card-item>
               <template #prepend>
                 <v-icon
-                  icon="mdi-account-multiple-outline"
+                  icon="mdi-account-check"
                   size="32"
                   color="primary"
                 />
