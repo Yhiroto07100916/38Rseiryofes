@@ -8,6 +8,7 @@ import { handleCalendar } from "./routes/calendar"
 import { handleCalendarCategories } from "./routes/calendar-categories"
 import { handleNews } from "./routes/news"
 import { handleScripts } from "./routes/scripts"
+import { handleEquipment } from "./routes/equipment"
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -129,6 +130,21 @@ export default {
           ),
         )
       }
+    }
+
+    if (
+      url.pathname === "/api/equipment" ||
+      url.pathname.startsWith("/api/equipment/")
+    ) {
+      const path = url.pathname.slice("/api/equipment".length)
+      const pathParts = path
+        .split("/")
+        .filter(Boolean)
+
+      return withCors(
+        request,
+        await handleEquipment(request, env, pathParts),
+      )
     }
 
     if (
