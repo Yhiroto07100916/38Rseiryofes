@@ -10,6 +10,8 @@ import { handleNews } from "./routes/news"
 import { handleScripts } from "./routes/scripts"
 import { handleEquipment } from "./routes/equipment"
 import { handleAccounting } from "./routes/accounting"
+import { handleFiles } from "./routes/files"
+import { handleReceiptOcr } from "./routes/receipt-ocr"
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -146,6 +148,21 @@ export default {
       )
     }
 
+    if (url.pathname === "/api/accounting/receipts/ocr") {
+      try {
+        return withCors(request, await handleReceiptOcr(request, env))
+      } catch (error) {
+        console.error("Receipt OCR API error:", error)
+        return withCors(
+          request,
+          Response.json(
+            { message: "OCR処理中にエラーが発生しました" },
+            { status: 500 },
+          ),
+        )
+      }
+    }
+
     if (
       url.pathname === "/api/accounting" ||
       url.pathname.startsWith("/api/accounting/")
@@ -157,6 +174,33 @@ export default {
         request,
         await handleAccounting(request, env, pathParts),
       )
+    }
+
+    if (
+      url.pathname === "/api/files" ||
+      url.pathname.startsWith("/api/files/")
+    ) {
+      const path = url.pathname.slice("/api/files".length)
+      const pathParts = path
+        .split("/")
+        .filter(Boolean)
+
+      try {
+        return withCors(
+          request,
+          await handleFiles(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("Files API error:", error)
+
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
+            { status: 500 },
+          ),
+        )
+      }
     }
 
     if (

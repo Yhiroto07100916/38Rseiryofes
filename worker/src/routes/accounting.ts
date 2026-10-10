@@ -2,7 +2,11 @@ import { hasPermission, requireAuth } from "../lib/authz"
 
 type Env = {
   DB: D1Database
+  FILES_BUCKET: R2Bucket
+  AI: Ai
 }
+
+type PriceType = "tax_included" | "tax_excluded" | "unknown"
 
 interface ReceiptItemInput {
   id?: string
@@ -12,6 +16,7 @@ interface ReceiptItemInput {
   quantity: number
   discount_rate?: number
   tax_rate?: number
+  price_type?: PriceType
   amount?: number
 }
 
@@ -102,10 +107,14 @@ function calculateItemAmount(
   quantity: number,
   discountRate: number,
   taxRate: number,
+  priceType: PriceType,
 ): number {
   const subtotal = unitPrice * quantity
   const discounted = subtotal * (1 - discountRate / 100)
-  return Math.round(discounted * (1 + taxRate / 100))
+  const total = priceType === "tax_excluded"
+    ? discounted * (1 + taxRate / 100)
+    : discounted
+  return Math.round(total)
 }
 
 function parseItems(value: unknown): ReceiptItemInput[] {
@@ -160,11 +169,17 @@ function parseItems(value: unknown): ReceiptItemInput[] {
       },
     )
 
+    const rawPriceType = source.price_type
+    const priceType: PriceType = rawPriceType === "tax_included" || rawPriceType === "tax_excluded"
+      ? rawPriceType
+      : "unknown"
+
     const amount = calculateItemAmount(
       unitPrice,
       quantity,
       discountRate,
       taxRate,
+      priceType,
     )
 
     return {
@@ -175,6 +190,7 @@ function parseItems(value: unknown): ReceiptItemInput[] {
       quantity,
       discount_rate: discountRate,
       tax_rate: taxRate,
+      price_type: priceType,
       amount,
     }
   })
@@ -275,6 +291,7 @@ async function getReceipt(
         ri.quantity,
         ri.discount_rate,
         ri.tax_rate,
+        ri.price_type,
         ri.amount,
         ri.created_at,
         ri.updated_at
@@ -314,10 +331,29 @@ async function getReceipt(
     .bind(id)
     .first()
 
+  const files = await env.DB.prepare(
+    `
+      SELECT
+        f.id,
+        f.object_key,
+        f.original_name,
+        f.content_type,
+        f.size,
+        rf.created_at
+      FROM receipt_files rf
+      INNER JOIN files f ON f.id = rf.file_id
+      WHERE rf.receipt_id = ?
+      ORDER BY rf.created_at ASC, f.id ASC
+    `,
+  )
+    .bind(id)
+    .all()
+
   return {
     ...receipt,
     items: items.results,
     reimbursement: reimbursement ?? null,
+    files: files.results,
   }
 }
 
@@ -469,6 +505,135 @@ export async function handleAccounting(
     }
 
     if (path[0] === "receipts") {
+      if (
+        path.length === 4 &&
+        path[2] === "files" &&
+        method === "DELETE"
+      ) {
+        if (!(await can(request, env, "accounting.edit"))) {
+          return json({ message: "会計編集権限がありません" }, 403)
+        }
+
+        const receiptId = path[1]
+        const fileId = path[3]
+
+        const receipt = await env.DB.prepare(
+          "SELECT id FROM receipts WHERE id = ? LIMIT 1",
+        )
+          .bind(receiptId)
+          .first<{ id: string }>()
+
+        if (!receipt) {
+          return json({ message: "購入記録が見つかりません" }, 404)
+        }
+
+        const attachment = await env.DB.prepare(
+          "SELECT file_id FROM receipt_files WHERE receipt_id = ? AND file_id = ? LIMIT 1",
+        )
+          .bind(receiptId, fileId)
+          .first<{ file_id: string }>()
+
+        if (!attachment) {
+          return json({ message: "この購入記録に添付画像がありません" }, 404)
+        }
+
+        await env.DB.prepare(
+          "DELETE FROM receipt_files WHERE receipt_id = ? AND file_id = ?",
+        )
+          .bind(receiptId, fileId)
+          .run()
+
+        return json({ success: true })
+      }
+
+      if (path.length === 3 && path[2] === "files") {
+        if (method !== "POST") {
+          return json({ message: "Method Not Allowed" }, 405)
+        }
+
+        const allowed =
+          (await can(request, env, "accounting.create")) ||
+          (await can(request, env, "accounting.edit"))
+
+        if (!allowed) {
+          return json({ message: "会計登録・編集権限がありません" }, 403)
+        }
+
+        const receiptId = path[1]
+        const receipt = await env.DB.prepare(
+          "SELECT id FROM receipts WHERE id = ? LIMIT 1",
+        )
+          .bind(receiptId)
+          .first<{ id: string }>()
+
+        if (!receipt) {
+          return json({ message: "購入記録が見つかりません" }, 404)
+        }
+
+        const body = (await request.json()) as Record<string, unknown>
+        const fileIds = Array.isArray(body.file_ids)
+          ? [...new Set(body.file_ids.filter(
+              (value): value is string =>
+                typeof value === "string" && value.trim().length > 0,
+            ))]
+          : []
+
+        if (fileIds.length === 0) {
+          return json({ message: "紐付ける画像がありません" }, 400)
+        }
+
+        if (fileIds.length > 20) {
+          return json({ message: "画像は一度に20件まで紐付けできます" }, 400)
+        }
+
+        const statements: D1PreparedStatement[] = []
+
+        for (const fileId of fileIds) {
+          const file = await env.DB.prepare(
+            "SELECT id FROM files WHERE id = ? AND category = 'receipts' LIMIT 1",
+          )
+            .bind(fileId)
+            .first<{ id: string }>()
+
+          if (!file) {
+            return json(
+              { message: "レシート画像が見つかりません" },
+              400,
+            )
+          }
+
+          statements.push(
+            env.DB.prepare(
+              "INSERT OR IGNORE INTO receipt_files (receipt_id, file_id) VALUES (?, ?)",
+            ).bind(receiptId, fileId),
+          )
+        }
+
+        await env.DB.batch(statements)
+
+        return json({
+          files: (
+            await env.DB.prepare(
+              `
+                SELECT
+                  f.id,
+                  f.object_key,
+                  f.original_name,
+                  f.content_type,
+                  f.size,
+                  rf.created_at
+                FROM receipt_files rf
+                INNER JOIN files f ON f.id = rf.file_id
+                WHERE rf.receipt_id = ?
+                ORDER BY rf.created_at ASC, f.id ASC
+              `,
+            )
+              .bind(receiptId)
+              .all()
+          ).results,
+        })
+      }
+
       if (path.length === 1) {
         if (method === "GET") {
           if (!(await can(request, env, "accounting.view"))) {
@@ -592,6 +757,7 @@ export async function handleAccounting(
                   ri.quantity,
                   ri.discount_rate,
                   ri.tax_rate,
+        ri.price_type,
                   ri.amount,
                   ri.created_at,
                   ri.updated_at
@@ -616,9 +782,46 @@ export async function handleAccounting(
             }
           }
 
+          const receiptFilesMap = new Map<string, unknown[]>()
+
+          if (receiptIds.length > 0) {
+            const placeholders = receiptIds.map(() => "?").join(", ")
+
+            const receiptFiles = await env.DB.prepare(
+              `
+                SELECT
+                  rf.receipt_id,
+                  f.id,
+                  f.object_key,
+                  f.original_name,
+                  f.content_type,
+                  f.size,
+                  rf.created_at
+                FROM receipt_files rf
+                INNER JOIN files f ON f.id = rf.file_id
+                WHERE rf.receipt_id IN (${placeholders})
+                ORDER BY rf.created_at ASC, f.id ASC
+              `,
+            )
+              .bind(...receiptIds)
+              .all()
+
+            for (const file of receiptFiles.results) {
+              const receiptId = String(file.receipt_id)
+
+              if (!receiptFilesMap.has(receiptId)) {
+                receiptFilesMap.set(receiptId, [])
+              }
+
+              const { receipt_id: _receiptId, ...fileData } = file
+              receiptFilesMap.get(receiptId)!.push(fileData)
+            }
+          }
+
           const receiptsWithItems = receiptResults.map((receipt) => ({
             ...receipt,
             items: receiptItemsMap.get(String(receipt.id)) ?? [],
+            files: receiptFilesMap.get(String(receipt.id)) ?? [],
           }))
 
           return json({
@@ -754,11 +957,12 @@ export async function handleAccounting(
                     quantity,
                     discount_rate,
                     tax_rate,
+                    price_type,
                     amount,
                     created_at,
                     updated_at
                   )
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `,
               ).bind(
                 crypto.randomUUID(),
@@ -769,6 +973,7 @@ export async function handleAccounting(
                 item.quantity,
                 item.discount_rate ?? 0,
                 item.tax_rate ?? 0,
+                item.price_type ?? "unknown",
                 item.amount ?? 0,
                 now,
                 now,
@@ -961,11 +1166,12 @@ export async function handleAccounting(
                     quantity,
                     discount_rate,
                     tax_rate,
+                    price_type,
                     amount,
                     created_at,
                     updated_at
                   )
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `,
               ).bind(
                 crypto.randomUUID(),
@@ -976,6 +1182,7 @@ export async function handleAccounting(
                 item.quantity,
                 item.discount_rate ?? 0,
                 item.tax_rate ?? 0,
+                item.price_type ?? "unknown",
                 item.amount ?? 0,
                 now,
                 now,

@@ -331,6 +331,17 @@
                       <v-avatar color="primary" variant="tonal" class="mr-3">
                         <v-icon>mdi-receipt</v-icon>
                       </v-avatar>
+                      <v-btn
+                        v-if="receipt.files?.length"
+                        icon="mdi-image-multiple-outline"
+                        variant="tonal"
+                        color="primary"
+                        size="small"
+                        class="mr-2"
+                        aria-label="レシート画像を表示"
+                        :title="`レシート画像 ${receipt.files.length} 件を表示`"
+                        @click.stop="openReceiptImagePreview(receipt)"
+                      />
                     </template>
 
                     <v-list-item-title class="font-weight-medium">
@@ -575,6 +586,63 @@
       会計を閲覧する権限がありません。
     </v-alert>
 
+    <v-dialog v-model="receiptImagePreviewDialog" max-width="900">
+      <v-card rounded="xl">
+        <v-card-title class="d-flex align-center justify-space-between ga-2">
+          <span class="text-truncate">
+            {{ previewReceiptFiles[previewReceiptImageIndex]?.original_name || 'レシート画像' }}
+          </span>
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            aria-label="画像プレビューを閉じる"
+            @click="receiptImagePreviewDialog = false"
+          />
+        </v-card-title>
+
+        <v-divider />
+
+        <v-card-text class="pa-3">
+          <template v-if="previewReceiptFiles[previewReceiptImageIndex]">
+            <v-img
+              :key="previewReceiptFiles[previewReceiptImageIndex]!.id"
+              :src="receiptImageUrl(previewReceiptFiles[previewReceiptImageIndex]!)"
+              :alt="previewReceiptFiles[previewReceiptImageIndex]!.original_name"
+              max-height="75vh"
+              min-height="180"
+              contain
+              class="bg-grey-lighten-4 rounded-lg"
+            />
+          </template>
+
+          <div
+            v-if="previewReceiptFiles.length > 1"
+            class="d-flex align-center justify-space-between mt-3"
+          >
+            <v-btn
+              prepend-icon="mdi-chevron-left"
+              variant="tonal"
+              :disabled="previewReceiptImageIndex <= 0"
+              @click="previewReceiptImageIndex--"
+            >
+              前の画像
+            </v-btn>
+            <span class="text-body-2 text-medium-emphasis">
+              {{ previewReceiptImageIndex + 1 }} / {{ previewReceiptFiles.length }}
+            </span>
+            <v-btn
+              append-icon="mdi-chevron-right"
+              variant="tonal"
+              :disabled="previewReceiptImageIndex >= previewReceiptFiles.length - 1"
+              @click="previewReceiptImageIndex++"
+            >
+              次の画像
+            </v-btn>
+          </div>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="receiptDialog" max-width="760" scrollable>
       <v-card rounded="xl">
         <v-card-title class="pa-5">
@@ -584,6 +652,87 @@
         <v-divider />
 
         <v-card-text class="pa-5">
+          <v-card variant="tonal" rounded="lg" class="mb-5">
+            <v-card-text>
+              <div class="text-subtitle-1 font-weight-bold mb-1">
+                レシート画像・自動読み取り
+              </div>
+              <div class="text-body-2 text-medium-emphasis mb-3">
+                JPEG・PNG・WebP画像を選択できます。OCR結果は確認してから保存してください。
+              </div>
+
+              <v-file-input
+                v-model="receiptImageFiles"
+                label="レシート画像"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                chips
+                show-size
+                clearable
+                prepend-icon="mdi-camera"
+                variant="outlined"
+                density="comfortable"
+                hide-details="auto"
+              />
+
+              <div class="d-flex flex-wrap align-center ga-2 mt-3">
+                <v-btn
+                  color="primary"
+                  variant="tonal"
+                  prepend-icon="mdi-text-recognition"
+                  :loading="receiptOcrLoading"
+                  :disabled="receiptImageFiles.length === 0 || saving"
+                  @click="recognizeReceipt"
+                >
+                  画像から読み取る
+                </v-btn>
+                <span class="text-caption text-medium-emphasis">
+                  選択した先頭の画像を読み取ります
+                </span>
+              </div>
+
+              <v-alert
+                v-if="receiptImageFiles.length > 0"
+                type="info"
+                variant="tonal"
+                density="compact"
+                class="mt-3"
+              >
+                選択中 {{ receiptImageFiles.length }} 件。購入記録の保存時に添付します。
+              </v-alert>
+
+              <template v-if="editingReceipt?.files?.length">
+                <v-divider class="my-3" />
+                <div class="text-body-2 font-weight-medium mb-2">
+                  保存済みの画像
+                </div>
+                <div
+                  v-for="file in editingReceipt.files"
+                  :key="file.id"
+                  class="d-flex align-center flex-wrap ga-1 mb-1"
+                >
+                  <v-chip
+                    prepend-icon="mdi-paperclip"
+                    variant="outlined"
+                  >
+                    {{ file.original_name }}
+                  </v-chip>
+                  <v-btn
+                    v-if="canEdit"
+                    icon="mdi-delete-outline"
+                    variant="text"
+                    color="error"
+                    size="small"
+                    aria-label="添付画像を削除"
+                    :disabled="deletingReceiptFileId === file.id"
+                    :loading="deletingReceiptFileId === file.id"
+                    @click="deleteReceiptFile(file)"
+                  />
+                </div>
+              </template>
+            </v-card-text>
+          </v-card>
+
           <v-row>
             <v-col cols="12" sm="6">
               <v-text-field
@@ -733,7 +882,21 @@
                   />
                 </v-col>
 
-                <v-col cols="6" sm="3">
+                <v-col cols="12" sm="4">
+                  <v-select
+                    v-model="item.price_type"
+                    label="価格区分"
+                    :items="[
+                      { title: '税込', value: 'tax_included' },
+                      { title: '税抜', value: 'tax_excluded' },
+                      { title: '不明', value: 'unknown' },
+                    ]"
+                    variant="outlined"
+                    density="comfortable"
+                  />
+                </v-col>
+
+                <v-col cols="6" sm="4">
                   <v-text-field
                     v-model.number="item.tax_rate"
                     label="税率"
@@ -861,6 +1024,7 @@ definePageMeta({
 })
 
 type PaymentMethod = 'budget' | 'advance'
+type PriceType = 'tax_included' | 'tax_excluded' | 'unknown'
 type ReimbursementStatus = 'pending' | 'paid' | 'cancelled'
 
 interface ReceiptItem {
@@ -873,11 +1037,22 @@ interface ReceiptItem {
   quantity: number
   discount_rate: number
   tax_rate: number
+  price_type: PriceType
   amount?: number
+}
+
+interface ReceiptFile {
+  id: string
+  object_key: string
+  original_name: string
+  content_type: string
+  size: number
+  created_at?: string
 }
 
 interface Receipt {
   id: string
+  files?: ReceiptFile[]
   purchased_at: string
   store_name: string
   total_amount: number
@@ -944,6 +1119,12 @@ const aggregationStartDate = ref('')
 const aggregationEndDate = ref('')
 const receiptDialog = ref(false)
 const editingReceipt = ref<Receipt | null>(null)
+const receiptImagePreviewDialog = ref(false)
+const previewReceiptFiles = ref<ReceiptFile[]>([])
+const previewReceiptImageIndex = ref(0)
+const deletingReceiptFileId = ref<string | null>(null)
+const receiptImageFiles = ref<File[]>([])
+const receiptOcrLoading = ref(false)
 
 const budgetDialog = ref(false)
 const editingBudget = ref<BudgetItem | null>(null)
@@ -1233,6 +1414,7 @@ const printAccountingReport = () => {
             <td class="quantity">${item.quantity ?? 0}</td>
             <td class="rate">
               割引 ${Number(item.discount_rate ?? 0)}%<br />
+              ${item.price_type === 'tax_included' ? '税込' : item.price_type === 'tax_excluded' ? '税抜' : '価格区分不明'}<br />
               税 ${Number(item.tax_rate ?? 0)}%
             </td>
             <td class="amount">${yen(calculateItemAmount(item))}</td>
@@ -1579,9 +1761,11 @@ const formatDate = (value: string | null | undefined) => {
 const calculateItemAmount = (item: ReceiptItem) => {
   const base = Number(item.unit_price || 0) * Number(item.quantity || 0)
   const discounted = base * (1 - Number(item.discount_rate || 0) / 100)
-  const taxed = discounted * (1 + Number(item.tax_rate || 0) / 100)
+  const total = item.price_type === 'tax_excluded'
+    ? discounted * (1 + Number(item.tax_rate || 0) / 100)
+    : discounted
 
-  return Math.round(taxed)
+  return Math.round(total)
 }
 
 const receiptItemSummary = (receipt: Receipt) => {
@@ -1754,6 +1938,7 @@ const exportReceiptsCsv = () => {
       '単価',
       '数量',
       '割引率',
+      '価格区分',
       '税率',
       '金額',
       '精算状況',
@@ -1784,6 +1969,11 @@ const exportReceiptsCsv = () => {
         String(item.unit_price ?? 0),
         String(item.quantity ?? 0),
         String(item.discount_rate ?? 0),
+        item.price_type === 'tax_included'
+          ? '税込'
+          : item.price_type === 'tax_excluded'
+            ? '税抜'
+            : '不明',
         String(item.tax_rate ?? 0),
         String(calculateItemAmount(item)),
         reimbursement,
@@ -1802,10 +1992,11 @@ const exportReceiptsCsv = () => {
 }
 
 const resetReceiptForm = () => {
-
+  receiptImageFiles.value = []
   receiptForm.purchased_at = new Date().toISOString().slice(0, 10)
   receiptForm.store_name = ''
   receiptForm.payment_method = 'budget'
+  receiptForm.paid_by_user_id = null
   receiptForm.description = ''
   receiptForm.items = [
     {
@@ -1815,6 +2006,7 @@ const resetReceiptForm = () => {
       quantity: 1,
       discount_rate: 0,
       tax_rate: 10,
+      price_type: 'unknown',
     },
   ]
 }
@@ -1827,6 +2019,7 @@ const openReceiptCreate = () => {
 
 const openReceiptEdit = (receipt: Receipt) => {
   editingReceipt.value = receipt
+  receiptImageFiles.value = []
 
   receiptForm.purchased_at = receipt.purchased_at?.slice(0, 10) ?? ''
   receiptForm.store_name = receipt.store_name ?? ''
@@ -1854,11 +2047,139 @@ const addReceiptItem = () => {
     budget_item_id: null,
     discount_rate: 0,
     tax_rate: 10,
+    price_type: 'unknown',
   })
 }
 
 const removeReceiptItem = (index: number) => {
   receiptForm.items.splice(index, 1)
+}
+
+const recognizeReceipt = async () => {
+  const file = receiptImageFiles.value[0]
+
+  if (!file) {
+    errorMessage.value = '先にレシート画像を選択してください。'
+    return
+  }
+
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    errorMessage.value = 'JPEG・PNG・WebP形式の画像を選択してください。'
+    return
+  }
+
+  if (file.size > 10 * 1024 * 1024) {
+    errorMessage.value = '画像は10MB以下にしてください。'
+    return
+  }
+
+  const formData = new FormData()
+  formData.append('file', file)
+  receiptOcrLoading.value = true
+  errorMessage.value = ''
+
+  try {
+    const result: any = await apiFetch('/api/accounting/receipts/ocr', {
+      method: 'POST',
+      body: formData,
+    })
+    const ocr = result?.ocr
+
+    if (!ocr || typeof ocr !== 'object') {
+      throw new Error('OCR結果を取得できませんでした。')
+    }
+
+    if (typeof ocr.purchased_at === 'string' &&
+        /^\d{4}-\d{2}-\d{2}$/.test(ocr.purchased_at)) {
+      receiptForm.purchased_at = ocr.purchased_at
+    }
+
+    if (typeof ocr.store_name === 'string' && ocr.store_name.trim()) {
+      receiptForm.store_name = ocr.store_name.trim()
+    }
+
+    if (Array.isArray(ocr.items) && ocr.items.length > 0) {
+      console.info('Receipt OCR items received:', ocr.items.length)
+
+      receiptForm.items = ocr.items.map((item: any) => {
+        const quantity =
+          Number.isFinite(item?.quantity) && item.quantity > 0
+            ? item.quantity
+            : 1
+
+        const unitPrice = Number.isFinite(item?.unit_price)
+          ? Math.max(0, Math.round(item.unit_price))
+          : Number.isFinite(item?.amount)
+            ? Math.max(0, Math.round(item.amount / quantity))
+            : 0
+
+        return {
+          localId: crypto.randomUUID(),
+          name: typeof item?.name === 'string' ? item.name : '',
+          unit_price: unitPrice,
+          quantity,
+          budget_item_id: null,
+          discount_rate: Number.isFinite(item?.discount_rate)
+            ? Math.min(100, Math.max(0, Math.round(item.discount_rate)))
+            : 0,
+          tax_rate: Number.isFinite(item?.tax_rate)
+            ? Math.min(100, Math.max(0, Math.round(item.tax_rate)))
+            : 10,
+          price_type: item?.price_type === 'tax_included' || item?.price_type === 'tax_excluded'
+            ? item.price_type
+            : 'unknown',
+        }
+      })
+    }
+
+    errorMessage.value = ''
+  } catch (error: any) {
+    errorMessage.value =
+      error?.data?.message ??
+      error?.data?.error ??
+      error?.message ??
+      'レシートの読み取りに失敗しました。画像を確認して手入力してください。'
+  } finally {
+    receiptOcrLoading.value = false
+  }
+}
+
+const uploadReceiptImages = async (receiptId: string) => {
+  if (receiptImageFiles.value.length === 0) return
+
+  const uploadedIds: string[] = []
+
+  for (const file of receiptImageFiles.value) {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      throw new Error('JPEG・PNG・WebP形式以外の画像は添付できません。')
+    }
+
+    if (file.size <= 0 || file.size > 10 * 1024 * 1024) {
+      throw new Error('画像は10MB以下のファイルを選択してください。')
+    }
+
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('category', 'receipts')
+
+    const uploaded: any = await apiFetch('/api/files', {
+      method: 'POST',
+      body: formData,
+    })
+
+    if (typeof uploaded?.id !== 'string') {
+      throw new Error('画像のアップロード結果を確認できませんでした。')
+    }
+
+    uploadedIds.push(uploaded.id)
+  }
+
+  await apiFetch(`/api/accounting/receipts/${receiptId}/files`, {
+    method: 'POST',
+    body: { file_ids: uploadedIds },
+  })
+
+  receiptImageFiles.value = []
 }
 
 const saveReceipt = async () => {
@@ -1896,9 +2217,12 @@ const saveReceipt = async () => {
         quantity: Number(item.quantity || 0),
         discount_rate: Number(item.discount_rate || 0),
         tax_rate: Number(item.tax_rate || 0),
+        price_type: item.price_type,
         amount: calculateItemAmount(item),
       })),
     }
+
+    let savedReceiptId = editingReceipt.value?.id
 
     if (editingReceipt.value) {
       await apiFetch(
@@ -1909,10 +2233,22 @@ const saveReceipt = async () => {
         },
       )
     } else {
-      await apiFetch('/api/accounting/receipts', {
+      const result: any = await apiFetch('/api/accounting/receipts', {
         method: 'POST',
         body,
       })
+
+      savedReceiptId = result?.receipt?.id
+
+      if (typeof savedReceiptId !== 'string') {
+        throw new Error('購入記録は保存されましたが、記録IDを取得できませんでした。')
+      }
+
+      editingReceipt.value = result.receipt
+    }
+
+    if (savedReceiptId && receiptImageFiles.value.length > 0) {
+      await uploadReceiptImages(savedReceiptId)
     }
 
     receiptDialog.value = false
@@ -1925,6 +2261,79 @@ const saveReceipt = async () => {
       '購入記録の保存に失敗しました。'
   } finally {
     saving.value = false
+  }
+}
+
+const config = useRuntimeConfig()
+
+const receiptImageUrl = (file: ReceiptFile) => {
+  const baseURL = String(config.public.apiBaseUrl || '').replace(/\/$/, '')
+  const objectKey = file.object_key
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/')
+
+  return `${baseURL}/api/files/${objectKey}`
+}
+
+const openReceiptImagePreview = (receipt: Receipt) => {
+  const files = receipt.files ?? []
+  if (files.length === 0) return
+
+  previewReceiptFiles.value = files
+  previewReceiptImageIndex.value = 0
+  receiptImagePreviewDialog.value = true
+}
+
+const deleteReceiptFile = async (file: ReceiptFile) => {
+  const receiptId = editingReceipt.value?.id
+  if (!receiptId || deletingReceiptFileId.value) return
+
+  const confirmed = await confirm({
+    title: '添付画像の削除',
+    message: `「${file.original_name}」をこの購入記録から外しますか？画像ファイル自体は削除されません。`,
+    confirmText: '添付を外す',
+    confirmColor: 'error',
+  })
+
+  if (!confirmed) return
+
+  deletingReceiptFileId.value = file.id
+  errorMessage.value = ''
+
+  try {
+    await apiFetch(
+      `/api/accounting/receipts/${receiptId}/files/${file.id}`,
+      { method: 'DELETE' },
+    )
+
+    if (editingReceipt.value?.id === receiptId) {
+      editingReceipt.value = {
+        ...editingReceipt.value,
+        files: (editingReceipt.value.files ?? []).filter(
+          (attachedFile) => attachedFile.id !== file.id,
+        ),
+      }
+    }
+
+    receipts.value = receipts.value.map((receipt) =>
+      receipt.id === receiptId
+        ? {
+            ...receipt,
+            files: (receipt.files ?? []).filter(
+              (attachedFile) => attachedFile.id !== file.id,
+            ),
+          }
+        : receipt,
+    )
+  } catch (error: any) {
+    errorMessage.value =
+      error?.data?.message ??
+      error?.data?.error ??
+      error?.message ??
+      '添付画像の削除に失敗しました。'
+  } finally {
+    deletingReceiptFileId.value = null
   }
 }
 
