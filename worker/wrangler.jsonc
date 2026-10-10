@@ -23,5 +23,14 @@
         "database_id": "cdc80820-9c96-4e36-b050-ac0c3e98c4e8"
       }
     ]
+  },
+  "r2_buckets": [
+    {
+      "binding": "FILES_BUCKET",
+      "bucket_name": "38r-seiryofes-files"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
   }
 }
