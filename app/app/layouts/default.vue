@@ -15,7 +15,7 @@
 
     <AppBottomNavigation />
 
-    <CommonAppSnackbar />
+
   </v-app>
 </template>
 
