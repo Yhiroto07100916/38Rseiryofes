@@ -4,7 +4,7 @@
     class="pa-4 pa-sm-6"
   >
     <div class="d-flex align-center mb-6">
-      <BackButton />
+      
       <div class="mb-6">
         <h1 class="text-h5 font-weight-bold">
           タスク管理

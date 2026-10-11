@@ -149,6 +149,12 @@ const implementedFeatures = [
     icon: 'mdi-bullhorn-outline',
     to: '/news',
   },
+  {
+    title: '備品・小道具',
+    description: '必要な備品や小道具を管理',
+    icon: 'mdi-package-variant-closed',
+    to: '/supplies',
+  },
 ]
 
 const plannedFeatures = [
@@ -156,11 +162,6 @@ const plannedFeatures = [
     title: '会計',
     description: '38Rの予算・支出などを管理',
     icon: 'mdi-cash-multiple',
-  },
-  {
-    title: '備品・小道具',
-    description: '必要な備品や小道具を管理',
-    icon: 'mdi-package-variant-closed',
   },
   {
     title: '出欠管理',
