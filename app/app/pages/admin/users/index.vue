@@ -725,7 +725,7 @@ onMounted(async () => {
 
 .page-description {
   margin: 8px 0 0;
-  color: rgb(var(--v-theme-on-surface-variant));
+  color: rgb(var(--color-primary));
 }
 
 .border-t {

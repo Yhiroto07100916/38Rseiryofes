@@ -155,14 +155,22 @@ const implementedFeatures = [
     icon: 'mdi-package-variant-closed',
     to: '/supplies',
   },
-]
-
-const plannedFeatures = [
+  {
+    title: '資料管理',
+    description: '星陵祭準備に必要な資料を共有・管理',
+    icon: 'mdi-file-document-multiple-outline',
+    to: '/files',
+  },
   {
     title: '会計',
     description: '38Rの予算・支出などを管理',
     icon: 'mdi-cash-multiple',
+    to:'/accounting'
   },
+]
+
+const plannedFeatures = [
+
   {
     title: '出欠管理',
     description: '星陵祭準備の出欠・参加状況を管理',
@@ -177,11 +185,6 @@ const plannedFeatures = [
     title: '意思決定記録',
     description: 'クラスで決定した内容を記録',
     icon: 'mdi-notebook-check-outline',
-  },
-  {
-    title: '資料管理',
-    description: '星陵祭準備に必要な資料を管理',
-    icon: 'mdi-file-document-multiple-outline',
   },
 ]
 </script>
