@@ -11,6 +11,7 @@ import { handleScripts } from "./routes/scripts"
 import { handleEquipment } from "./routes/equipment"
 import { handleAccounting } from "./routes/accounting"
 import { handleFiles } from "./routes/files"
+import { handlePublicFiles } from "./routes/public-files"
 import { handleReceiptOcr } from "./routes/receipt-ocr"
 
 function getCorsHeaders(request: Request): Headers {
@@ -174,6 +175,15 @@ export default {
         request,
         await handleAccounting(request, env, pathParts),
       )
+    }
+
+    if (
+      url.pathname === "/api/public/files" ||
+      url.pathname.startsWith("/api/public/files/")
+    ) {
+      const path = url.pathname.slice("/api/public/files".length)
+      const pathParts = path.split("/").filter(Boolean)
+      return withCors(request, await handlePublicFiles(request, env, pathParts))
     }
 
     if (
