@@ -83,6 +83,38 @@
 
         <v-divider class="my-6" />
 
+        <div class="text-subtitle-1 font-weight-bold mb-3">
+          関連情報
+        </div>
+
+        <v-select
+          v-if="auth.hasPermission('schedule.view')"
+          v-model="form.calendarEventId"
+          :items="calendarEventItems"
+          item-title="title"
+          item-value="id"
+          label="関連する予定（任意）"
+          variant="outlined"
+          clearable
+          :loading="calendarEventsLoading"
+          no-data-text="予定が見つかりません"
+        />
+
+        <v-autocomplete
+          v-model="form.fileIds"
+          :items="availableFiles"
+          item-title="original_name"
+          item-value="id"
+          label="関連するファイル（任意）"
+          variant="outlined"
+          multiple
+          chips
+          closable-chips
+          :loading="filesLoading"
+          no-data-text="ファイルが見つかりません"
+          class="mt-3"
+        />
+
         <template v-if="auth.hasPermission('tasks.assign')">
           <div class="text-subtitle-1 font-weight-bold mb-3">
             担当者
@@ -149,9 +181,11 @@ import BackButton from '~/components/layout/BackButton.vue'
 import { useSnackbar } from '~/composables/useSnackbar'
 import { useAuthStore } from '~/stores/auth'
 import {
+  type CalendarEvent,
   type Task,
   type TaskAssignmentRole,
   type TaskAssignmentUser,
+  type TaskLinkedFile,
   useApi,
 } from '~/composables/useApi'
 
@@ -179,13 +213,19 @@ const form = ref({
   dueAt: '',
   assigneeUserIds: [] as string[],
   assigneeRoleIds: [] as string[],
+  calendarEventId: null as string | null,
+  fileIds: [] as string[],
 })
 
 const users = ref<UserItem[]>([])
 const roles = ref<TaskAssignmentRole[]>([])
+const calendarEventItems = ref<CalendarEvent[]>([])
+const availableFiles = ref<TaskLinkedFile[]>([])
 
 const usersLoading = ref(false)
 const rolesLoading = ref(false)
+const calendarEventsLoading = ref(false)
+const filesLoading = ref(false)
 const submitting = ref(false)
 
 const titleError = ref('')
@@ -278,6 +318,51 @@ const loadRoles = async () => {
   }
 }
 
+const loadLinkOptions = async () => {
+  const jobs: Promise<void>[] = []
+
+  if (auth.hasPermission('schedule.view')) {
+    jobs.push((async () => {
+      calendarEventsLoading.value = true
+      try {
+        const now = new Date()
+        const from = new Date(now)
+        from.setFullYear(from.getFullYear() - 1)
+        const to = new Date(now)
+        to.setFullYear(to.getFullYear() + 2)
+
+        const response = await useApi().getCalendarEvents(
+          from.toISOString().slice(0, 10),
+          to.toISOString().slice(0, 10),
+        )
+        calendarEventItems.value = response.events
+      } catch (error) {
+        console.error(error)
+        snackbar.error('予定一覧の取得に失敗しました。')
+      } finally {
+        calendarEventsLoading.value = false
+      }
+    })())
+  }
+
+  jobs.push((async () => {
+    filesLoading.value = true
+    try {
+      const response = await apiFetch<{ files: TaskLinkedFile[] }>(
+        '/api/files?limit=200',
+      )
+      availableFiles.value = response.files
+    } catch (error) {
+      console.error(error)
+      snackbar.error('ファイル一覧の取得に失敗しました。')
+    } finally {
+      filesLoading.value = false
+    }
+  })())
+
+  await Promise.all(jobs)
+}
+
 const createTask = async () => {
   titleError.value = ''
 
@@ -308,6 +393,10 @@ const createTask = async () => {
             form.value.assigneeUserIds,
           assignee_role_ids:
             form.value.assigneeRoleIds,
+          ...(auth.hasPermission('schedule.view')
+            ? { calendar_event_id: form.value.calendarEventId }
+            : {}),
+          file_ids: form.value.fileIds,
         },
       },
     )
@@ -342,11 +431,12 @@ onMounted(async () => {
     return
   }
 
+  const jobs: Promise<unknown>[] = [loadLinkOptions()]
+
   if (auth.hasPermission('tasks.assign')) {
-    await Promise.all([
-      loadUsers(),
-      loadRoles(),
-    ])
+    jobs.push(loadUsers(), loadRoles())
   }
+
+  await Promise.all(jobs)
 })
 </script>

@@ -122,6 +122,34 @@
               </v-row>
             </template>
 
+            <template v-if="canEdit">
+              <v-select
+                v-if="auth.hasPermission('schedule.view')"
+                v-model="editForm.calendarEventId"
+                :items="calendarEventItems"
+                item-title="title"
+                item-value="id"
+                label="関連する予定"
+                variant="outlined"
+                clearable
+                :loading="calendarEventsLoading"
+              />
+
+              <v-autocomplete
+                v-model="editForm.fileIds"
+                :items="availableFiles"
+                item-title="original_name"
+                item-value="id"
+                label="関連するファイル"
+                variant="outlined"
+                multiple
+                chips
+                closable-chips
+                :loading="filesLoading"
+                class="mt-3"
+              />
+            </template>
+
             <template v-if="canAssign">
               <v-autocomplete
                 v-model="editForm.assigneeUserIds"
@@ -317,6 +345,71 @@
               </span>
             </div>
           </div>
+
+          <v-divider class="my-5" />
+
+          <div class="text-subtitle-1 font-weight-bold mb-3">
+            関連情報
+          </div>
+
+          <div class="related-info-block">
+            <div class="related-info-label">
+              <v-icon icon="mdi-calendar-check-outline" size="20" />
+              <span>関連する予定</span>
+            </div>
+            <div class="related-info-value">
+              {{ task.calendar_event?.title || 'なし' }}
+            </div>
+          </div>
+
+          <div class="related-info-block mt-5">
+            <div class="related-info-label">
+              <v-icon icon="mdi-paperclip" size="20" />
+              <span>関連ファイル</span>
+            </div>
+
+            <div v-if="task.files?.length" class="related-file-list">
+              <div
+                v-for="file in task.files"
+                :key="file.id"
+                class="related-file"
+              >
+                <div class="related-file-name">
+                  <v-icon icon="mdi-file-document-outline" size="small" />
+                  <span>{{ file.original_name }}</span>
+                </div>
+
+                <div class="related-file-meta">
+                  {{ formatFileSize(file.size) }}
+                </div>
+
+                <div class="related-file-actions">
+                  <v-btn
+                    size="small"
+                    variant="tonal"
+                    prepend-icon="mdi-open-in-new"
+                    :loading="openingFileId === file.id"
+                    @click="openLinkedFile(file)"
+                  >
+                    開く
+                  </v-btn>
+                  <v-btn
+                    size="small"
+                    variant="tonal"
+                    prepend-icon="mdi-download"
+                    :loading="downloadingFileId === file.id"
+                    @click="downloadLinkedFile(file)"
+                  >
+                    ダウンロード
+                  </v-btn>
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="related-info-value">
+              なし
+            </div>
+          </div>
         </v-card-text>
       </v-card>
 
@@ -464,8 +557,10 @@ import BackButton from '~/components/layout/BackButton.vue'
 import { useConfirmDialog } from '~/composables/useConfirmDialog'
 import { useSnackbar } from '~/composables/useSnackbar'
 import {
+  type CalendarEvent,
   type Task,
   type TaskComment,
+  type TaskLinkedFile,
   useApi,
 } from '~/composables/useApi'
 import { useAuthStore } from '~/stores/auth'
@@ -482,6 +577,7 @@ const snackbar = useSnackbar()
 const {
   getTask,
   getTaskComments,
+  getCalendarEvents,
   apiFetch,
 } = useApi()
 
@@ -522,6 +618,10 @@ const roles = ref<
 
 const usersLoading = ref(false)
 const rolesLoading = ref(false)
+const calendarEventItems = ref<CalendarEvent[]>([])
+const availableFiles = ref<TaskLinkedFile[]>([])
+const calendarEventsLoading = ref(false)
+const filesLoading = ref(false)
 
 const editForm = ref({
   title: '',
@@ -531,6 +631,8 @@ const editForm = ref({
   dueAt: '',
   assigneeUserIds: [] as string[],
   assigneeRoleIds: [] as string[],
+  calendarEventId: null as string | null,
+  fileIds: [] as string[],
 })
 
 const canEdit = computed(() =>
@@ -586,6 +688,137 @@ const priorityItems = [
     value: 'urgent',
   },
 ]
+
+const loadLinkOptions = async () => {
+  const jobs: Promise<void>[] = []
+
+  if (auth.hasPermission('schedule.view')) {
+    jobs.push((async () => {
+      calendarEventsLoading.value = true
+      try {
+        const now = new Date()
+        const from = new Date(now)
+        from.setFullYear(from.getFullYear() - 1)
+        const to = new Date(now)
+        to.setFullYear(to.getFullYear() + 2)
+        const response = await getCalendarEvents(
+          from.toISOString().slice(0, 10),
+          to.toISOString().slice(0, 10),
+        )
+        calendarEventItems.value = response.events
+      } catch (error) {
+        console.error(error)
+        snackbar.error('予定一覧の取得に失敗しました。')
+      } finally {
+        calendarEventsLoading.value = false
+      }
+    })())
+  }
+
+  jobs.push((async () => {
+    filesLoading.value = true
+    try {
+      const response = await apiFetch<{ files: TaskLinkedFile[] }>(
+        '/api/files?limit=200',
+      )
+      availableFiles.value = response.files
+    } catch (error) {
+      console.error(error)
+      snackbar.error('ファイル一覧の取得に失敗しました。')
+    } finally {
+      filesLoading.value = false
+    }
+  })())
+
+  await Promise.all(jobs)
+}
+
+const config = useRuntimeConfig()
+const openingFileId = ref<string | null>(null)
+const downloadingFileId = ref<string | null>(null)
+
+type LinkedFileWithObjectKey = TaskLinkedFile & {
+  object_key: string
+}
+
+const getLinkedFileObjectUrl = async (fileId: string) => {
+  const response = await apiFetch<{ files: LinkedFileWithObjectKey[] }>(
+    '/api/files?limit=200',
+  )
+  const file = response.files.find((item) => item.id === fileId)
+
+  if (!file) {
+    throw new Error('関連ファイルが見つからないか、アーカイブされています。')
+  }
+
+  const baseURL = String(config.public.apiBaseUrl || '').replace(/\/$/, '')
+  const objectKey = file.object_key
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/')
+
+  return `${baseURL}/api/files/${objectKey}`
+}
+
+const openLinkedFile = async (file: TaskLinkedFile) => {
+  // 非同期処理の前にタブを開き、ポップアップブロックを避ける。
+  const openedWindow = window.open('about:blank', '_blank')
+  if (!openedWindow) {
+    snackbar.error('新しいタブを開けません。ポップアップを許可してください。')
+    return
+  }
+
+  openedWindow.opener = null
+  openingFileId.value = file.id
+
+  try {
+    const url = await getLinkedFileObjectUrl(file.id)
+    const response = await fetch(url, { credentials: 'include' })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+    const blob = await response.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    openedWindow.location.href = objectUrl
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+  } catch (error) {
+    console.error(error)
+    openedWindow.close()
+    snackbar.error('ファイルを開けませんでした。')
+  } finally {
+    openingFileId.value = null
+  }
+}
+
+const downloadLinkedFile = async (file: TaskLinkedFile) => {
+  downloadingFileId.value = file.id
+
+  try {
+    const url = await getLinkedFileObjectUrl(file.id)
+    const response = await fetch(url, { credentials: 'include' })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+    const blob = await response.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = objectUrl
+    anchor.download = file.original_name
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000)
+  } catch (error) {
+    console.error(error)
+    snackbar.error('ファイルをダウンロードできませんでした。')
+  } finally {
+    downloadingFileId.value = null
+  }
+}
+
+const formatFileSize = (size: number) => {
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
 
 const loadTask = async () => {
   loading.value = true
@@ -667,6 +900,8 @@ const startEdit = async () => {
     status: task.value.status,
     priority: task.value.priority,
     dueAt: toDatetimeLocal(task.value.due_at),
+    calendarEventId: task.value.calendar_event?.id ?? null,
+    fileIds: (task.value.files ?? []).map((file) => file.id),
     assigneeUserIds: task.value.assignments.users.map(
       (user) => user.id,
     ),
@@ -709,6 +944,13 @@ const saveEdit = async () => {
       editForm.value.assigneeUserIds
     body.assignee_role_ids =
       editForm.value.assigneeRoleIds
+  }
+
+  if (canEdit.value) {
+    if (auth.hasPermission('schedule.view')) {
+      body.calendar_event_id = editForm.value.calendarEventId
+    }
+    body.file_ids = editForm.value.fileIds
   }
 
   if (Object.keys(body).length === 0) {
@@ -1032,7 +1274,10 @@ onMounted(async () => {
     await auth.fetchMe()
   }
 
-  await loadTask()
+  await Promise.all([
+    loadTask(),
+    loadLinkOptions(),
+  ])
 })
 </script>
 
@@ -1062,5 +1307,73 @@ onMounted(async () => {
 
 .comment-item + .comment-item {
   margin-top: 18px;
+}
+
+.related-info-block {
+  min-width: 0;
+}
+
+.related-info-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgb(var(--v-border-opacity));
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.related-info-value {
+  min-width: 0;
+  margin-top: 8px;
+  padding-left: 28px;
+  overflow-wrap: anywhere;
+}
+
+.related-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.related-file {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 12px;
+}
+
+.related-file-name {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.related-file-name .v-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.related-file-meta {
+  margin-top: 6px;
+  margin-left: 28px;
+  color: rgb(var(--v-border-opacity));
+  font-size: 0.8rem;
+}
+
+.related-file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+@media (max-width: 600px) {
+  .related-file-actions > .v-btn {
+    flex: 1 1 auto;
+  }
 }
 </style>

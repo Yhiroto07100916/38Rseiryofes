@@ -22,6 +22,8 @@ interface CreateTaskBody {
   due_at?: unknown
   assignee_user_ids?: unknown
   assignee_role_ids?: unknown
+  calendar_event_id?: unknown
+  file_ids?: unknown
 }
 
 interface UpdateTaskBody {
@@ -33,6 +35,8 @@ interface UpdateTaskBody {
   due_at?: unknown
   assignee_user_ids?: unknown
   assignee_role_ids?: unknown
+  calendar_event_id?: unknown
+  file_ids?: unknown
 }
 
 const VALID_SCOPES = [
@@ -93,6 +97,70 @@ async function getTask(
     .first<Task>()
 }
 
+async function getTaskLinks(
+  env: Env,
+  taskId: string,
+  includeCalendarEvent = true,
+) {
+  const event = includeCalendarEvent
+    ? await env.DB
+        .prepare(`
+          SELECT
+            e.id,
+            e.title,
+            e.starts_at,
+            e.ends_at,
+            e.is_all_day,
+            e.location
+          FROM task_calendar_events tce
+          INNER JOIN calendar_events e
+            ON e.id = tce.event_id
+          WHERE tce.task_id = ?
+          LIMIT 1
+        `)
+        .bind(taskId)
+        .first<{
+          id: string
+          title: string
+          starts_at: string
+          ends_at: string | null
+          is_all_day: number
+          location: string | null
+        }>()
+    : null
+
+  const files = await env.DB
+    .prepare(`
+      SELECT
+        f.id,
+        f.original_name,
+        f.content_type,
+        f.size,
+        f.category,
+        f.created_at
+      FROM task_files tf
+      INNER JOIN files f
+        ON f.id = tf.file_id
+      WHERE tf.task_id = ?
+        AND f.archived_at IS NULL
+      ORDER BY tf.created_at
+    `)
+    .bind(taskId)
+    .all<{
+      id: string
+      original_name: string
+      content_type: string
+      size: number
+      category: string
+      created_at: string
+    }>()
+
+  return {
+    calendar_event: event ?? null,
+    files: files.results,
+  }
+}
+
 async function getTaskAssignments(
   env: Env,
   taskId: string,
@@ -141,104 +209,6 @@ async function getTaskAssignments(
     users: assignees.results,
     roles: roles.results,
   }
-}
-
-async function replaceAssignments(
-  env: Env,
-  taskId: string,
-  userIds: string[],
-  roleIds: string[],
-): Promise<Response | null> {
-  const uniqueUserIds = [...new Set(userIds)]
-  const uniqueRoleIds = [...new Set(roleIds)]
-
-  if (uniqueUserIds.length > 0) {
-    const placeholders = uniqueUserIds
-      .map(() => "?")
-      .join(", ")
-
-    const result = await env.DB
-      .prepare(`
-        SELECT id
-        FROM users
-        WHERE id IN (${placeholders})
-      `)
-      .bind(...uniqueUserIds)
-      .all<{ id: string }>()
-
-    if (result.results.length !== uniqueUserIds.length) {
-      return Response.json(
-        { error: "One or more users not found" },
-        { status: 404 },
-      )
-    }
-  }
-
-  if (uniqueRoleIds.length > 0) {
-    const placeholders = uniqueRoleIds
-      .map(() => "?")
-      .join(", ")
-
-    const result = await env.DB
-      .prepare(`
-        SELECT id
-        FROM roles
-        WHERE id IN (${placeholders})
-      `)
-      .bind(...uniqueRoleIds)
-      .all<{ id: string }>()
-
-    if (result.results.length !== uniqueRoleIds.length) {
-      return Response.json(
-        { error: "One or more roles not found" },
-        { status: 404 },
-      )
-    }
-  }
-
-  await env.DB
-    .prepare(`
-      DELETE FROM task_assignees
-      WHERE task_id = ?
-    `)
-    .bind(taskId)
-    .run()
-
-  await env.DB
-    .prepare(`
-      DELETE FROM task_roles
-      WHERE task_id = ?
-    `)
-    .bind(taskId)
-    .run()
-
-  for (const userId of uniqueUserIds) {
-    await env.DB
-      .prepare(`
-        INSERT INTO task_assignees (
-          task_id,
-          user_id
-        )
-        VALUES (?, ?)
-      `)
-      .bind(taskId, userId)
-      .run()
-  }
-
-  for (const roleId of uniqueRoleIds) {
-    await env.DB
-      .prepare(`
-        INSERT INTO task_roles (
-          task_id,
-          role_id
-        )
-        VALUES (?, ?)
-      `)
-      .bind(taskId, roleId)
-      .run()
-  }
-
-  return null
 }
 
 export async function handleTasks(
@@ -419,10 +389,21 @@ export async function handleTasks(
       env,
       task.id,
     )
+    const canViewSchedule = await hasPermission(
+      env,
+      auth.user.id,
+      "schedule.view",
+    )
+    const links = await getTaskLinks(
+      env,
+      task.id,
+      canViewSchedule,
+    )
 
     return Response.json({
       ...task,
       assignments: assignment,
+      ...links,
     })
   }
 
@@ -539,6 +520,42 @@ export async function handleTasks(
       )
     }
 
+    if (
+      body.calendar_event_id !== undefined &&
+      body.calendar_event_id !== null &&
+      typeof body.calendar_event_id !== "string"
+    ) {
+      return Response.json(
+        { error: "calendar_event_id must be a string or null" },
+        { status: 400 },
+      )
+    }
+
+    if (
+      body.file_ids !== undefined &&
+      !isStringArray(body.file_ids)
+    ) {
+      return Response.json(
+        { error: "file_ids must be an array of strings" },
+        { status: 400 },
+      )
+    }
+
+    const hasCalendarEventInput =
+      body.calendar_event_id !== undefined &&
+      body.calendar_event_id !== null &&
+      body.calendar_event_id.trim() !== ""
+
+    if (
+      hasCalendarEventInput &&
+      !(await hasPermission(env, auth.user.id, "schedule.view"))
+    ) {
+      return Response.json(
+        { error: "Forbidden", permission: "schedule.view" },
+        { status: 403 },
+      )
+    }
+
     const hasAssignmentInput =
       body.assignee_user_ids !== undefined ||
       body.assignee_role_ids !== undefined
@@ -571,64 +588,177 @@ export async function handleTasks(
       typeof body.due_at === "string"
         ? body.due_at.trim() || null
         : null
-    const userIds =
+
+    const userIds = [...new Set(
       body.assignee_user_ids === undefined
         ? []
-        : body.assignee_user_ids
-    const roleIds =
+        : body.assignee_user_ids,
+    )]
+    const roleIds = [...new Set(
       body.assignee_role_ids === undefined
         ? []
-        : body.assignee_role_ids
+        : body.assignee_role_ids,
+    )]
+    const calendarEventId =
+      typeof body.calendar_event_id === "string"
+        ? body.calendar_event_id.trim() || null
+        : null
+    const fileIds = [...new Set(
+      body.file_ids === undefined ? [] : body.file_ids,
+    )]
 
     try {
-      await env.DB
-        .prepare(`
-          INSERT INTO tasks (
+      if (userIds.length > 0) {
+        const placeholders = userIds.map(() => "?").join(", ")
+        const result = await env.DB
+          .prepare(`
+            SELECT id
+            FROM users
+            WHERE id IN (${placeholders})
+          `)
+          .bind(...userIds)
+          .all<{ id: string }>()
+
+        if (result.results.length !== userIds.length) {
+          return Response.json(
+            { error: "One or more users not found" },
+            { status: 404 },
+          )
+        }
+      }
+
+      if (roleIds.length > 0) {
+        const placeholders = roleIds.map(() => "?").join(", ")
+        const result = await env.DB
+          .prepare(`
+            SELECT id
+            FROM roles
+            WHERE id IN (${placeholders})
+          `)
+          .bind(...roleIds)
+          .all<{ id: string }>()
+
+        if (result.results.length !== roleIds.length) {
+          return Response.json(
+            { error: "One or more roles not found" },
+            { status: 404 },
+          )
+        }
+      }
+
+      if (calendarEventId) {
+        const event = await env.DB
+          .prepare(`
+            SELECT id
+            FROM calendar_events
+            WHERE id = ?
+            LIMIT 1
+          `)
+          .bind(calendarEventId)
+          .first<{ id: string }>()
+
+        if (!event) {
+          return Response.json(
+            { error: "Calendar event not found" },
+            { status: 404 },
+          )
+        }
+      }
+
+      if (fileIds.length > 0) {
+        const placeholders = fileIds.map(() => "?").join(", ")
+        const result = await env.DB
+          .prepare(`
+            SELECT id
+            FROM files
+            WHERE id IN (${placeholders})
+              AND archived_at IS NULL
+          `)
+          .bind(...fileIds)
+          .all<{ id: string }>()
+
+        if (result.results.length !== fileIds.length) {
+          return Response.json(
+            { error: "One or more files not found or archived" },
+            { status: 400 },
+          )
+        }
+      }
+
+      const statements: D1PreparedStatement[] = [
+        env.DB
+          .prepare(`
+            INSERT INTO tasks (
+              id,
+              title,
+              description,
+              scope,
+              status,
+              priority,
+              due_at,
+              created_by
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `)
+          .bind(
             id,
             title,
             description,
             scope,
             status,
             priority,
-            due_at,
-            created_by
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `)
-        .bind(
-          id,
-          title,
-          description,
-          scope,
-          status,
-          priority,
-          dueAt,
-          auth.user.id,
+            dueAt,
+            auth.user.id,
+          ),
+      ]
+
+      for (const userId of userIds) {
+        statements.push(
+          env.DB
+            .prepare(`
+              INSERT INTO task_assignees (task_id, user_id)
+              VALUES (?, ?)
+            `)
+            .bind(id, userId),
         )
-        .run()
-
-      const assignmentError = await replaceAssignments(
-        env,
-        id,
-        userIds,
-        roleIds,
-      )
-
-      if (assignmentError) {
-        await env.DB
-          .prepare("DELETE FROM tasks WHERE id = ?")
-          .bind(id)
-          .run()
-
-        return assignmentError
       }
+
+      for (const roleId of roleIds) {
+        statements.push(
+          env.DB
+            .prepare(`
+              INSERT INTO task_roles (task_id, role_id)
+              VALUES (?, ?)
+            `)
+            .bind(id, roleId),
+        )
+      }
+
+      if (calendarEventId) {
+        statements.push(
+          env.DB
+            .prepare(`
+              INSERT INTO task_calendar_events (task_id, event_id)
+              VALUES (?, ?)
+            `)
+            .bind(id, calendarEventId),
+        )
+      }
+
+      for (const fileId of fileIds) {
+        statements.push(
+          env.DB
+            .prepare(`
+              INSERT INTO task_files (task_id, file_id)
+              VALUES (?, ?)
+            `)
+            .bind(id, fileId),
+        )
+      }
+
+      await env.DB.batch(statements)
     } catch (error) {
       console.error("Failed to create task:", error)
-
-      await env.DB
-        .prepare("DELETE FROM tasks WHERE id = ?")
-        .bind(id)
-        .run()
 
       return Response.json(
         { error: "Failed to create task" },
@@ -642,6 +772,15 @@ export async function handleTasks(
       {
         ...task,
         assignments: await getTaskAssignments(env, id),
+        ...(await getTaskLinks(
+          env,
+          id,
+          await hasPermission(
+            env,
+            auth.user.id,
+            "schedule.view",
+          ),
+        )),
       },
       { status: 201 },
     )
@@ -804,6 +943,60 @@ export async function handleTasks(
       )
     }
 
+    if (
+      body.calendar_event_id !== undefined &&
+      body.calendar_event_id !== null &&
+      typeof body.calendar_event_id !== "string"
+    ) {
+      return Response.json(
+        { error: "calendar_event_id must be a string or null" },
+        { status: 400 },
+      )
+    }
+
+    if (
+      body.file_ids !== undefined &&
+      !isStringArray(body.file_ids)
+    ) {
+      return Response.json(
+        { error: "file_ids must be an array of strings" },
+        { status: 400 },
+      )
+    }
+
+    const hasCalendarEventUpdate =
+      body.calendar_event_id !== undefined
+    const hasFileUpdate =
+      body.file_ids !== undefined
+    const hasLinkUpdate =
+      hasCalendarEventUpdate || hasFileUpdate
+
+    const calendarEventId =
+      typeof body.calendar_event_id === "string"
+        ? body.calendar_event_id.trim() || null
+        : null
+
+    if (
+      typeof body.calendar_event_id === "string" &&
+      calendarEventId !== null &&
+      !(await hasPermission(env, auth.user.id, "schedule.view"))
+    ) {
+      return Response.json(
+        { error: "Forbidden", permission: "schedule.view" },
+        { status: 403 },
+      )
+    }
+
+    if (
+      hasLinkUpdate &&
+      !(await hasPermission(env, auth.user.id, "tasks.edit"))
+    ) {
+      return Response.json(
+        { error: "Forbidden", permission: "tasks.edit" },
+        { status: 403 },
+      )
+    }
+
     const updates: string[] = []
     const values: (string | null)[] = []
 
@@ -869,7 +1062,8 @@ export async function handleTasks(
 
     if (
       updates.length === 0 &&
-      !hasAssignmentUpdate
+      !hasAssignmentUpdate &&
+      !hasLinkUpdate
     ) {
       return Response.json(
         { error: "No fields to update" },
@@ -878,58 +1072,190 @@ export async function handleTasks(
     }
 
     try {
+      const statements: D1PreparedStatement[] = []
+
+      const hasUserAssignmentUpdate =
+        body.assignee_user_ids !== undefined
+      const hasRoleAssignmentUpdate =
+        body.assignee_role_ids !== undefined
+
+      const userIds = hasUserAssignmentUpdate
+        ? [...new Set(body.assignee_user_ids as string[])]
+        : []
+      const roleIds = hasRoleAssignmentUpdate
+        ? [...new Set(body.assignee_role_ids as string[])]
+        : []
+
+      if (userIds.length > 0) {
+        const placeholders = userIds.map(() => "?").join(", ")
+        const result = await env.DB
+          .prepare(`SELECT id FROM users WHERE id IN (${placeholders})`)
+          .bind(...userIds)
+          .all<{ id: string }>()
+
+        if (result.results.length !== userIds.length) {
+          return Response.json(
+            { error: "One or more users not found" },
+            { status: 404 },
+          )
+        }
+      }
+
+      if (roleIds.length > 0) {
+        const placeholders = roleIds.map(() => "?").join(", ")
+        const result = await env.DB
+          .prepare(`SELECT id FROM roles WHERE id IN (${placeholders})`)
+          .bind(...roleIds)
+          .all<{ id: string }>()
+
+        if (result.results.length !== roleIds.length) {
+          return Response.json(
+            { error: "One or more roles not found" },
+            { status: 404 },
+          )
+        }
+      }
+
+      if (hasCalendarEventUpdate && calendarEventId) {
+        const event = await env.DB
+          .prepare("SELECT id FROM calendar_events WHERE id = ? LIMIT 1")
+          .bind(calendarEventId)
+          .first<{ id: string }>()
+
+        if (!event) {
+          return Response.json(
+            { error: "Calendar event not found" },
+            { status: 404 },
+          )
+        }
+      }
+
+      const requestedFileIds = hasFileUpdate
+        ? [...new Set(body.file_ids as string[])]
+        : []
+
+      if (requestedFileIds.length > 0) {
+        const placeholders = requestedFileIds.map(() => "?").join(", ")
+        const result = await env.DB
+          .prepare(`
+            SELECT id
+            FROM files
+            WHERE id IN (${placeholders})
+              AND archived_at IS NULL
+          `)
+          .bind(...requestedFileIds)
+          .all<{ id: string }>()
+
+        if (result.results.length !== requestedFileIds.length) {
+          return Response.json(
+            { error: "One or more files not found or archived" },
+            { status: 400 },
+          )
+        }
+      }
+
       if (updates.length > 0) {
         updates.push("updated_at = CURRENT_TIMESTAMP")
-
-        await env.DB
-          .prepare(`
-            UPDATE tasks
-            SET ${updates.join(", ")}
-            WHERE id = ?
-          `)
-          .bind(...values, id)
-          .run()
+        statements.push(
+          env.DB
+            .prepare(`
+              UPDATE tasks
+              SET ${updates.join(", ")}
+              WHERE id = ?
+            `)
+            .bind(...values, id),
+        )
       }
 
-      if (hasAssignmentUpdate) {
-        const currentAssignments =
-          await getTaskAssignments(env, id)
+      if (hasUserAssignmentUpdate) {
+        statements.push(
+          env.DB
+            .prepare("DELETE FROM task_assignees WHERE task_id = ?")
+            .bind(id),
+        )
 
-        const userIds =
-          body.assignee_user_ids !== undefined
-            ? body.assignee_user_ids
-            : currentAssignments.users.map(
-                (user) => user.id,
-              )
-
-        const roleIds =
-          body.assignee_role_ids !== undefined
-            ? body.assignee_role_ids
-            : currentAssignments.roles.map(
-                (role) => role.id,
-              )
-
-        const assignmentError =
-          await replaceAssignments(
-            env,
-            id,
-            userIds,
-            roleIds,
+        for (const userId of userIds) {
+          statements.push(
+            env.DB
+              .prepare(`
+                INSERT INTO task_assignees (task_id, user_id)
+                VALUES (?, ?)
+              `)
+              .bind(id, userId),
           )
-
-        if (assignmentError) {
-          return assignmentError
         }
-
-        await env.DB
-          .prepare(`
-            UPDATE tasks
-            SET updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-          `)
-          .bind(id)
-          .run()
       }
+
+      if (hasRoleAssignmentUpdate) {
+        statements.push(
+          env.DB
+            .prepare("DELETE FROM task_roles WHERE task_id = ?")
+            .bind(id),
+        )
+
+        for (const roleId of roleIds) {
+          statements.push(
+            env.DB
+              .prepare(`
+                INSERT INTO task_roles (task_id, role_id)
+                VALUES (?, ?)
+              `)
+              .bind(id, roleId),
+          )
+        }
+      }
+
+      if (hasCalendarEventUpdate) {
+        statements.push(
+          env.DB
+            .prepare("DELETE FROM task_calendar_events WHERE task_id = ?")
+            .bind(id),
+        )
+
+        if (calendarEventId) {
+          statements.push(
+            env.DB
+              .prepare(`
+                INSERT INTO task_calendar_events (task_id, event_id)
+                VALUES (?, ?)
+              `)
+              .bind(id, calendarEventId),
+          )
+        }
+      }
+
+      if (hasFileUpdate) {
+        statements.push(
+          env.DB
+            .prepare("DELETE FROM task_files WHERE task_id = ?")
+            .bind(id),
+        )
+
+        for (const fileId of requestedFileIds) {
+          statements.push(
+            env.DB
+              .prepare(`
+                INSERT INTO task_files (task_id, file_id)
+                VALUES (?, ?)
+              `)
+              .bind(id, fileId),
+          )
+        }
+      }
+
+      if (updates.length === 0 && (hasAssignmentUpdate || hasLinkUpdate)) {
+        statements.push(
+          env.DB
+            .prepare(`
+              UPDATE tasks
+              SET updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `)
+            .bind(id),
+        )
+      }
+
+      await env.DB.batch(statements)
     } catch (error) {
       console.error("Failed to update task:", error)
 
@@ -944,6 +1270,15 @@ export async function handleTasks(
     return Response.json({
       ...task,
       assignments: await getTaskAssignments(env, id),
+      ...(await getTaskLinks(
+        env,
+        id,
+        await hasPermission(
+          env,
+          auth.user.id,
+          "schedule.view",
+        ),
+      )),
     })
   }
 
