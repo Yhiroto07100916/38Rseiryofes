@@ -221,6 +221,158 @@ export async function handleCalendar(
     })
   }
 
+  // List users who have not responded or selected undecided.
+  if (
+    request.method === "GET" &&
+    pathParts.length === 4 &&
+    pathParts[0] === "events" &&
+    pathParts[2] === "attendance" &&
+    pathParts[3] === "nonrespondents"
+  ) {
+    if (!(await hasPermission(env, auth.user.id, "schedule.view"))) {
+      return Response.json(
+        { error: "Forbidden", permission: "schedule.view" },
+        { status: 403 },
+      )
+    }
+
+    if (!(await hasPermission(env, auth.user.id, "attendance.nonrespondents.view"))) {
+      return Response.json(
+        { error: "Forbidden", permission: "attendance.nonrespondents.view" },
+        { status: 403 },
+      )
+    }
+
+    const eventId = pathParts[1]
+    const event = await getCalendarEvent(env, eventId)
+
+    if (!event) {
+      return Response.json(
+        { error: "Calendar event not found" },
+        { status: 404 },
+      )
+    }
+
+    const result = await env.DB
+      .prepare(`
+        SELECT
+          u.id,
+          u.student_number,
+          u.name,
+          u.nickname,
+          a.status
+        FROM users AS u
+        LEFT JOIN calendar_event_attendance AS a
+          ON a.user_id = u.id
+          AND a.event_id = ?
+        ORDER BY
+          CASE a.status
+            WHEN 'attending' THEN 1
+            WHEN 'not_attending' THEN 2
+            WHEN 'undecided' THEN 3
+            ELSE 4
+          END,
+          u.student_number ASC
+      `)
+      .bind(eventId)
+      .all<{
+        id: string
+        student_number: string
+        name: string
+        nickname: string | null
+        status: "undecided" | null
+      }>()
+
+    return Response.json({
+      event_id: eventId,
+      users: result.results,
+    })
+  }
+
+  // Edit another user's attendance.
+  if (
+    request.method === "PUT" &&
+    pathParts.length === 4 &&
+    pathParts[0] === "events" &&
+    pathParts[2] === "attendance"
+  ) {
+    if (!(await hasPermission(env, auth.user.id, "attendance.edit"))) {
+      return Response.json(
+        { error: "Forbidden", permission: "attendance.edit" },
+        { status: 403 },
+      )
+    }
+
+    const eventId = pathParts[1]
+    const targetUserId = pathParts[3]
+    const event = await getCalendarEvent(env, eventId)
+
+    if (!event) {
+      return Response.json(
+        { error: "Calendar event not found" },
+        { status: 404 },
+      )
+    }
+
+    const targetUser = await env.DB
+      .prepare("SELECT id FROM users WHERE id = ? LIMIT 1")
+      .bind(targetUserId)
+      .first<{ id: string }>()
+
+    if (!targetUser) {
+      return Response.json(
+        { error: "User not found" },
+        { status: 404 },
+      )
+    }
+
+    let body: { status?: unknown }
+
+    try {
+      body = await request.json<{ status?: unknown }>()
+    } catch {
+      return Response.json(
+        { error: "Invalid JSON body" },
+        { status: 400 },
+      )
+    }
+
+    const status = body.status
+
+    if (
+      status !== "attending" &&
+      status !== "not_attending" &&
+      status !== "undecided"
+    ) {
+      return Response.json(
+        { error: "status must be attending, not_attending, or undecided" },
+        { status: 400 },
+      )
+    }
+
+    const now = new Date().toISOString()
+
+    await env.DB
+      .prepare(`
+        INSERT INTO calendar_event_attendance (
+          event_id, user_id, status, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(event_id, user_id)
+        DO UPDATE SET
+          status = excluded.status,
+          updated_at = excluded.updated_at
+      `)
+      .bind(eventId, targetUserId, status, now, now)
+      .run()
+
+    return Response.json({
+      event_id: eventId,
+      user_id: targetUserId,
+      status,
+    })
+  }
+
   if (
     request.method === "GET" &&
     pathParts.length === 3 &&
@@ -283,10 +435,18 @@ export async function handleCalendar(
         status: "attending" | "not_attending" | "undecided"
       }>()
 
+    const canViewCounts = await hasPermission(
+      env,
+      auth.user.id,
+      "attendance.view",
+    )
+
     return Response.json({
       event_id: eventId,
       my_status: mine?.status ?? null,
-      counts,
+      counts: canViewCounts
+        ? counts
+        : { attending: 0, not_attending: 0, undecided: 0 },
     })
   }
 
@@ -395,10 +555,18 @@ export async function handleCalendar(
       counts[row.status] = Number(row.count)
     }
 
+    const canViewCounts = await hasPermission(
+      env,
+      auth.user.id,
+      "attendance.view",
+    )
+
     return Response.json({
       event_id: eventId,
       my_status: status,
-      counts,
+      counts: canViewCounts
+        ? counts
+        : { attending: 0, not_attending: 0, undecided: 0 },
     })
   }
 

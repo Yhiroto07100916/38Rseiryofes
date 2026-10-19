@@ -134,6 +134,7 @@
         </div>
 
         <v-btn-toggle
+          v-if="canEditOwnAttendance"
           v-model="attendanceStatus"
           mandatory
           divided
@@ -142,26 +143,25 @@
           :disabled="attendanceLoading || attendanceSaving"
         >
           <v-btn value="attending">
-            <v-icon start>
-              mdi-check-circle-outline
-            </v-icon>
+            <v-icon start>mdi-check-circle-outline</v-icon>
             参加
           </v-btn>
-
           <v-btn value="undecided">
-            <v-icon start>
-              mdi-help-circle-outline
-            </v-icon>
+            <v-icon start>mdi-help-circle-outline</v-icon>
             未定
           </v-btn>
-
           <v-btn value="not_attending">
-            <v-icon start>
-              mdi-close-circle-outline
-            </v-icon>
+            <v-icon start>mdi-close-circle-outline</v-icon>
             不参加
           </v-btn>
         </v-btn-toggle>
+
+        <div
+          v-else
+          class="text-body-2 text-medium-emphasis"
+        >
+          自分の出欠を変更する権限がありません。
+        </div>
 
         <v-progress-linear
           v-if="attendanceLoading"
@@ -171,38 +171,21 @@
         />
 
         <div
-          v-else
+          v-else-if="canViewAttendance"
           class="attendance-counts mt-4"
         >
           <div class="attendance-count">
-            <v-icon
-              size="18"
-              color="success"
-            >
-              mdi-check-circle
-            </v-icon>
+            <v-icon size="18" color="success">mdi-check-circle</v-icon>
             <span>参加</span>
             <strong>{{ attendance.counts.attending }}</strong>
           </div>
-
           <div class="attendance-count">
-            <v-icon
-              size="18"
-              color="warning"
-            >
-              mdi-help-circle
-            </v-icon>
+            <v-icon size="18" color="warning">mdi-help-circle</v-icon>
             <span>未定</span>
             <strong>{{ attendance.counts.undecided }}</strong>
           </div>
-
           <div class="attendance-count">
-            <v-icon
-              size="18"
-              color="error"
-            >
-              mdi-close-circle
-            </v-icon>
+            <v-icon size="18" color="error">mdi-close-circle</v-icon>
             <span>不参加</span>
             <strong>{{ attendance.counts.not_attending }}</strong>
           </div>
@@ -213,6 +196,131 @@
           class="text-body-2 text-medium-emphasis mt-3"
         >
           参加状況を更新しています…
+        </div>
+
+        <v-divider
+          v-if="canViewNonrespondents"
+          class="my-5"
+        />
+
+        <div v-if="canViewNonrespondents">
+          <div class="d-flex align-center justify-space-between mb-3">
+            <div class="text-subtitle-2 font-weight-bold">
+              参加状況一覧
+            </div>
+            <v-btn
+              icon="mdi-refresh"
+              variant="text"
+              size="small"
+              aria-label="参加状況一覧を更新"
+              :loading="nonrespondentsLoading"
+              @click="loadNonrespondents"
+            />
+          </div>
+
+          <v-progress-linear
+            v-if="nonrespondentsLoading"
+            indeterminate
+            color="primary"
+          />
+
+          <v-alert
+            v-else-if="nonrespondentsError"
+            type="error"
+            variant="tonal"
+            density="compact"
+            class="mb-3"
+          >
+            参加状況一覧を読み込めませんでした。
+            <v-btn
+              variant="text"
+              size="small"
+              @click="loadNonrespondents"
+            >
+              再試行
+            </v-btn>
+          </v-alert>
+
+          <template v-else>
+            <v-tabs
+              v-model="attendanceListTab"
+              color="primary"
+              grow
+              density="comfortable"
+              class="attendance-list-tabs mb-3"
+            >
+              <v-tab value="attending">
+                参加 {{ attendanceListCounts.attending }}
+              </v-tab>
+              <v-tab value="not_attending">
+                不参加 {{ attendanceListCounts.not_attending }}
+              </v-tab>
+              <v-tab value="undecided">
+                未定 {{ attendanceListCounts.undecided }}
+              </v-tab>
+              <v-tab value="unanswered">
+                未回答 {{ attendanceListCounts.unanswered }}
+              </v-tab>
+            </v-tabs>
+
+            <v-list
+              v-if="filteredAttendanceUsers.length > 0"
+              density="compact"
+              class="pa-0"
+            >
+              <v-list-item
+                v-for="person in filteredAttendanceUsers"
+                :key="person.id"
+                :title="person.nickname || person.name"
+                :subtitle="`${person.student_number} · ${
+                  person.status === 'attending'
+                    ? '参加'
+                    : person.status === 'not_attending'
+                      ? '不参加'
+                      : person.status === 'undecided'
+                        ? '未定'
+                        : '未回答'
+                }`"
+              >
+                <template #append>
+                  <v-menu v-if="canEditOtherAttendance">
+                    <template #activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        icon="mdi-pencil-outline"
+                        variant="text"
+                        size="small"
+                        :disabled="updatingUserId === person.id"
+                        :loading="updatingUserId === person.id"
+                        :aria-label="`${person.name}の出欠を変更`"
+                      />
+                    </template>
+                    <v-list density="compact">
+                      <v-list-item
+                        title="参加に変更"
+                        @click="updateOtherAttendance(person, 'attending')"
+                      />
+                      <v-list-item
+                        title="未定に変更"
+                        @click="updateOtherAttendance(person, 'undecided')"
+                      />
+                      <v-list-item
+                        title="不参加に変更"
+                        @click="updateOtherAttendance(person, 'not_attending')"
+                      />
+                    </v-list>
+                  </v-menu>
+                </template>
+              </v-list-item>
+            </v-list>
+
+            <div
+              v-else
+              class="text-body-2 text-medium-emphasis py-4 text-center"
+            >
+              この区分のユーザーはいません。
+            </div>
+          </template>
         </div>
       </v-card-text>
 
@@ -389,6 +497,7 @@ import type {
   CalendarCategory,
   CalendarEvent,
   CalendarEventAttendance,
+  CalendarNonrespondent,
 } from '~/composables/useApi'
 
 const route = useRoute()
@@ -405,6 +514,8 @@ const {
   deleteCalendarEvent: deleteCalendarEventApi,
   getCalendarEventAttendance,
   updateCalendarEventAttendance,
+  getCalendarNonrespondents,
+  updateUserCalendarAttendance,
 } = useApi()
 
 const event = ref<CalendarEvent | null>(null)
@@ -430,6 +541,41 @@ const attendanceStatus = ref<CalendarAttendanceStatus | null>(null)
 const canDelete = computed(() =>
   auth.hasPermission('schedule.delete'),
 )
+const canViewAttendance = computed(() =>
+  auth.hasPermission('attendance.view'),
+)
+const canEditOwnAttendance = computed(() =>
+  auth.hasPermission('schedule.attendance'),
+)
+const canViewNonrespondents = computed(() =>
+  auth.hasPermission('attendance.nonrespondents.view'),
+)
+const canEditOtherAttendance = computed(() =>
+  auth.hasPermission('attendance.edit'),
+)
+
+const nonrespondents = ref<CalendarNonrespondent[]>([])
+const attendanceListTab = ref<'attending' | 'not_attending' | 'undecided' | 'unanswered'>('attending')
+
+const attendanceListCounts = computed(() => ({
+  attending: nonrespondents.value.filter(person => person.status === 'attending').length,
+  not_attending: nonrespondents.value.filter(person => person.status === 'not_attending').length,
+  undecided: nonrespondents.value.filter(person => person.status === 'undecided').length,
+  unanswered: nonrespondents.value.filter(person => person.status === null).length,
+}))
+
+const filteredAttendanceUsers = computed(() =>
+  nonrespondents.value.filter(person =>
+    attendanceListTab.value === 'unanswered'
+      ? person.status === null
+      : person.status === attendanceListTab.value,
+  ),
+)
+
+const nonrespondentsLoading = ref(false)
+const nonrespondentsError = ref(false)
+const updatingUserId = ref<string | null>(null)
+
 const editDialog = ref(false)
 
 const eventForm = reactive({
@@ -592,6 +738,59 @@ async function loadCategories() {
   }
 }
 
+async function loadNonrespondents() {
+  if (!canViewNonrespondents.value || !event.value) {
+    return
+  }
+
+  nonrespondentsLoading.value = true
+  nonrespondentsError.value = false
+
+  try {
+    const response = await getCalendarNonrespondents(event.value.id)
+    nonrespondents.value = response.users
+  } catch (error) {
+    console.error('Failed to load calendar nonrespondents:', error)
+    nonrespondentsError.value = true
+  } finally {
+    nonrespondentsLoading.value = false
+  }
+}
+
+async function updateOtherAttendance(
+  person: CalendarNonrespondent,
+  status: CalendarAttendanceStatus,
+) {
+  if (
+    !canEditOtherAttendance.value ||
+    !event.value ||
+    updatingUserId.value
+  ) {
+    return
+  }
+
+  updatingUserId.value = person.id
+
+  try {
+    await updateUserCalendarAttendance(
+      event.value.id,
+      person.id,
+      status,
+    )
+
+    snackbar.show('出欠を更新しました。')
+    await Promise.all([
+      loadNonrespondents(),
+      loadAttendance(),
+    ])
+  } catch (error) {
+    console.error('Failed to update another user attendance:', error)
+    snackbar.show('出欠の更新に失敗しました。')
+  } finally {
+    updatingUserId.value = null
+  }
+}
+
 async function loadAttendance() {
   attendanceLoading.value = true
 
@@ -668,6 +867,10 @@ onMounted(async () => {
     loadEvent(),
     loadAttendance(),
   ])
+
+  if (canViewNonrespondents.value) {
+    await loadNonrespondents()
+  }
 })
 </script>
 
