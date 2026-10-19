@@ -756,6 +756,26 @@ export async function handleFiles(
         )
       }
 
+      const taskLink = await env.DB
+        .prepare(`
+          SELECT 1
+          FROM task_files
+          WHERE file_id = ?
+          LIMIT 1
+        `)
+        .bind(file.id)
+        .first()
+
+      if (taskLink) {
+        return json(
+          {
+            error: "This file is attached to a task",
+            code: "FILE_HAS_TASK_LINK",
+          },
+          409,
+        )
+      }
+
       await env.FILES_BUCKET.delete(objectKey)
 
       await env.DB

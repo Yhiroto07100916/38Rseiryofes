@@ -1,0 +1,326 @@
+import { env, SELF } from "cloudflare:test";
+import { afterEach, describe, expect, it } from "vitest";
+
+const createdFixtures: Array<{
+  userIds: string[];
+  sessionIds: string[];
+  taskIds: string[];
+  roleIds: string[];
+  eventIds: string[];
+  fileIds: string[];
+}> = [];
+
+async function createFixture() {
+  const fixture = {
+    userIds: [crypto.randomUUID(), crypto.randomUUID()],
+    sessionIds: [crypto.randomUUID()],
+    taskIds: [crypto.randomUUID()],
+    roleIds: [crypto.randomUUID()],
+    eventIds: [crypto.randomUUID()],
+    fileIds: [crypto.randomUUID()],
+  };
+
+  createdFixtures.push(fixture);
+
+  const [actorId, assigneeId] = fixture.userIds;
+  const sessionId = fixture.sessionIds[0];
+  const roleId = fixture.roleIds[0];
+  const eventId = fixture.eventIds[0];
+  const fileId = fixture.fileIds[0];
+
+  for (const [index, userId] of fixture.userIds.entries()) {
+    await env.DB.prepare(`
+      INSERT INTO users (id, student_number, name, nickname)
+      VALUES (?, ?, ?, ?)
+    `)
+      .bind(userId, `test-${crypto.randomUUID()}`, `テストユーザー${index}`, null)
+      .run();
+  }
+
+  await env.DB.prepare(`
+    INSERT INTO sessions (id, user_id, expires_at)
+    VALUES (?, ?, datetime('now', '+1 day'))
+  `)
+    .bind(sessionId, actorId)
+    .run();
+
+  await env.DB.prepare(`
+    INSERT INTO roles (id, name, description)
+    VALUES (?, ?, ?)
+  `)
+    .bind(roleId, `test-role-${roleId}`, "テスト用の役割")
+    .run();
+
+  await env.DB.prepare(`
+    INSERT INTO calendar_events (
+      id, title, starts_at, created_by
+    )
+    VALUES (?, ?, ?, ?)
+  `)
+    .bind(eventId, "テスト予定", "2030-01-01T10:00:00", actorId)
+    .run();
+
+  await env.DB.prepare(`
+    INSERT INTO files (
+      id, object_key, original_name, content_type,
+      size, category, uploaded_by
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `)
+    .bind(
+      fileId,
+      `test/${fileId}`,
+      "test.pdf",
+      "application/pdf",
+      100,
+      "document",
+      actorId,
+    )
+    .run();
+
+  return {
+    ...fixture,
+    actorId,
+    assigneeId,
+    sessionId,
+    roleId,
+    eventId,
+    fileId,
+    cookie: `session_id=${sessionId}`,
+  };
+}
+
+async function grantPermissions(
+  userId: string,
+  permissionKeys: string[],
+) {
+  for (const key of permissionKeys) {
+    await env.DB.prepare(`
+      INSERT INTO user_permissions (user_id, permission_id, effect)
+      SELECT ?, id, 'allow'
+      FROM permissions
+      WHERE key = ?
+    `)
+      .bind(userId, key)
+      .run();
+  }
+}
+
+async function createTaskDirectly(
+  taskId: string,
+  creatorId: string,
+  title: string,
+) {
+  await env.DB.prepare(`
+    INSERT INTO tasks (id, title, scope, created_by)
+    VALUES (?, ?, 'class', ?)
+  `)
+    .bind(taskId, title, creatorId)
+    .run();
+}
+
+afterEach(async () => {
+  for (const fixture of createdFixtures.splice(0)) {
+    for (const taskId of fixture.taskIds) {
+      await env.DB.prepare("DELETE FROM tasks WHERE id = ?")
+        .bind(taskId)
+        .run();
+    }
+
+    for (const sessionId of fixture.sessionIds) {
+      await env.DB.prepare("DELETE FROM sessions WHERE id = ?")
+        .bind(sessionId)
+        .run();
+    }
+
+    for (const fileId of fixture.fileIds) {
+      await env.DB.prepare("DELETE FROM files WHERE id = ?")
+        .bind(fileId)
+        .run();
+    }
+
+    for (const eventId of fixture.eventIds) {
+      await env.DB.prepare("DELETE FROM calendar_events WHERE id = ?")
+        .bind(eventId)
+        .run();
+    }
+
+    for (const roleId of fixture.roleIds) {
+      await env.DB.prepare("DELETE FROM roles WHERE id = ?")
+        .bind(roleId)
+        .run();
+    }
+
+    for (const userId of fixture.userIds) {
+      await env.DB.prepare("DELETE FROM user_permissions WHERE user_id = ?")
+        .bind(userId)
+        .run();
+
+      await env.DB.prepare("DELETE FROM users WHERE id = ?")
+        .bind(userId)
+        .run();
+    }
+  }
+});
+
+describe("Task write atomicity", () => {
+  it("creates a task and all its links together", async () => {
+    const fixture = await createFixture();
+
+    await grantPermissions(fixture.actorId, [
+      "tasks.create",
+      "tasks.assign",
+      "schedule.view",
+    ]);
+
+    const response = await SELF.fetch("http://example.com/api/tasks", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: fixture.cookie,
+      },
+      body: JSON.stringify({
+        title: "一括作成テスト",
+        scope: "class",
+        assignee_user_ids: [fixture.assigneeId],
+        assignee_role_ids: [fixture.roleId],
+        calendar_event_id: fixture.eventId,
+        file_ids: [fixture.fileId],
+      }),
+    });
+
+    expect(response.status).toBe(201);
+
+    const task = await env.DB.prepare(`
+      SELECT id FROM tasks WHERE title = ?
+    `)
+      .bind("一括作成テスト")
+      .first<{ id: string }>();
+
+    expect(task).not.toBeNull();
+    if (!task) return;
+
+    fixture.taskIds.push(task.id);
+
+    const assignee = await env.DB.prepare(`
+      SELECT user_id FROM task_assignees WHERE task_id = ?
+    `)
+      .bind(task.id)
+      .first<{ user_id: string }>();
+
+    const role = await env.DB.prepare(`
+      SELECT role_id FROM task_roles WHERE task_id = ?
+    `)
+      .bind(task.id)
+      .first<{ role_id: string }>();
+
+    const event = await env.DB.prepare(`
+      SELECT event_id FROM task_calendar_events WHERE task_id = ?
+    `)
+      .bind(task.id)
+      .first<{ event_id: string }>();
+
+    const file = await env.DB.prepare(`
+      SELECT file_id FROM task_files WHERE task_id = ?
+    `)
+      .bind(task.id)
+      .first<{ file_id: string }>();
+
+    expect(assignee?.user_id).toBe(fixture.assigneeId);
+    expect(role?.role_id).toBe(fixture.roleId);
+    expect(event?.event_id).toBe(fixture.eventId);
+    expect(file?.file_id).toBe(fixture.fileId);
+  });
+
+  it("does not create a task when a linked file is invalid", async () => {
+    const fixture = await createFixture();
+
+    await grantPermissions(fixture.actorId, ["tasks.create"]);
+
+    const title = `不正ファイルテスト-${crypto.randomUUID()}`;
+
+    const response = await SELF.fetch("http://example.com/api/tasks", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: fixture.cookie,
+      },
+      body: JSON.stringify({
+        title,
+        scope: "class",
+        file_ids: [crypto.randomUUID()],
+      }),
+    });
+
+    expect(response.status).toBe(400);
+
+    const task = await env.DB.prepare(`
+      SELECT id FROM tasks WHERE title = ?
+    `)
+      .bind(title)
+      .first();
+
+    expect(task).toBeNull();
+  });
+
+  it("preserves assignments when PATCH omits assignment fields", async () => {
+    const fixture = await createFixture();
+    const taskId = fixture.taskIds[0];
+
+    await grantPermissions(fixture.actorId, ["tasks.edit"]);
+
+    await createTaskDirectly(taskId, fixture.actorId, "更新前タイトル");
+
+    await env.DB.prepare(`
+      INSERT INTO task_assignees (task_id, user_id)
+      VALUES (?, ?)
+    `)
+      .bind(taskId, fixture.assigneeId)
+      .run();
+
+    await env.DB.prepare(`
+      INSERT INTO task_roles (task_id, role_id)
+      VALUES (?, ?)
+    `)
+      .bind(taskId, fixture.roleId)
+      .run();
+
+    const response = await SELF.fetch(
+      `http://example.com/api/tasks/${taskId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: fixture.cookie,
+        },
+        body: JSON.stringify({
+          title: "更新後タイトル",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+
+    const task = await env.DB.prepare(`
+      SELECT title FROM tasks WHERE id = ?
+    `)
+      .bind(taskId)
+      .first<{ title: string }>();
+
+    const assignee = await env.DB.prepare(`
+      SELECT user_id FROM task_assignees WHERE task_id = ?
+    `)
+      .bind(taskId)
+      .first<{ user_id: string }>();
+
+    const role = await env.DB.prepare(`
+      SELECT role_id FROM task_roles WHERE task_id = ?
+    `)
+      .bind(taskId)
+      .first<{ role_id: string }>();
+
+    expect(task?.title).toBe("更新後タイトル");
+    expect(assignee?.user_id).toBe(fixture.assigneeId);
+    expect(role?.role_id).toBe(fixture.roleId);
+  });
+});

@@ -120,6 +120,24 @@ export interface TaskAssignments {
   roles: TaskAssignmentRole[]
 }
 
+export interface TaskLinkedFile {
+  id: string
+  original_name: string
+  content_type: string
+  size: number
+  category: string
+  created_at: string
+}
+
+export interface TaskLinkedCalendarEvent {
+  id: string
+  title: string
+  starts_at: string
+  ends_at: string | null
+  is_all_day: number
+  location: string | null
+}
+
 export interface Task {
   id: string
   title: string
@@ -132,6 +150,8 @@ export interface Task {
   created_at: string
   updated_at: string
   assignments: TaskAssignments
+  calendar_event?: TaskLinkedCalendarEvent | null
+  files?: TaskLinkedFile[]
 }
 
 export interface TaskListResponse {

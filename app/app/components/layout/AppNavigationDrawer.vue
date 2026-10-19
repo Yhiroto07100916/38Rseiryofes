@@ -174,6 +174,7 @@ const fetchAccountRole = async () => {
 
 const items: NavigationItem[] = [
   {icon: "mdi-bullhorn", title:"お知らせ", to:"/news"},
+  {icon: "mdi-file-document", title:"書類", to:"/files"},
 ]
 
 watch(
