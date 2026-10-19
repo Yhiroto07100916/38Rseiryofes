@@ -86,7 +86,7 @@ export default defineNuxtConfig({
       ],
     },
     pwaAssets: {
-      config: true,
+      disabled: true,
     },
     includeAssets: [
       'favicon.ico',
