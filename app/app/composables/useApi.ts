@@ -44,6 +44,19 @@ export interface CalendarEventAttendance {
   }
 }
 
+export interface CalendarNonrespondent {
+  id: string
+  student_number: string
+  name: string
+  nickname: string | null
+  status: CalendarAttendanceStatus | null
+}
+
+export interface CalendarNonrespondentsResponse {
+  event_id: string
+  users: CalendarNonrespondent[]
+}
+
 
 export interface NewsCalendarEvent {
   id: string
@@ -337,6 +350,27 @@ export const useApi = () => {
     )
   }
 
+  const getCalendarNonrespondents = (eventId: string) => {
+    return apiFetch<CalendarNonrespondentsResponse>(
+      `/api/calendar/events/${eventId}/attendance/nonrespondents`,
+    )
+  }
+
+  const updateUserCalendarAttendance = (
+    eventId: string,
+    userId: string,
+    status: CalendarAttendanceStatus,
+  ) => {
+    return apiFetch<{
+      event_id: string
+      user_id: string
+      status: CalendarAttendanceStatus
+    }>(`/api/calendar/events/${eventId}/attendance/${userId}`, {
+      method: 'PUT',
+      body: { status },
+    })
+  }
+
   const getNews = () => {
     return apiFetch<{ news: News[] }>(
       '/api/news',
@@ -458,6 +492,8 @@ export const useApi = () => {
     getCalendarEvent,
     getCalendarEventAttendance,
     updateCalendarEventAttendance,
+    getCalendarNonrespondents,
+    updateUserCalendarAttendance,
     createCalendarEvent,
     updateCalendarEvent,
     deleteCalendarEvent,
