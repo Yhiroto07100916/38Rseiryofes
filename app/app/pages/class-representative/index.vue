@@ -165,28 +165,30 @@ const implementedFeatures = [
     title: '会計',
     description: '38Rの予算・支出などを管理',
     icon: 'mdi-cash-multiple',
-    to:'/accounting'
-  },
-]
-
-const plannedFeatures = [
-
-  {
-    title: '出欠管理',
-    description: '星陵祭準備の出欠・参加状況を管理',
-    icon: 'mdi-account-check-outline',
+    to: '/accounting',
   },
   {
     title: 'アンケート・投票',
     description: 'クラス内のアンケートや投票を管理',
     icon: 'mdi-vote-outline',
+    to: '/surveys',
   },
   {
     title: '意思決定記録',
-    description: 'クラスで決定した内容を記録',
+    description: 'クラスで決定した内容や経緯を記録',
     icon: 'mdi-notebook-check-outline',
+    to: '/decisions',
   },
 ]
+
+const plannedFeatures = [
+  {
+    title: '出欠管理',
+    description: '星陵祭準備の出欠・参加状況を管理',
+    icon: 'mdi-account-check-outline',
+  },
+]
+
 </script>
 
 <style scoped>

@@ -175,6 +175,8 @@ const fetchAccountRole = async () => {
 const items: NavigationItem[] = [
   {icon: "mdi-bullhorn", title:"お知らせ", to:"/news"},
   {icon: "mdi-file-document", title:"書類", to:"/files"},
+  {title: 'アンケート・投票',icon: 'mdi-vote-outline',to: '/surveys',},
+  {title: '意思決定記録',icon: 'mdi-notebook-check-outline',to: '/decisions',},
 ]
 
 watch(
