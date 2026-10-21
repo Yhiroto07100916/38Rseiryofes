@@ -13,6 +13,8 @@ import { handleAccounting } from "./routes/accounting"
 import { handleFiles } from "./routes/files"
 import { handlePublicFiles } from "./routes/public-files"
 import { handleReceiptOcr } from "./routes/receipt-ocr"
+import { handleSurveys } from "./routes/surveys"
+import { handleDecisions } from "./routes/decisions"
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -584,6 +586,50 @@ export default {
             { error: "Internal Server Error" },
             { status: 500 },
           ),
+        )
+      }
+    }
+
+
+    if (
+      url.pathname === "/api/surveys" ||
+      url.pathname.startsWith("/api/surveys/")
+    ) {
+      const path = url.pathname.slice("/api/surveys".length)
+      const pathParts = path.split("/").filter(Boolean)
+
+      try {
+        return withCors(
+          request,
+          await handleSurveys(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("Surveys API error:", error)
+        return withCors(
+          request,
+          Response.json({ error: "Internal Server Error" }, { status: 500 }),
+        )
+      }
+    }
+
+
+    if (
+      url.pathname === "/api/decisions" ||
+      url.pathname.startsWith("/api/decisions/")
+    ) {
+      const path = url.pathname.slice("/api/decisions".length)
+      const pathParts = path.split("/").filter(Boolean)
+
+      try {
+        return withCors(
+          request,
+          await handleDecisions(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("Decisions API error:", error)
+        return withCors(
+          request,
+          Response.json({ error: "Internal Server Error" }, { status: 500 }),
         )
       }
     }
