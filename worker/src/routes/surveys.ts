@@ -254,7 +254,7 @@ export async function handleSurveys(
   const survey = await getSurvey(env, surveyId)
   if (!survey) return error("Survey not found", 404)
 
-  if (subresource === "responses" && pathParts.length === 2 && method === "POST") {
+  if (subresource === "responses" && pathParts.length === 2 && (method === "POST" || method === "PATCH")) {
     if (!(await permitted(env, userId, "surveys.respond"))) {
       return error("Forbidden", 403)
     }
@@ -308,6 +308,66 @@ export async function handleSurveys(
       }
     }
 
+    if (method === "PATCH") {
+      const participation = await env.DB.prepare(`
+        SELECT response_id
+        FROM survey_participation
+        WHERE survey_id = ? AND user_id = ?
+      `).bind(surveyId, userId).first<{ response_id: string | null }>()
+
+      if (!participation) return error("No existing response to edit", 404)
+
+      let responseId = participation.response_id
+      if (!responseId && !survey.is_anonymous) {
+        const legacyResponse = await env.DB.prepare(`
+          SELECT id
+          FROM survey_responses
+          WHERE survey_id = ? AND respondent_id = ?
+          ORDER BY submitted_at DESC
+          LIMIT 1
+        `).bind(surveyId, userId).first<{ id: string }>()
+        responseId = legacyResponse?.id ?? null
+      }
+
+      if (!responseId) {
+        return error("This historical response cannot be edited", 409)
+      }
+
+      const existingResponse = await env.DB.prepare(`
+        SELECT id
+        FROM survey_responses
+        WHERE id = ? AND survey_id = ?
+      `).bind(responseId, surveyId).first<{ id: string }>()
+
+      if (!existingResponse) {
+        return error("Existing response not found", 404)
+      }
+
+      try {
+        await env.DB.batch([
+          env.DB.prepare(`
+            UPDATE survey_responses
+            SET text_answer = ?
+            WHERE id = ? AND survey_id = ?
+          `).bind(textAnswer, responseId, surveyId),
+          env.DB.prepare(`
+            DELETE FROM survey_response_options
+            WHERE response_id = ?
+          `).bind(responseId),
+          ...optionIds.map((optionId: string) =>
+            env.DB.prepare(`
+              INSERT INTO survey_response_options (response_id, option_id)
+              VALUES (?, ?)
+            `).bind(responseId, optionId),
+          ),
+        ])
+      } catch {
+        return error("Could not update response", 500)
+      }
+
+      return Response.json({ submitted: true, updated: true })
+    }
+
     const responseId = id()
     const respondentId = survey.is_anonymous ? null : userId
     const submittedAt = new Date().toISOString()
@@ -315,16 +375,17 @@ export async function handleSurveys(
     try {
       await env.DB.batch([
         env.DB.prepare(`
-          INSERT INTO survey_participation (survey_id, user_id, submitted_at)
-          VALUES (?, ?, ?)
-        `).bind(surveyId, userId, submittedAt),
-        env.DB.prepare(`
           INSERT INTO survey_responses
             (id, survey_id, respondent_id, text_answer, submitted_at)
           VALUES (?, ?, ?, ?, ?)
         `).bind(
           responseId, surveyId, respondentId, textAnswer, submittedAt,
         ),
+        env.DB.prepare(`
+          INSERT INTO survey_participation
+            (survey_id, user_id, submitted_at, response_id)
+          VALUES (?, ?, ?, ?)
+        `).bind(surveyId, userId, submittedAt, responseId),
         ...optionIds.map((optionId: string) =>
           env.DB.prepare(`
             INSERT INTO survey_response_options (response_id, option_id)
@@ -375,6 +436,29 @@ export async function handleSurveys(
       ORDER BY o.sort_order, o.id
     `).bind(surveyId, surveyId).all()
 
+    const votersByOption = new Map<string, string[]>()
+
+    if (!survey.is_anonymous && survey.response_type !== "free_text") {
+      const voterRows = await env.DB.prepare(`
+        SELECT ro.option_id, u.name AS voter_name
+        FROM survey_response_options ro
+        JOIN survey_responses r
+          ON r.id = ro.response_id AND r.survey_id = ?
+        JOIN users u ON u.id = r.respondent_id
+        WHERE r.survey_id = ?
+        ORDER BY ro.option_id, u.name
+      `).bind(surveyId, surveyId).all<{
+        option_id: string
+        voter_name: string
+      }>()
+
+      for (const row of voterRows.results) {
+        const names = votersByOption.get(row.option_id) ?? []
+        names.push(row.voter_name)
+        votersByOption.set(row.option_id, names)
+      }
+    }
+
     const textAnswers = survey.response_type === "free_text"
       ? await env.DB.prepare(`
           SELECT text_answer
@@ -392,7 +476,12 @@ export async function handleSurveys(
         is_anonymous: survey.is_anonymous,
       },
       response_count: total?.count ?? 0,
-      options: options.results,
+      options: options.results.map((option) => ({
+        ...option,
+        ...(!survey.is_anonymous && survey.response_type !== "free_text"
+          ? { voters: votersByOption.get(option.id) ?? [] }
+          : {}),
+      })),
       text_answers: textAnswers.results.map((row) => row.text_answer),
     })
   }
@@ -409,15 +498,51 @@ export async function handleSurveys(
 
     const options = await getOptions(env, surveyId)
     const participation = await env.DB.prepare(`
-      SELECT 1 AS submitted
+      SELECT response_id
       FROM survey_participation
       WHERE survey_id = ? AND user_id = ?
-    `).bind(surveyId, userId).first<{ submitted: number }>()
+    `).bind(surveyId, userId).first<{ response_id: string | null }>()
+
+    let responseId = participation?.response_id ?? null
+    if (participation && !responseId && !survey.is_anonymous) {
+      const legacyResponse = await env.DB.prepare(`
+        SELECT id
+        FROM survey_responses
+        WHERE survey_id = ? AND respondent_id = ?
+        ORDER BY submitted_at DESC
+        LIMIT 1
+      `).bind(surveyId, userId).first<{ id: string }>()
+      responseId = legacyResponse?.id ?? null
+    }
+
+    let myResponse: { text_answer: string | null; option_ids: string[] } | null = null
+    if (responseId) {
+      const responseRow = await env.DB.prepare(`
+        SELECT text_answer
+        FROM survey_responses
+        WHERE id = ? AND survey_id = ?
+      `).bind(responseId, surveyId).first<{ text_answer: string | null }>()
+
+      if (responseRow) {
+        const selected = await env.DB.prepare(`
+          SELECT option_id
+          FROM survey_response_options
+          WHERE response_id = ?
+        `).bind(responseId).all<{ option_id: string }>()
+
+        myResponse = {
+          text_answer: responseRow.text_answer,
+          option_ids: selected.results.map(row => row.option_id),
+        }
+      }
+    }
 
     return Response.json({
       survey,
       options,
       has_responded: Boolean(participation),
+      response_editable: Boolean(myResponse),
+      my_response: myResponse,
     })
   }
 
@@ -475,14 +600,14 @@ export async function handleSurveys(
     const existingResponses = await env.DB.prepare(`
       SELECT COUNT(*) AS count FROM survey_responses WHERE survey_id = ?
     `).bind(surveyId).first<{ count: number }>()
+    const hasResponses = (existingResponses?.count ?? 0) > 0
 
-    if (body.options !== undefined || responseType !== survey.response_type) {
-      if ((existingResponses?.count ?? 0) > 0) {
-        return error("Cannot change options or response type after responses exist", 409)
-      }
+    if (hasResponses && responseType !== survey.response_type) {
+      return error("Cannot change response type after responses exist", 409)
     }
 
     let options: string[] | undefined
+    let currentOptions: SurveyOption[] = []
     if (body.options !== undefined) {
       const parsed = parseOptions(body.options)
       if (!parsed) return error("Invalid options")
@@ -492,6 +617,20 @@ export async function handleSurveys(
       }
       if (responseType !== "free_text" && options.length < 2) {
         return error("Choice surveys require at least two options")
+      }
+
+      if (hasResponses) {
+        currentOptions = await getOptions(env, surveyId)
+        const currentLabels = currentOptions.map(option => option.label)
+        if (
+          options.length < currentLabels.length ||
+          currentLabels.some((label, index) => options![index] !== label)
+        ) {
+          return error(
+            "Existing options cannot be changed or removed; new options may only be appended",
+            409,
+          )
+        }
       }
     }
 
@@ -516,14 +655,23 @@ export async function handleSurveys(
     ]
 
     if (options !== undefined) {
-      statements.push(
-        env.DB.prepare("DELETE FROM survey_options WHERE survey_id = ?").bind(surveyId),
-      )
-      for (let index = 0; index < options.length; index++) {
-        statements.push(env.DB.prepare(`
-          INSERT INTO survey_options (id, survey_id, label, sort_order)
-          VALUES (?, ?, ?, ?)
-        `).bind(id(), surveyId, options[index], index))
+      if (hasResponses) {
+        for (let index = currentOptions.length; index < options.length; index++) {
+          statements.push(env.DB.prepare(`
+            INSERT INTO survey_options (id, survey_id, label, sort_order)
+            VALUES (?, ?, ?, ?)
+          `).bind(id(), surveyId, options[index], index))
+        }
+      } else {
+        statements.push(
+          env.DB.prepare("DELETE FROM survey_options WHERE survey_id = ?").bind(surveyId),
+        )
+        for (let index = 0; index < options.length; index++) {
+          statements.push(env.DB.prepare(`
+            INSERT INTO survey_options (id, survey_id, label, sort_order)
+            VALUES (?, ?, ?, ?)
+          `).bind(id(), surveyId, options[index], index))
+        }
       }
     }
 

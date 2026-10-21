@@ -23,20 +23,13 @@
 import { ref } from 'vue'
 import AppMenuButton from '~/components/layout/AppMenuButton.vue'
 import AppNavigationDrawer from '~/components/layout/AppNavigationDrawer.vue'
-import AppBottomNavigation from '~/components/layout/AppBottomNavigation.vue';
+import AppBottomNavigation from '~/components/layout/AppBottomNavigation.vue'
 
 
 const drawerOpen = ref(false)
 </script>
 
 <style scoped>
-.back-button-wrapper {
-  position: fixed;
-  top: 8px;
-  left: 56px;
-  z-index: 1000;
-}
-
 .app-main {
   padding-top: 56px;
   padding-bottom: 56px;
