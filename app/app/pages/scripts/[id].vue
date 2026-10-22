@@ -2,12 +2,7 @@
     <div class="script-editor">
       <header class="editor-header">
         <div class="header-left">
-          <v-btn
-            icon="mdi-arrow-left"
-            variant="text"
-            aria-label="戻る"
-            @click="navigateTo('/scripts')"
-          />
+          <LayoutBackButton />
   
           <div class="header-title">
             <div class="title-row">
@@ -784,6 +779,8 @@
 </template>
   
   <script setup lang="ts">
+import { L } from 'vue-router/dist/index-D7ja2BKs.js'
+
   const { apiFetch } = useApi()
   const { confirm } = useConfirmDialog()
   const snackbar = useSnackbar()

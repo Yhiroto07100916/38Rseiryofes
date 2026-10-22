@@ -2,7 +2,7 @@
 <template>
   <v-container fluid class="pa-4 pa-sm-6 survey-page">
     <div class="d-flex align-center mb-6">
-      <BackButton />
+      <LayoutBackButton />
       <div class="ml-2">
         <h1 class="text-h5 font-weight-bold">アンケート・投票</h1>
         <p class="text-body-2 text-medium-emphasis mt-1">

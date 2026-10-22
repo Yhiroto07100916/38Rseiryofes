@@ -1,7 +1,7 @@
 <template>
   <v-container fluid class="pa-4 pa-sm-6">
     <div class="d-flex align-center mb-6">
-      <BackButton />
+      <LayoutBackButton />
       <div>
         <h1 class="text-h5 font-weight-bold">意思決定記録</h1>
         <p class="text-body-2 text-medium-emphasis mt-1">
