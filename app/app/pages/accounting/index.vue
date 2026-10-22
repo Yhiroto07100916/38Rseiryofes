@@ -1,6 +1,6 @@
 <template>
   <v-container class="py-6" style="max-width: 1200px">
-    <BackButton />
+    <LayoutBackButton />
 
     <div class="d-flex align-center justify-space-between flex-wrap ga-3 mb-5">
       <div>

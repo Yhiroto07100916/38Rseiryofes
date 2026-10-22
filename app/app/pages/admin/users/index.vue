@@ -1,7 +1,7 @@
 <template>
   <v-container class="admin-users-page py-8">
     <div class="d-flex align-center mb-6">
-      <BackButton />
+      <LayoutBackButton />
     </div>
     <div class="page-header">
       <div>
