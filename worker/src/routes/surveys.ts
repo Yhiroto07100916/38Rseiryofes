@@ -434,7 +434,12 @@ export async function handleSurveys(
       WHERE o.survey_id = ?
       GROUP BY o.id, o.label, o.sort_order
       ORDER BY o.sort_order, o.id
-    `).bind(surveyId, surveyId).all()
+    `).bind(surveyId, surveyId).all<{
+      id: string
+      label: string
+      sort_order: number
+      count: number
+    }>()
 
     const votersByOption = new Map<string, string[]>()
 
