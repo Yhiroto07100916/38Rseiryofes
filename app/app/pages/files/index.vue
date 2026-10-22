@@ -1,9 +1,8 @@
 <template>
   <v-container class="py-6" style="max-width: 1200px">
-    <div class="d-flex align-center mb-6">
-      <BackButton />
-    </div>
-    <div class="d-flex flex-wrap align-center mb-6 ga-3">
+    <div class="d-flex align-center mb-6 ga-3">
+      <LayoutBackButton />
+
       <div class="flex-grow-1" style="min-width: 0">
         <h1
           class="text-h5 font-weight-bold text-no-wrap"

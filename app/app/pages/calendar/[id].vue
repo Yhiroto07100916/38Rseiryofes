@@ -1,12 +1,10 @@
 <template>
   <v-container class="calendar-event-detail-page py-4">
-    <div class="d-flex align-center mb-4">
-      <BackButton />
+    <div class="d-flex align-center mb-6">
+      <LayoutBackButton />
+    
 
       <div class="ml-2">
-        <div class="text-body-2 text-medium-emphasis">
-          カレンダー
-        </div>
         <h1 class="text-h5 font-weight-bold">
           予定詳細
         </h1>

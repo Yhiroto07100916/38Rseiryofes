@@ -1,12 +1,7 @@
 <template>
   <v-container class="py-6" style="max-width: 1000px">
     <div class="d-flex align-center flex-wrap ga-3 mb-6">
-      <v-btn
-        icon="mdi-arrow-left"
-        variant="text"
-        aria-label="ファイル管理へ戻る"
-        to="/files"
-      />
+      <LayoutBackButton />
       <div class="flex-grow-1">
         <h1 class="text-h5 font-weight-bold">カテゴリ管理</h1>
         <p class="text-body-2 text-medium-emphasis mt-1">
