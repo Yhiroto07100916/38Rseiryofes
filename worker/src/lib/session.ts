@@ -28,7 +28,12 @@ function parseCookies(request: Request): Record<string, string> {
     const value = part.slice(index + 1).trim()
 
     if (name) {
-      cookies[name] = decodeURIComponent(value)
+      try {
+        cookies[name] = decodeURIComponent(value)
+      } catch {
+        // Ignore malformed cookie values rather than failing the whole request.
+        continue
+      }
     }
   }
 

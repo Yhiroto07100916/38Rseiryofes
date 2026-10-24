@@ -1,6 +1,18 @@
 {
   "devDependencies": {
+    "concurrently": "^10.0.6",
     "typescript": "^7.0.2",
     "vue-tsc": "^3.3.12"
+  },
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "scripts": {
+    "setup:deps": "npm ci && npm ci --prefix app && npm ci --prefix worker",
+    "dev:app": "npm --prefix app run dev",
+    "dev:worker": "npm --prefix worker run dev",
+    "db:migrate:local": "npm --prefix worker run db:migrate:local",
+    "dev": "concurrently -k -n APP,API -c blue,green \"npm run dev:app\" \"npm run dev:worker\"",
+    "dev:setup": "npm run setup:deps && npm run db:migrate:local && npm run dev"
   }
 }
