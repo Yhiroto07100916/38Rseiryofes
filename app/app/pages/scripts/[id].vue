@@ -779,7 +779,6 @@
 </template>
   
   <script setup lang="ts">
-import { L } from 'vue-router/dist/index-D7ja2BKs.js'
 
   const { apiFetch } = useApi()
   const { confirm } = useConfirmDialog()
