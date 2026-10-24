@@ -89,77 +89,6 @@ async function isAdmin(
   return Boolean(result)
 }
 
-async function getPermissionEffect(
-  env: Env,
-  userId: string,
-  permissionKey: string,
-): Promise<PermissionEffect | null> {
-  const result = await env.DB
-    .prepare(`
-      SELECT effect
-      FROM user_permissions up
-      INNER JOIN permissions p
-        ON p.id = up.permission_id
-      WHERE up.user_id = ?
-        AND p.key = ?
-      LIMIT 1
-    `)
-    .bind(userId, permissionKey)
-    .first<{ effect: PermissionEffect }>()
-
-  if (result) {
-    return result.effect
-  }
-
-  const roleResult = await env.DB
-    .prepare(`
-      SELECT
-        CASE
-          WHEN MAX(CASE WHEN rp.effect = 'deny' THEN 1 ELSE 0 END) = 1
-            THEN 'deny'
-          WHEN MAX(CASE WHEN rp.effect = 'allow' THEN 1 ELSE 0 END) = 1
-            THEN 'allow'
-          ELSE NULL
-        END AS effect
-      FROM user_roles ur
-      INNER JOIN role_permissions rp
-        ON rp.role_id = ur.role_id
-      INNER JOIN permissions p
-        ON p.id = rp.permission_id
-      WHERE ur.user_id = ?
-        AND p.key = ?
-    `)
-    .bind(userId, permissionKey)
-    .first<{ effect: PermissionEffect | null }>()
-
-  if (roleResult?.effect) {
-    return roleResult.effect
-  }
-
-  const accountRoleResult = await env.DB
-    .prepare(`
-      SELECT
-        CASE
-          WHEN MAX(CASE WHEN arp.effect = 'deny' THEN 1 ELSE 0 END) = 1
-            THEN 'deny'
-          WHEN MAX(CASE WHEN arp.effect = 'allow' THEN 1 ELSE 0 END) = 1
-            THEN 'allow'
-          ELSE NULL
-        END AS effect
-      FROM user_account_roles uar
-      INNER JOIN account_role_permissions arp
-        ON arp.account_role_id = uar.account_role_id
-      INNER JOIN permissions p
-        ON p.id = arp.permission_id
-      WHERE uar.user_id = ?
-        AND p.key = ?
-    `)
-    .bind(userId, permissionKey)
-    .first<{ effect: PermissionEffect | null }>()
-
-  return accountRoleResult?.effect ?? null
-}
-
 export async function getUserPermissions(
   env: Env,
   userId: string,
@@ -294,17 +223,93 @@ export async function hasPermission(
   userId: string,
   permissionKey: string,
 ): Promise<boolean> {
-  if (await isAdmin(env, userId)) {
-    return true
-  }
+  const result = await env.DB
+    .prepare(`
+      WITH admin_check AS (
+        SELECT EXISTS (
+          SELECT 1
+          FROM user_account_roles uar
+          INNER JOIN account_roles ar
+            ON ar.id = uar.account_role_id
+          WHERE uar.user_id = ?
+            AND ar.name = 'admin'
+        ) AS is_admin
+      ),
 
-  const effect = await getPermissionEffect(
-    env,
-    userId,
-    permissionKey,
-  )
+      user_effect AS (
+        SELECT up.effect
+        FROM user_permissions up
+        INNER JOIN permissions p
+          ON p.id = up.permission_id
+        WHERE up.user_id = ?
+          AND p.key = ?
+        LIMIT 1
+      ),
 
-  return effect === "allow"
+      role_effect AS (
+        SELECT
+          CASE
+            WHEN MAX(
+              CASE WHEN rp.effect = 'deny' THEN 1 ELSE 0 END
+            ) = 1 THEN 'deny'
+            WHEN MAX(
+              CASE WHEN rp.effect = 'allow' THEN 1 ELSE 0 END
+            ) = 1 THEN 'allow'
+            ELSE NULL
+          END AS effect
+        FROM user_roles ur
+        INNER JOIN role_permissions rp
+          ON rp.role_id = ur.role_id
+        INNER JOIN permissions p
+          ON p.id = rp.permission_id
+        WHERE ur.user_id = ?
+          AND p.key = ?
+      ),
+
+      account_role_effect AS (
+        SELECT
+          CASE
+            WHEN MAX(
+              CASE WHEN arp.effect = 'deny' THEN 1 ELSE 0 END
+            ) = 1 THEN 'deny'
+            WHEN MAX(
+              CASE WHEN arp.effect = 'allow' THEN 1 ELSE 0 END
+            ) = 1 THEN 'allow'
+            ELSE NULL
+          END AS effect
+        FROM user_account_roles uar
+        INNER JOIN account_role_permissions arp
+          ON arp.account_role_id = uar.account_role_id
+        INNER JOIN permissions p
+          ON p.id = arp.permission_id
+        WHERE uar.user_id = ?
+          AND p.key = ?
+      )
+
+      SELECT CASE
+        WHEN admin_check.is_admin = 1 THEN 1
+        WHEN user_effect.effect IS NOT NULL
+          THEN user_effect.effect = 'allow'
+        WHEN role_effect.effect IS NOT NULL
+          THEN role_effect.effect = 'allow'
+        WHEN account_role_effect.effect IS NOT NULL
+          THEN account_role_effect.effect = 'allow'
+        ELSE 0
+      END AS allowed
+      FROM admin_check
+      LEFT JOIN user_effect ON 1 = 1
+      LEFT JOIN role_effect ON 1 = 1
+      LEFT JOIN account_role_effect ON 1 = 1
+    `)
+    .bind(
+      userId,
+      userId, permissionKey,
+      userId, permissionKey,
+      userId, permissionKey,
+    )
+    .first<{ allowed: number }>()
+
+  return result?.allowed === 1
 }
 
 export async function requirePermission(

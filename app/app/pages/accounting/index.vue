@@ -136,6 +136,7 @@
                 />
 
                 <v-btn
+                  v-if="canExport"
                   variant="outlined"
                   prepend-icon="mdi-file-delimited-outline"
                   @click="exportReceiptsCsv"
@@ -231,6 +232,7 @@
 
                   <div class="d-flex justify-end mt-2">
                     <v-btn
+                      v-if="canExport"
                       variant="outlined"
                       prepend-icon="mdi-file-pdf-box"
                       @click="printAccountingReport"
@@ -1154,6 +1156,7 @@ const budgetForm = reactive({
 })
 
 const canView = computed(() => auth.hasPermission('accounting.view'))
+const canExport = computed(() => auth.hasPermission('accounting.export'))
 const canCreate = computed(() => auth.hasPermission('accounting.create'))
 const canEdit = computed(() => auth.hasPermission('accounting.edit'))
 const canApprove = computed(() => auth.hasPermission('accounting.approve'))
@@ -1362,6 +1365,11 @@ const pendingAdvanceByUser = computed(() => {
 })
 
 const printAccountingReport = () => {
+  if (!canExport.value) {
+    errorMessage.value = '会計書類の出力権限がありません。'
+    return
+  }
+
   const range = aggregationRange.value
 
   const periodLabel =
@@ -1928,6 +1936,11 @@ const downloadCsv = (filename: string, rows: string[][]) => {
 }
 
 const exportReceiptsCsv = () => {
+  if (!canExport.value) {
+    errorMessage.value = '会計書類の出力権限がありません。'
+    return
+  }
+
   const rows: string[][] = [
     [
       '購入日',
