@@ -381,6 +381,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatJstDateTimeLocal, jstDateTimeLocalToIso } from '~/utils/jst'
 import { onMounted, ref } from 'vue'
 import { useApi } from '~/composables/useApi'
 import { useSnackbar } from '~/composables/useSnackbar'
@@ -479,10 +480,11 @@ const emptyForm = (): DecisionForm => ({
 const form = ref<DecisionForm>(emptyForm())
 
 function toLocalDateTime(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const pad = (number: number) => String(number).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  try {
+    return formatJstDateTimeLocal(value)
+  } catch {
+    return ''
+  }
 }
 
 function formatDate(value: string | null): string {
@@ -490,6 +492,7 @@ function formatDate(value: string | null): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -501,6 +504,7 @@ function formatDateTime(value: string | null): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -574,8 +578,10 @@ async function saveDecision() {
     return
   }
 
-  const timestamp = new Date(form.value.decided_at)
-  if (Number.isNaN(timestamp.getTime())) {
+  let decidedAt: string
+  try {
+    decidedAt = jstDateTimeLocalToIso(form.value.decided_at)
+  } catch {
     showMessage('決定日時が正しくありません。', 'error')
     return
   }
@@ -585,7 +591,7 @@ async function saveDecision() {
     title: form.value.title.trim(),
     content: form.value.content.trim(),
     rationale: form.value.rationale.trim() || null,
-    decided_at: timestamp.toISOString(),
+    decided_at: decidedAt,
     decision_maker: form.value.decision_maker.trim() || null,
     meeting_name: form.value.meeting_name.trim() || null,
     survey_id: form.value.survey_id.trim() || null,

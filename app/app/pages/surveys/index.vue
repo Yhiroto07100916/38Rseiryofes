@@ -473,6 +473,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatJstDateTimeLocal, jstDateTimeLocalToIso } from '~/utils/jst'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useApi } from '~/composables/useApi'
 import { useAuthStore } from '~/stores/auth'
@@ -626,6 +627,7 @@ function formatDate(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -636,14 +638,15 @@ function formatDate(value: string) {
 
 function toLocalInput(value: string | null) {
   if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-  return local.toISOString().slice(0, 16)
+  try {
+    return formatJstDateTimeLocal(value)
+  } catch {
+    return ''
+  }
 }
 
 function toIso(value: string) {
-  return value ? new Date(value).toISOString() : null
+  return value ? jstDateTimeLocalToIso(value) : null
 }
 
 function canRespond(survey: Survey) {

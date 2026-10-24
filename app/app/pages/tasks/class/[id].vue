@@ -548,6 +548,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatJstDateTimeLocal, jstDateTimeLocalToIso } from '~/utils/jst'
 import {
   computed,
   onMounted,
@@ -935,7 +936,7 @@ const saveEdit = async () => {
     body.status = editForm.value.status
     body.priority = editForm.value.priority
     body.due_at = editForm.value.dueAt
-      ? new Date(editForm.value.dueAt).toISOString()
+      ? jstDateTimeLocalToIso(editForm.value.dueAt)
       : null
   }
 
@@ -1213,23 +1214,11 @@ const toDatetimeLocal = (
     return ''
   }
 
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
+  try {
+    return formatJstDateTimeLocal(value)
+  } catch {
     return ''
   }
-
-  const offset =
-    date.getTimezoneOffset()
-
-  const localDate =
-    new Date(
-      date.getTime() - offset * 60 * 1000,
-    )
-
-  return localDate
-    .toISOString()
-    .slice(0, 16)
 }
 
 const formatDueDate = (value: string) => {
@@ -1242,6 +1231,7 @@ const formatDueDate = (value: string) => {
   return new Intl.DateTimeFormat(
     'ja-JP',
     {
+      timeZone: 'Asia/Tokyo',
       year: 'numeric',
       month: 'numeric',
       day: 'numeric',
@@ -1261,6 +1251,7 @@ const formatCommentDate = (value: string) => {
   return new Intl.DateTimeFormat(
     'ja-JP',
     {
+      timeZone: 'Asia/Tokyo',
       month: 'numeric',
       day: 'numeric',
       hour: '2-digit',

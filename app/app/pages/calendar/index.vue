@@ -389,6 +389,12 @@
 </template>
 
 <script setup lang="ts">
+import {
+  formatJstDateTimeLocal,
+  jstDateKey,
+  jstDateTimeLocalToIso,
+} from '~/utils/jst'
+
 definePageMeta({
   middleware: 'auth',
 })
@@ -412,7 +418,7 @@ const {
 const { mobile } = useDisplay()
 const router = useRouter()
 
-const now = new Date()
+const now = parseDateKey(jstDateKey(new Date()))
 
 const currentDate = ref(
   new Date(now.getFullYear(), now.getMonth(), 1),
@@ -495,10 +501,11 @@ const formatSelectedDate = computed(() => {
   const date = parseDateKey(selectedDate.value)
 
   return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
     month: 'long',
     day: 'numeric',
     weekday: 'long',
-  }).format(date)
+  }).format(new Date(`${selectedDate.value}T12:00:00+09:00`))
 })
 
 function formatDateKey(date: Date): string {
@@ -536,15 +543,22 @@ function getMonthRange() {
 
   to.setDate(to.getDate() + 7)
 
+  const fromKey = formatDateKey(from)
+  const toKey = formatDateKey(to)
+
   return {
-    from: from.toISOString(),
-    to: to.toISOString(),
+    from: jstDateTimeLocalToIso(`${fromKey}T00:00`),
+    to: jstDateTimeLocalToIso(`${toKey}T00:00`),
   }
 }
 
 function getEventsForDate(dateKey: string): CalendarEvent[] {
-  const dayStart = new Date(`${dateKey}T00:00:00`)
-  const dayEnd = new Date(`${dateKey}T23:59:59.999`)
+  const dayStart = new Date(jstDateTimeLocalToIso(`${dateKey}T00:00`))
+  const nextDate = parseDateKey(dateKey)
+  nextDate.setDate(nextDate.getDate() + 1)
+  const dayEnd = new Date(
+    new Date(jstDateTimeLocalToIso(`${formatDateKey(nextDate)}T00:00`)).getTime() - 1,
+  )
 
   return events.value
     .filter((event) => {
@@ -562,8 +576,12 @@ function getEventsForDate(dateKey: string): CalendarEvent[] {
 }
 
 function getTaskDeadlinesForDate(dateKey: string): Task[] {
-  const dayStart = new Date(`${dateKey}T00:00:00`)
-  const dayEnd = new Date(`${dateKey}T23:59:59.999`)
+  const dayStart = new Date(jstDateTimeLocalToIso(`${dateKey}T00:00`))
+  const nextDate = parseDateKey(dateKey)
+  nextDate.setDate(nextDate.getDate() + 1)
+  const dayEnd = new Date(
+    new Date(jstDateTimeLocalToIso(`${formatDateKey(nextDate)}T00:00`)).getTime() - 1,
+  )
 
   return tasks.value
     .filter((task) => {
@@ -587,6 +605,7 @@ function getTaskDeadlinesForDate(dateKey: string): Task[] {
 
 function formatTaskDeadline(value: string): string {
   return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
     hour: 'numeric',
     minute: '2-digit',
   }).format(new Date(value))
@@ -691,29 +710,17 @@ function selectDate(dateKey: string) {
   }
 }
 
-function toDateTimeLocal(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-
-  return `${year}-${month}-${day}T${hours}:${minutes}`
+function toDateTimeLocal(value: string | Date): string {
+  return formatJstDateTimeLocal(value)
 }
 
 function openCreateDialog(dateKey: string) {
   editingEvent.value = null
 
-  const date = parseDateKey(dateKey)
-  date.setHours(18, 0, 0, 0)
-
-  const end = new Date(date)
-  end.setHours(19, 0, 0, 0)
-
   eventForm.title = ''
   eventForm.description = ''
-  eventForm.starts_at = toDateTimeLocal(date)
-  eventForm.ends_at = toDateTimeLocal(end)
+  eventForm.starts_at = `${dateKey}T18:00`
+  eventForm.ends_at = `${dateKey}T19:00`
   eventForm.is_all_day = false
   eventForm.location = ''
   eventForm.category_id = categories.value[0]?.id ?? ''
@@ -726,7 +733,7 @@ function openEvent(event: CalendarEvent) {
 }
 
 function toISOStringFromLocal(value: string): string {
-  return new Date(value).toISOString()
+  return jstDateTimeLocalToIso(value)
 }
 
 async function saveEvent() {
@@ -788,6 +795,7 @@ async function deleteEvent() {
 
 function formatEventTime(event: CalendarEvent): string {
   return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(event.starts_at))
@@ -801,6 +809,7 @@ function formatEventRange(event: CalendarEvent): string {
   const start = new Date(event.starts_at)
 
   const startText = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(start)
@@ -810,6 +819,7 @@ function formatEventRange(event: CalendarEvent): string {
   }
 
   const endText = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(event.ends_at))

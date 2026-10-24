@@ -176,6 +176,7 @@
 </template>
 
 <script setup lang="ts">
+import { jstDateTimeLocalToIso } from '~/utils/jst'
 import { onMounted, ref } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
 import { useSnackbar } from '~/composables/useSnackbar'
@@ -387,8 +388,9 @@ const createTask = async () => {
           scope: form.value.scope,
           status: form.value.status,
           priority: form.value.priority,
-          due_at:
-            form.value.dueAt || null,
+          due_at: form.value.dueAt
+            ? jstDateTimeLocalToIso(form.value.dueAt)
+            : null,
           assignee_user_ids:
             form.value.assigneeUserIds,
           assignee_role_ids:

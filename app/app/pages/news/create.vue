@@ -298,6 +298,7 @@ const formatEventDate = (event: CalendarEvent) => {
   }
 
   const date = new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -308,6 +309,7 @@ const formatEventDate = (event: CalendarEvent) => {
   }
 
   const startTime = new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(start)
@@ -323,12 +325,14 @@ const formatEventDate = (event: CalendarEvent) => {
   }
 
   const endDate = new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
   }).format(end)
 
   const endTime = new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(end)
@@ -448,7 +452,7 @@ const loadTasks = async () => {
           getTaskStatusLabel(task.status),
           getTaskPriorityLabel(task.priority),
           task.due_at
-            ? `期限 ${new Intl.DateTimeFormat('ja-JP').format(
+            ? `期限 ${new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo' }).format(
                 new Date(task.due_at),
               )}`
             : null,

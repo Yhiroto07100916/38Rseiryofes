@@ -218,6 +218,7 @@ const openScript = (id: string) => {
 const formatDate = (value: string) => {
   if (!value) return ''
   return new Date(value.replace(' ', 'T') + 'Z').toLocaleString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
     month: 'numeric',
     day: 'numeric',
     hour: 'numeric',

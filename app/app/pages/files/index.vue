@@ -590,7 +590,7 @@ const formatDate = (value: string) => {
   const date = new Date(value)
   return Number.isNaN(date.getTime())
     ? value
-    : date.toLocaleString('ja-JP')
+    : date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
 }
 
 const fileIcon = (contentType: string) => {

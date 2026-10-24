@@ -738,6 +738,7 @@ const formatDate = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -752,6 +753,7 @@ const formatMonthDay = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     month: 'numeric',
     day: 'numeric',
   }).format(date)
@@ -765,6 +767,7 @@ const formatTime = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(date)
