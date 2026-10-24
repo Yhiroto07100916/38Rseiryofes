@@ -3,3 +3,13 @@ app/node_modules/
 app/.nuxt/
 app/.output/
 app/.env
+
+# Dependencies
+node_modules/
+
+# Local environment variables
+worker/.env
+worker/.dev.vars
+
+# Machine-specific Cloudflare test configuration
+worker/wrangler.test.jsonc
