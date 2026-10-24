@@ -3,7 +3,7 @@ import { hasPermission, requireAuth } from "../lib/authz"
 type Env = {
   DB: D1Database
   FILES_BUCKET: R2Bucket
-  AI: Ai
+  AI?: Ai
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024
@@ -51,6 +51,13 @@ export async function handleReceiptOcr(
 
   if (!(await hasPermission(env, auth.user.id, "accounting.create"))) {
     return json({ message: "会計登録権限がありません" }, 403)
+  }
+
+  if (!env.AI) {
+    return json(
+      { message: "ローカル開発環境ではレシートOCRを利用できません。手入力してください。" },
+      503,
+    )
   }
 
   try {
