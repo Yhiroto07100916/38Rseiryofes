@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "38r-seiryofes-local",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-16",
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "38r-festival-db",
+      "database_id": "3079b483-4140-45f2-b444-0661cb334cef",
+      "migrations_dir": "../migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES_BUCKET",
+      "bucket_name": "38r-seiryofes-files"
+    }
+  ]
+}
