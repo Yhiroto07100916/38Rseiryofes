@@ -23,6 +23,8 @@ function getCorsHeaders(request: Request): Headers {
   if (
     origin === "http://localhost:3000" ||
     origin === "http://127.0.0.1:3000" ||
+    origin === "http://localhost:3001" ||
+    origin === "http://127.0.0.1:3001" ||
     origin === "https://5d3f213d.38r-seiryofes.pages.dev" ||
     origin === "https://38r-seiryofes.pages.dev" ||
     origin === "https://production.38r-seiryofes.pages.dev" ||
