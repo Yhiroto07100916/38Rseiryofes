@@ -238,20 +238,9 @@
               class="mt-4"
             />
 
-            <v-text-field
-              v-model="form.starts_at"
-              label="開始日時（任意）"
-              type="datetime-local"
-              clearable
-              class="mt-2"
-            />
+            <CommonJstDateTimePicker v-model="form.starts_at" label="開始日時（任意）" class="mt-2" :clearable="true" />
 
-            <v-text-field
-              v-model="form.deadline_at"
-              label="回答締切（任意）"
-              type="datetime-local"
-              clearable
-            />
+            <CommonJstDateTimePicker v-model="form.deadline_at" label="回答締切（任意）" :clearable="true" />
 
             <v-alert
               v-if="editingId && existingResponseCount > 0"

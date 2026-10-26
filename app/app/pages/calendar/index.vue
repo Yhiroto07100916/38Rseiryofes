@@ -82,7 +82,7 @@
           @click="selectDate(day.key)"
         >
           <div class="day-number">
-            <span>{{ day.date.getDate() }}</span>
+            <span>{{ day.date.getUTCDate() }}</span>
           </div>
 
           <div class="day-events">
@@ -293,21 +293,9 @@
             class="mt-1"
           />
 
-          <v-text-field
-            v-model="eventForm.starts_at"
-            label="開始"
-            type="datetime-local"
-            variant="outlined"
-            class="mt-2"
-          />
+          <CommonJstDateTimePicker v-model="eventForm.starts_at" label="開始" class="mt-2" />
 
-          <v-text-field
-            v-model="eventForm.ends_at"
-            label="終了"
-            type="datetime-local"
-            variant="outlined"
-            class="mt-2"
-          />
+          <CommonJstDateTimePicker v-model="eventForm.ends_at" label="終了" class="mt-2" />
 
           <v-text-field
             v-model="eventForm.location"
@@ -421,7 +409,7 @@ const router = useRouter()
 const now = parseDateKey(jstDateKey(new Date()))
 
 const currentDate = ref(
-  new Date(now.getFullYear(), now.getMonth(), 1),
+  new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
 )
 
 const selectedDate = ref(formatDateKey(now))
@@ -455,31 +443,31 @@ const weekDays = [
   { label: '土', class: 'saturday' },
 ]
 
-const currentYear = computed(() => currentDate.value.getFullYear())
-const currentMonth = computed(() => currentDate.value.getMonth())
+const currentYear = computed(() => currentDate.value.getUTCFullYear())
+const currentMonth = computed(() => currentDate.value.getUTCMonth())
 
 const calendarDays = computed(() => {
-  const firstDay = new Date(
+  const firstDay = new Date(Date.UTC(
     currentYear.value,
     currentMonth.value,
     1,
-  )
+  ))
 
   const start = new Date(firstDay)
-  start.setDate(start.getDate() - start.getDay())
+  start.setUTCDate(start.getUTCDate() - start.getUTCDay())
 
   const days = []
 
   for (let i = 0; i < 42; i++) {
     const date = new Date(start)
-    date.setDate(start.getDate() + i)
+    date.setUTCDate(start.getUTCDate() + i)
 
     const key = formatDateKey(date)
 
     days.push({
       date,
       key,
-      isCurrentMonth: date.getMonth() === currentMonth.value,
+      isCurrentMonth: date.getUTCMonth() === currentMonth.value,
       isToday: key === formatDateKey(now),
       events: getEventsForDate(key),
       taskDeadlines: getTaskDeadlinesForDate(key),
@@ -509,53 +497,61 @@ const formatSelectedDate = computed(() => {
 })
 
 function formatDateKey(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
+  const year = date.getUTCFullYear()
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(date.getUTCDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
 }
 
 function parseDateKey(value: string): Date {
-  const parts = value.split('-')
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
 
-  const year = Number(parts[0])
-  const month = Number(parts[1])
-  const day = Number(parts[2])
+  if (!match) {
+    throw new Error('Invalid date key')
+  }
 
-  return new Date(year, month - 1, day)
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const date = new Date(Date.UTC(year, month - 1, day))
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    throw new Error('Invalid calendar date')
+  }
+
+  return date
 }
 
 function getMonthRange() {
-  const from = new Date(
+  const from = new Date(Date.UTC(
     currentYear.value,
     currentMonth.value,
     1,
-  )
+  ))
+  from.setUTCDate(from.getUTCDate() - 7)
 
-  from.setDate(from.getDate() - 7)
-
-  const to = new Date(
+  const to = new Date(Date.UTC(
     currentYear.value,
     currentMonth.value + 1,
     0,
-  )
-
-  to.setDate(to.getDate() + 7)
-
-  const fromKey = formatDateKey(from)
-  const toKey = formatDateKey(to)
+  ))
+  to.setUTCDate(to.getUTCDate() + 7)
 
   return {
-    from: jstDateTimeLocalToIso(`${fromKey}T00:00`),
-    to: jstDateTimeLocalToIso(`${toKey}T00:00`),
+    from: jstDateTimeLocalToIso(`${formatDateKey(from)}T00:00`),
+    to: jstDateTimeLocalToIso(`${formatDateKey(to)}T00:00`),
   }
 }
 
 function getEventsForDate(dateKey: string): CalendarEvent[] {
   const dayStart = new Date(jstDateTimeLocalToIso(`${dateKey}T00:00`))
   const nextDate = parseDateKey(dateKey)
-  nextDate.setDate(nextDate.getDate() + 1)
+  nextDate.setUTCDate(nextDate.getUTCDate() + 1)
   const dayEnd = new Date(
     new Date(jstDateTimeLocalToIso(`${formatDateKey(nextDate)}T00:00`)).getTime() - 1,
   )
@@ -578,7 +574,7 @@ function getEventsForDate(dateKey: string): CalendarEvent[] {
 function getTaskDeadlinesForDate(dateKey: string): Task[] {
   const dayStart = new Date(jstDateTimeLocalToIso(`${dateKey}T00:00`))
   const nextDate = parseDateKey(dateKey)
-  nextDate.setDate(nextDate.getDate() + 1)
+  nextDate.setUTCDate(nextDate.getUTCDate() + 1)
   const dayEnd = new Date(
     new Date(jstDateTimeLocalToIso(`${formatDateKey(nextDate)}T00:00`)).getTime() - 1,
   )
@@ -663,31 +659,26 @@ async function loadTasks() {
 }
 
 function changeMonth(offset: number) {
-  currentDate.value = new Date(
+  const newMonthDate = new Date(Date.UTC(
     currentYear.value,
     currentMonth.value + offset,
     1,
-  )
+  ))
 
-  const newMonthDate = new Date(
-    currentYear.value,
-    currentMonth.value + offset,
-    1,
-  )
-
+  currentDate.value = newMonthDate
   selectedDate.value = formatDateKey(newMonthDate)
 
   loadEvents()
 }
 
 function goToday() {
-  const today = new Date()
+  const today = parseDateKey(jstDateKey(new Date()))
 
-  currentDate.value = new Date(
-    today.getFullYear(),
-    today.getMonth(),
+  currentDate.value = new Date(Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
     1,
-  )
+  ))
 
   selectedDate.value = formatDateKey(today)
 
@@ -699,12 +690,13 @@ function selectDate(dateKey: string) {
 
   const date = parseDateKey(dateKey)
 
-  if (date.getMonth() !== currentMonth.value) {
-    currentDate.value = new Date(
-      date.getFullYear(),
-      date.getMonth(),
+  if (date.getUTCMonth() !== currentMonth.value ||
+      date.getUTCFullYear() !== currentYear.value) {
+    currentDate.value = new Date(Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
       1,
-    )
+    ))
 
     loadEvents()
   }

@@ -73,13 +73,7 @@
           </v-col>
         </v-row>
 
-        <v-text-field
-          v-model="form.dueAt"
-          label="期限"
-          type="datetime-local"
-          variant="outlined"
-          class="mt-2"
-        />
+        <CommonJstDateTimePicker v-model="form.dueAt" label="期限" class="mt-2" />
 
         <v-divider class="my-6" />
 
@@ -176,7 +170,7 @@
 </template>
 
 <script setup lang="ts">
-import { jstDateTimeLocalToIso } from '~/utils/jst'
+import { jstDateKey, jstDateTimeLocalToIso } from '~/utils/jst'
 import { onMounted, ref } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
 import { useSnackbar } from '~/composables/useSnackbar'
@@ -327,14 +321,15 @@ const loadLinkOptions = async () => {
       calendarEventsLoading.value = true
       try {
         const now = new Date()
-        const from = new Date(now)
-        from.setFullYear(from.getFullYear() - 1)
-        const to = new Date(now)
-        to.setFullYear(to.getFullYear() + 2)
+        const [year, month, day] = jstDateKey(now).split('-').map(Number)
+        const from = new Date(Date.UTC(year - 1, month - 1, day))
+        const to = new Date(Date.UTC(year + 2, month - 1, day))
+        const fromDateKey = jstDateKey(from)
+        const toDateKey = jstDateKey(to)
 
         const response = await useApi().getCalendarEvents(
-          from.toISOString().slice(0, 10),
-          to.toISOString().slice(0, 10),
+          jstDateTimeLocalToIso(`${fromDateKey}T00:00`),
+          jstDateTimeLocalToIso(`${toDateKey}T00:00`),
         )
         calendarEventItems.value = response.events
       } catch (error) {

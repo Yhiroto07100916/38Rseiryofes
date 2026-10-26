@@ -168,14 +168,7 @@
               variant="outlined"
               class="mb-2"
             />
-            <v-text-field
-              v-model="form.decided_at"
-              label="決定日時"
-              type="datetime-local"
-              required
-              variant="outlined"
-              class="mb-2"
-            />
+            <CommonJstDateTimePicker v-model="form.decided_at" label="決定日時" class="mb-2" :required="true" />
             <v-text-field
               v-model="form.decision_maker"
               label="決定者（任意）"

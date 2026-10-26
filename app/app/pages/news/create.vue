@@ -244,6 +244,7 @@ import {
   useApi,
 } from '~/composables/useApi'
 import { useSnackbar } from '~/composables/useSnackbar'
+import { jstDateKey, jstDateTimeLocalToIso } from '~/utils/jst'
 import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({
@@ -349,26 +350,17 @@ const loadCalendarEvents = async () => {
 
   try {
     const now = new Date()
+    const [year, month] = jstDateKey(now).split('-').map(Number)
 
-    const fromDate = new Date(
-      now.getFullYear(),
-      now.getMonth() - 3,
-      1,
-    )
+    const fromDate = new Date(Date.UTC(year, month - 1 - 3, 1))
+    const toDate = new Date(Date.UTC(year, month - 1 + 4, 0))
 
-    const toDate = new Date(
-      now.getFullYear(),
-      now.getMonth() + 4,
-      0,
-      23,
-      59,
-      59,
-      999,
-    )
+    const fromDateKey = jstDateKey(fromDate)
+    const toDateKey = jstDateKey(toDate)
 
     const response = await getCalendarEvents(
-      fromDate.toISOString(),
-      toDate.toISOString(),
+      jstDateTimeLocalToIso(`${fromDateKey}T00:00`),
+      jstDateTimeLocalToIso(`${toDateKey}T23:59:59.999`),
     )
 
     calendarEvents.value = response.events

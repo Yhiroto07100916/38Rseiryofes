@@ -658,6 +658,7 @@ import {
   type Task,
   useApi,
 } from '~/composables/useApi'
+import { jstDateKey, jstDateTimeLocalToIso } from '~/utils/jst'
 import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({
@@ -821,18 +822,13 @@ const loadEvents = async () => {
 
   try {
     const now = new Date()
+    const [year, month, day] = jstDateKey(now).split('-').map(Number)
+    const toDate = new Date(Date.UTC(year, month - 1, day + 14))
 
     const from = now.toISOString()
-
-    const to = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() + 14,
-      23,
-      59,
-      59,
-      999,
-    ).toISOString()
+    const to = jstDateTimeLocalToIso(
+      `${jstDateKey(toDate)}T23:59:59.999`,
+    )
 
     const response = await getCalendarEvents(from, to)
 
@@ -893,18 +889,13 @@ const loadAttendance = async () => {
 
   try {
     const now = new Date()
+    const [year, month, day] = jstDateKey(now).split('-').map(Number)
+    const toDate = new Date(Date.UTC(year, month - 1, day + 14))
 
     const from = now.toISOString()
-
-    const to = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() + 14,
-      23,
-      59,
-      59,
-      999,
-    ).toISOString()
+    const to = jstDateTimeLocalToIso(
+      `${jstDateKey(toDate)}T23:59:59.999`,
+    )
 
     const response = await getCalendarEvents(from, to)
 
