@@ -15,6 +15,7 @@ import { handlePublicFiles } from "./routes/public-files"
 import { handleReceiptOcr } from "./routes/receipt-ocr"
 import { handleSurveys } from "./routes/surveys"
 import { handleDecisions } from "./routes/decisions"
+import { handleMinutes } from "./routes/minutes"
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -612,6 +613,27 @@ export default {
       }
     }
 
+
+    if (
+      url.pathname === "/api/minutes" ||
+      url.pathname.startsWith("/api/minutes/")
+    ) {
+      const path = url.pathname.slice("/api/minutes".length)
+      const pathParts = path.split("/").filter(Boolean)
+
+      try {
+        return withCors(
+          request,
+          await handleMinutes(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("Minutes API error:", error)
+        return withCors(
+          request,
+          Response.json({ error: "Internal Server Error" }, { status: 500 }),
+        )
+      }
+    }
 
     if (
       url.pathname === "/api/decisions" ||

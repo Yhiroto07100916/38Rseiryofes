@@ -1,0 +1,483 @@
+<template>
+  <v-container fluid class="pa-4 pa-sm-6">
+    <div class="d-flex align-center ga-3 mb-6">
+      <div class="flex-grow-1">
+        <h1 class="text-h5 font-weight-bold">議事録</h1>
+        <p class="text-body-2 text-medium-emphasis mt-1">
+          会議の内容を自由に書き留めます
+        </p>
+      </div>
+      <v-btn
+        v-if="auth.hasPermission('minutes.create')"
+        color="primary"
+        prepend-icon="mdi-plus"
+        :disabled="creating"
+        :loading="creating"
+        @click="createMinute"
+      >
+        新規作成
+      </v-btn>
+    </div>
+
+    <v-alert
+      v-if="!auth.hasPermission('minutes.view')"
+      type="warning"
+      variant="tonal"
+    >
+      議事録を閲覧する権限がありません。
+    </v-alert>
+
+    <template v-else>
+      <v-alert v-if="errorMessage" type="error" variant="tonal" class="mb-4">
+        {{ errorMessage }}
+      </v-alert>
+
+      <v-row>
+        <v-col cols="12" md="4" lg="3">
+          <v-card variant="outlined" rounded="xl">
+            <v-card-title class="text-subtitle-1">メモ一覧</v-card-title>
+            <v-text-field
+              v-model="searchQuery"
+              label="メモを検索"
+              placeholder="タイトル・本文を検索"
+              prepend-inner-icon="mdi-magnify"
+              variant="solo"
+              density="compact"
+              hide-details
+              clearable
+              class="px-3 py-2"
+            />
+            <v-divider />
+            <v-progress-linear v-if="loading" indeterminate />
+            <v-list v-if="minutes.length" density="comfortable">
+              <v-list-item
+                v-for="item in filteredMinutes"
+                :key="item.id"
+                :active="selectedId === item.id"
+                rounded="lg"
+                @click="selectMinute(item.id)"
+              >
+                <v-list-item-title class="text-wrap">
+                  {{ item.title }}
+                </v-list-item-title>
+                <v-list-item-subtitle>
+                  {{ formatDate(item.meeting_at) }}
+                </v-list-item-subtitle>
+                <template #append>
+                  <v-icon
+                    v-if="selectedId === item.id"
+                    icon="mdi-chevron-right"
+                  />
+                </template>
+              </v-list-item>
+            </v-list>
+            <v-card-text v-else-if="!loading" class="text-body-2 text-medium-emphasis">
+              議事録はまだありません。
+            </v-card-text>
+          </v-card>
+        </v-col>
+
+        <v-col cols="12" md="8" lg="9">
+          <v-card variant="outlined" rounded="xl">
+            <template v-if="currentMinute">
+              <v-card-text class="pa-4 pa-sm-6">
+                <v-text-field
+                  v-model="editor.title"
+                  label="会議名"
+                  placeholder="例：第3回 演劇準備会議"
+                  maxlength="200"
+                  variant="underlined"
+                  hide-details
+                  :readonly="!auth.hasPermission('minutes.edit')"
+                  @update:model-value="scheduleSave"
+                />
+
+                <div class="mt-4">
+                  <CommonJstDateTimePicker
+                    v-model="editor.meeting_at"
+                    label="会議日時"
+                    :required="true"
+                    :disabled="!auth.hasPermission('minutes.edit')"
+                    @update:model-value="scheduleSave"
+                  />
+                </div>
+
+                <v-text-field
+                  v-model="editor.location"
+                  label="場所（任意）"
+                  placeholder="例：教室"
+                  variant="underlined"
+                  hide-details
+                  class="mt-2"
+                  :readonly="!auth.hasPermission('minutes.edit')"
+                  @update:model-value="scheduleSave"
+                />
+
+                <div class="d-flex align-center flex-wrap ga-2 mt-6 mb-3">
+                  <div class="text-subtitle-1 font-weight-bold">会議メモ</div>
+                  <v-spacer />
+                  <v-chip
+                    size="small"
+                    variant="tonal"
+                    :color="saveStatus === '保存済み' ? 'success' : 'default'"
+                  >
+                    {{ saveStatus }}
+                  </v-chip>
+                </div>
+
+                <MinutesRichEditor
+                  v-model="editor.discussion"
+                  :readonly="!auth.hasPermission('minutes.edit')"
+                  placeholder="会議で話し合ったこと、決定事項、次回までの作業などを書き留めます。"
+                  @update:model-value="scheduleSave"
+                />
+
+                <p class="text-caption text-medium-emphasis mt-3">
+                  入力内容は自動保存されます。画面を閉じる前に「保存済み」と表示されていることを確認してください。
+                </p>
+
+                <div class="d-flex align-center flex-wrap ga-2 mt-4">
+                  <v-btn
+                    v-if="auth.hasPermission('minutes.edit')"
+                    variant="outlined"
+                    prepend-icon="mdi-content-save-outline"
+                    :loading="saving"
+                    :disabled="saving || saveStatus === '保存済み'"
+                    @click="saveNow"
+                  >
+                    今すぐ保存
+                  </v-btn>
+                  <v-spacer />
+                  <v-btn
+                    v-if="auth.hasPermission('minutes.delete')"
+                    color="error"
+                    variant="text"
+                    prepend-icon="mdi-delete-outline"
+                    @click="deleteMinute(currentMinute)"
+                  >
+                    削除
+                  </v-btn>
+                </div>
+
+                <div class="text-caption text-medium-emphasis mt-4">
+                  最終更新：{{ formatDateTime(currentMinute.updated_at) }}
+                </div>
+              </v-card-text>
+            </template>
+
+            <v-card-text v-else class="text-center py-12">
+              <v-icon icon="mdi-notebook-edit-outline" size="52" class="mb-3" />
+              <div class="text-h6">議事録を選択してください</div>
+              <p class="text-body-2 text-medium-emphasis mt-2">
+                一覧から開くか、新しい議事録を作成してください。
+              </p>
+            </v-card-text>
+          </v-card>
+        </v-col>
+      </v-row>
+    </template>
+
+    <v-snackbar v-model="messageVisible" :color="messageColor" timeout="3500">
+      {{ message }}
+    </v-snackbar>
+  </v-container>
+</template>
+
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { formatJstDateTimeLocal, jstDateTimeLocalToIso } from '~/utils/jst'
+import { useApi } from '~/composables/useApi'
+import { useAuthStore } from '~/stores/auth'
+
+definePageMeta({ middleware: 'auth' })
+
+interface Minute {
+  id: string
+  title: string
+  meeting_at: string
+  location: string | null
+  attendees: string
+  absentees: string
+  agenda: string
+  discussion: string
+  decisions: string
+  next_meeting_at: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+interface MinuteDetail {
+  minute: Minute
+  task_ids: string[]
+}
+
+const auth = useAuthStore()
+const { apiFetch } = useApi()
+
+const minutes = ref<Minute[]>([])
+const searchQuery = ref('')
+
+function getDiscussionText(value: string): string {
+  if (!value) return ''
+  try {
+    const parsed = JSON.parse(value)
+    if (parsed && typeof parsed === 'object' && parsed.type === 'doc') {
+      const collect = (node: unknown): string => {
+        if (!node || typeof node !== 'object') return ''
+        const item = node as { text?: unknown; content?: unknown[] }
+        const own = typeof item.text === 'string' ? item.text : ''
+        const children = Array.isArray(item.content)
+          ? item.content.map(collect).join(' ')
+          : ''
+        return [own, children].filter(Boolean).join(' ')
+      }
+      return collect(parsed)
+    }
+  } catch {
+    // 以前のプレーンテキスト形式にも対応
+  }
+  return value
+}
+
+const filteredMinutes = computed(() => {
+  const query = searchQuery.value.trim().toLocaleLowerCase('ja')
+  if (!query) return minutes.value
+
+  return minutes.value.filter((item) =>
+    [
+      item.title,
+      item.location ?? '',
+      getDiscussionText(item.discussion ?? ''),
+    ].join(' ').toLocaleLowerCase('ja').includes(query),
+  )
+})
+
+const loading = ref(false)
+const creating = ref(false)
+const saving = ref(false)
+const selectedId = ref<string | null>(null)
+const errorMessage = ref('')
+const saveStatus = ref('保存済み')
+const message = ref('')
+const messageColor = ref('success')
+const messageVisible = ref(false)
+
+let saveTimer: ReturnType<typeof setTimeout> | undefined
+let saveSequence = 0
+
+const editor = reactive({
+  title: '',
+  meeting_at: '',
+  location: '',
+  discussion: '',
+})
+
+const currentMinute = computed(
+  () => minutes.value.find((item) => item.id === selectedId.value) ?? null,
+)
+
+function notify(text: string, color = 'success') {
+  message.value = text
+  messageColor.value = color
+  messageVisible.value = true
+}
+
+function toLocalDateTime(value: string | null | undefined): string {
+  if (!value) return ''
+  try {
+    return formatJstDateTimeLocal(value)
+  } catch {
+    return ''
+  }
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return '日時未設定'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) return '未設定'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function loadEditor(item: Minute) {
+  editor.title = item.title
+  editor.meeting_at = toLocalDateTime(item.meeting_at)
+  editor.location = item.location ?? ''
+  editor.discussion = item.discussion ?? ''
+  saveStatus.value = '保存済み'
+}
+
+async function loadMinutes() {
+  if (!auth.hasPermission('minutes.view')) return
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    const response = await apiFetch<{ minutes: Minute[] }>('/api/minutes')
+    minutes.value = response.minutes
+    if (selectedId.value) {
+      const selected = minutes.value.find((item) => item.id === selectedId.value)
+      if (selected) loadEditor(selected)
+      else selectedId.value = null
+    }
+  } catch (error) {
+    console.error('Failed to load minutes:', error)
+    errorMessage.value = '議事録を読み込めませんでした。API と閲覧権限を確認してください。'
+  } finally {
+    loading.value = false
+  }
+}
+
+function selectMinute(id: string) {
+  if (saving.value) {
+    notify('保存が完了してから別の議事録を開いてください。', 'warning')
+    return
+  }
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = undefined
+  const item = minutes.value.find((minute) => minute.id === id)
+  if (!item) return
+  selectedId.value = id
+  loadEditor(item)
+}
+
+async function createMinute() {
+  if (creating.value || !auth.hasPermission('minutes.create')) return
+  creating.value = true
+  try {
+    const now = new Date().toISOString()
+    const response = await apiFetch<MinuteDetail>('/api/minutes', {
+      method: 'POST',
+      body: {
+        title: '新しい議事録',
+        meeting_at: now,
+        location: null,
+        attendees: '',
+        absentees: '',
+        agenda: '',
+        discussion: '',
+        decisions: '',
+        next_meeting_at: null,
+        task_ids: [],
+      },
+    })
+    await loadMinutes()
+    selectedId.value = response.minute.id
+    loadEditor(response.minute)
+    notify('新しい議事録を作成しました。')
+  } catch (error) {
+    console.error('Failed to create minute:', error)
+    notify('議事録を作成できませんでした。作成権限と API を確認してください。', 'error')
+  } finally {
+    creating.value = false
+  }
+}
+
+function scheduleSave() {
+  if (!auth.hasPermission('minutes.edit') || !selectedId.value) return
+  saveStatus.value = '未保存'
+  saveSequence += 1
+  const sequence = saveSequence
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => {
+    if (sequence === saveSequence) void saveNow()
+  }, 800)
+}
+
+async function saveNow() {
+  if (!auth.hasPermission('minutes.edit') || !selectedId.value || saving.value) return
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = undefined
+
+  const id = selectedId.value
+  const sequenceAtStart = saveSequence
+  let meetingAt: string
+  try {
+    if (!editor.title.trim()) {
+      saveStatus.value = '未保存'
+      notify('会議名を入力してください。', 'error')
+      return
+    }
+    meetingAt = jstDateTimeLocalToIso(editor.meeting_at)
+  } catch {
+    saveStatus.value = '未保存'
+    notify('会議日時を確認してください。', 'error')
+    return
+  }
+
+  saving.value = true
+  saveStatus.value = '保存中'
+  try {
+    const response = await apiFetch<MinuteDetail>(`/api/minutes/${id}`, {
+      method: 'PATCH',
+      body: {
+        title: editor.title.trim(),
+        meeting_at: meetingAt,
+        location: editor.location.trim() || null,
+        discussion: editor.discussion,
+      },
+    })
+
+    const index = minutes.value.findIndex((item) => item.id === id)
+    if (index >= 0) minutes.value[index] = response.minute
+
+    if (selectedId.value === id && sequenceAtStart === saveSequence) {
+      saveStatus.value = '保存済み'
+    } else if (selectedId.value === id) {
+      saveStatus.value = '未保存'
+      scheduleSave()
+    }
+  } catch (error) {
+    console.error('Failed to save minute:', error)
+    saveStatus.value = '保存失敗'
+    notify('自動保存に失敗しました。接続を確認して「今すぐ保存」を押してください。', 'error')
+  } finally {
+    saving.value = false
+    if (selectedId.value === id && saveStatus.value === '未保存' && !saveTimer) {
+      scheduleSave()
+    }
+  }
+}
+
+async function deleteMinute(item: Minute) {
+  if (!auth.hasPermission('minutes.delete')) return
+  if (!window.confirm(`「${item.title}」を削除しますか？\nこの操作は取り消せません。`)) return
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = undefined
+  try {
+    await apiFetch(`/api/minutes/${item.id}`, { method: 'DELETE' })
+    if (selectedId.value === item.id) selectedId.value = null
+    minutes.value = minutes.value.filter((minute) => minute.id !== item.id)
+    notify('議事録を削除しました。')
+  } catch (error) {
+    console.error('Failed to delete minute:', error)
+    notify('削除に失敗しました。削除権限を確認してください。', 'error')
+  }
+}
+
+onMounted(() => {
+  void loadMinutes()
+})
+
+onBeforeUnmount(() => {
+  if (saveTimer) clearTimeout(saveTimer)
+})
+</script>
