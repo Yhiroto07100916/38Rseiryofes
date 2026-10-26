@@ -322,6 +322,7 @@ const formatDateTime = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -340,6 +341,7 @@ const formatEventDate = (
   }
 
   const date = new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -350,6 +352,7 @@ const formatEventDate = (
   }
 
   const time = new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(start)
@@ -365,6 +368,7 @@ const formatEventDate = (
   }
 
   const endTime = new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(end)
@@ -455,6 +459,7 @@ const formatTaskDueDate = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',

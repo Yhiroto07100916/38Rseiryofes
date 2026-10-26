@@ -112,12 +112,7 @@
                   cols="12"
                   sm="4"
                 >
-                  <v-text-field
-                    v-model="editForm.dueAt"
-                    label="期限"
-                    type="datetime-local"
-                    variant="outlined"
-                  />
+                  <CommonJstDateTimePicker v-model="editForm.dueAt" label="期限" />
                 </v-col>
               </v-row>
             </template>
@@ -547,6 +542,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatJstDateTimeLocal, jstDateKey, jstDateTimeLocalToIso } from '~/utils/jst'
 import {
   computed,
   onMounted,
@@ -696,13 +692,14 @@ const loadLinkOptions = async () => {
       calendarEventsLoading.value = true
       try {
         const now = new Date()
-        const from = new Date(now)
-        from.setFullYear(from.getFullYear() - 1)
-        const to = new Date(now)
-        to.setFullYear(to.getFullYear() + 2)
+        const [year, month, day] = jstDateKey(now).split('-').map(Number)
+        const from = new Date(Date.UTC(year - 1, month - 1, day))
+        const to = new Date(Date.UTC(year + 2, month - 1, day))
+        const fromDateKey = jstDateKey(from)
+        const toDateKey = jstDateKey(to)
         const response = await getCalendarEvents(
-          from.toISOString().slice(0, 10),
-          to.toISOString().slice(0, 10),
+          jstDateTimeLocalToIso(`${fromDateKey}T00:00`),
+          jstDateTimeLocalToIso(`${toDateKey}T00:00`),
         )
         calendarEventItems.value = response.events
       } catch (error) {
@@ -934,7 +931,7 @@ const saveEdit = async () => {
     body.status = editForm.value.status
     body.priority = editForm.value.priority
     body.due_at = editForm.value.dueAt
-      ? new Date(editForm.value.dueAt).toISOString()
+      ? jstDateTimeLocalToIso(editForm.value.dueAt)
       : null
   }
 
@@ -1212,23 +1209,11 @@ const toDatetimeLocal = (
     return ''
   }
 
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
+  try {
+    return formatJstDateTimeLocal(value)
+  } catch {
     return ''
   }
-
-  const offset =
-    date.getTimezoneOffset()
-
-  const localDate =
-    new Date(
-      date.getTime() - offset * 60 * 1000,
-    )
-
-  return localDate
-    .toISOString()
-    .slice(0, 16)
 }
 
 const formatDueDate = (value: string) => {
@@ -1241,6 +1226,7 @@ const formatDueDate = (value: string) => {
   return new Intl.DateTimeFormat(
     'ja-JP',
     {
+      timeZone: 'Asia/Tokyo',
       year: 'numeric',
       month: 'numeric',
       day: 'numeric',
@@ -1260,6 +1246,7 @@ const formatCommentDate = (value: string) => {
   return new Intl.DateTimeFormat(
     'ja-JP',
     {
+      timeZone: 'Asia/Tokyo',
       month: 'numeric',
       day: 'numeric',
       hour: '2-digit',

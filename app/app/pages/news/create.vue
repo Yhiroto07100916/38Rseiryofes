@@ -244,6 +244,7 @@ import {
   useApi,
 } from '~/composables/useApi'
 import { useSnackbar } from '~/composables/useSnackbar'
+import { jstDateKey, jstDateTimeLocalToIso } from '~/utils/jst'
 import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({
@@ -298,6 +299,7 @@ const formatEventDate = (event: CalendarEvent) => {
   }
 
   const date = new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -308,6 +310,7 @@ const formatEventDate = (event: CalendarEvent) => {
   }
 
   const startTime = new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(start)
@@ -323,12 +326,14 @@ const formatEventDate = (event: CalendarEvent) => {
   }
 
   const endDate = new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
   }).format(end)
 
   const endTime = new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(end)
@@ -345,26 +350,17 @@ const loadCalendarEvents = async () => {
 
   try {
     const now = new Date()
+    const [year, month] = jstDateKey(now).split('-').map(Number)
 
-    const fromDate = new Date(
-      now.getFullYear(),
-      now.getMonth() - 3,
-      1,
-    )
+    const fromDate = new Date(Date.UTC(year, month - 1 - 3, 1))
+    const toDate = new Date(Date.UTC(year, month - 1 + 4, 0))
 
-    const toDate = new Date(
-      now.getFullYear(),
-      now.getMonth() + 4,
-      0,
-      23,
-      59,
-      59,
-      999,
-    )
+    const fromDateKey = jstDateKey(fromDate)
+    const toDateKey = jstDateKey(toDate)
 
     const response = await getCalendarEvents(
-      fromDate.toISOString(),
-      toDate.toISOString(),
+      jstDateTimeLocalToIso(`${fromDateKey}T00:00`),
+      jstDateTimeLocalToIso(`${toDateKey}T23:59:59.999`),
     )
 
     calendarEvents.value = response.events
@@ -448,7 +444,7 @@ const loadTasks = async () => {
           getTaskStatusLabel(task.status),
           getTaskPriorityLabel(task.priority),
           task.due_at
-            ? `期限 ${new Intl.DateTimeFormat('ja-JP').format(
+            ? `期限 ${new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo' }).format(
                 new Date(task.due_at),
               )}`
             : null,

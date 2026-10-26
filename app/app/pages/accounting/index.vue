@@ -1020,6 +1020,7 @@
 
 <script setup lang="ts">
 import { useConfirmDialog } from '~/composables/useConfirmDialog'
+import { jstDateKey } from '~/utils/jst'
 
 definePageMeta({
   middleware: ['auth'],
@@ -1116,7 +1117,7 @@ const summary = reactive({
 const receiptSearch = ref('')
 const receiptPaymentFilter = ref<'all' | PaymentMethod>('all')
 const receiptReimbursementFilter = ref<'all' | ReimbursementStatus>('all')
-const aggregationMonth = ref(new Date().toISOString().slice(0, 7))
+const aggregationMonth = ref(jstDateKey(new Date()).slice(0, 7))
 const aggregationStartDate = ref('')
 const aggregationEndDate = ref('')
 const receiptDialog = ref(false)
@@ -1140,7 +1141,7 @@ const budgetSourceForm = reactive({
 })
 
 const receiptForm = reactive({
-  purchased_at: new Date().toISOString().slice(0, 10),
+  purchased_at: jstDateKey(new Date()),
   store_name: '',
   payment_method: 'budget' as PaymentMethod,
   paid_by_user_id: null as string | null,
@@ -1256,10 +1257,7 @@ const isReceiptInPeriod = (
 }
 
 const currentMonthPurchased = computed(() => {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const monthPrefix = `${year}-${month}`
+  const monthPrefix = jstDateKey(new Date()).slice(0, 7)
 
   return receipts.value
     .filter((receipt) => receiptDate(receipt).startsWith(monthPrefix))
@@ -1432,7 +1430,7 @@ const printAccountingReport = () => {
     )
     .join('')
 
-  const printedAt = new Date().toLocaleString('ja-JP')
+  const printedAt = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
 
   const printWindow = window.open('', '_blank', 'width=900,height=1200')
 
@@ -1739,7 +1737,7 @@ const printAccountingReport = () => {
 }
 
 const resetAggregationPeriod = () => {
-  aggregationMonth.value = new Date().toISOString().slice(0, 7)
+  aggregationMonth.value = jstDateKey(new Date()).slice(0, 7)
   aggregationStartDate.value = ''
   aggregationEndDate.value = ''
 }
@@ -1752,7 +1750,7 @@ const receiptTotal = computed(() =>
 )
 
 const yen = (value: number | null | undefined) =>
-  `¥${Number(value ?? 0).toLocaleString('ja-JP')}`
+  `¥${Number(value ?? 0).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`
 
 const formatDate = (value: string | null | undefined) => {
   if (!value) return '-'
@@ -1763,7 +1761,7 @@ const formatDate = (value: string | null | undefined) => {
     return value
   }
 
-  return date.toLocaleDateString('ja-JP')
+  return date.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })
 }
 
 const calculateItemAmount = (item: ReceiptItem) => {
@@ -1994,9 +1992,7 @@ const exportReceiptsCsv = () => {
     }
   }
 
-  const date = new Date()
-    .toISOString()
-    .slice(0, 10)
+  const date = jstDateKey(new Date())
 
   downloadCsv(
     `38R会計_購入記録_${date}.csv`,
@@ -2006,7 +2002,7 @@ const exportReceiptsCsv = () => {
 
 const resetReceiptForm = () => {
   receiptImageFiles.value = []
-  receiptForm.purchased_at = new Date().toISOString().slice(0, 10)
+  receiptForm.purchased_at = jstDateKey(new Date())
   receiptForm.store_name = ''
   receiptForm.payment_method = 'budget'
   receiptForm.paid_by_user_id = null

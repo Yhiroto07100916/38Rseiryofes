@@ -386,21 +386,9 @@
             class="mt-1"
           />
 
-          <v-text-field
-            v-model="eventForm.starts_at"
-            label="開始"
-            type="datetime-local"
-            variant="outlined"
-            class="mt-2"
-          />
+          <CommonJstDateTimePicker v-model="eventForm.starts_at" label="開始" class="mt-2" />
 
-          <v-text-field
-            v-model="eventForm.ends_at"
-            label="終了"
-            type="datetime-local"
-            variant="outlined"
-            class="mt-2"
-          />
+          <CommonJstDateTimePicker v-model="eventForm.ends_at" label="終了" class="mt-2" />
 
           <v-text-field
             v-model="eventForm.location"
@@ -483,6 +471,13 @@
 </template>
 
 <script setup lang="ts">
+import {
+  formatJstDate,
+  formatJstDateTime,
+  formatJstDateTimeLocal,
+  jstDateTimeLocalToIso,
+} from '~/utils/jst'
+
 definePageMeta({
   middleware: 'auth',
 })
@@ -587,35 +582,15 @@ const eventForm = reactive({
 })
 
 function toDateTimeLocal(value: string) {
-  const date = new Date(value)
-
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-
-  return `${year}-${month}-${day}T${hours}:${minutes}`
+  return formatJstDateTimeLocal(value)
 }
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat('ja-JP', {
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value))
+  return formatJstDateTime(value)
 }
 
 function formatDateOnly(value: string) {
-  return new Intl.DateTimeFormat('ja-JP', {
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    weekday: 'short',
-  }).format(new Date(value))
+  return formatJstDate(value)
 }
 
 function formatEventRange(value: CalendarEvent) {
@@ -678,9 +653,9 @@ async function saveEvent() {
       {
         title: eventForm.title.trim(),
         description: eventForm.description.trim() || null,
-        starts_at: new Date(eventForm.starts_at).toISOString(),
+        starts_at: jstDateTimeLocalToIso(eventForm.starts_at),
         ends_at: eventForm.ends_at
-          ? new Date(eventForm.ends_at).toISOString()
+          ? jstDateTimeLocalToIso(eventForm.ends_at)
           : null,
         is_all_day: eventForm.is_all_day,
         location: eventForm.location.trim() || null,
