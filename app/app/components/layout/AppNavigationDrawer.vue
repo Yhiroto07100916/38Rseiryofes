@@ -177,6 +177,7 @@ const items: NavigationItem[] = [
   {icon: "mdi-file-document", title:"書類", to:"/files"},
   {title: 'アンケート・投票',icon: 'mdi-vote-outline',to: '/surveys',},
   {title: '意思決定記録',icon: 'mdi-notebook-check-outline',to: '/decisions',},
+  {title: '議事録', icon: 'mdi-clipboard-text-multiple', to: '/minutes'},
 ]
 
 watch(

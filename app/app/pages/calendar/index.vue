@@ -82,7 +82,7 @@
           @click="selectDate(day.key)"
         >
           <div class="day-number">
-            <span>{{ day.date.getDate() }}</span>
+            <span>{{ day.date.getUTCDate() }}</span>
           </div>
 
           <div class="day-events">
@@ -293,21 +293,9 @@
             class="mt-1"
           />
 
-          <v-text-field
-            v-model="eventForm.starts_at"
-            label="開始"
-            type="datetime-local"
-            variant="outlined"
-            class="mt-2"
-          />
+          <CommonJstDateTimePicker v-model="eventForm.starts_at" label="開始" class="mt-2" />
 
-          <v-text-field
-            v-model="eventForm.ends_at"
-            label="終了"
-            type="datetime-local"
-            variant="outlined"
-            class="mt-2"
-          />
+          <CommonJstDateTimePicker v-model="eventForm.ends_at" label="終了" class="mt-2" />
 
           <v-text-field
             v-model="eventForm.location"
@@ -389,6 +377,12 @@
 </template>
 
 <script setup lang="ts">
+import {
+  formatJstDateTimeLocal,
+  jstDateKey,
+  jstDateTimeLocalToIso,
+} from '~/utils/jst'
+
 definePageMeta({
   middleware: 'auth',
 })
@@ -412,10 +406,10 @@ const {
 const { mobile } = useDisplay()
 const router = useRouter()
 
-const now = new Date()
+const now = parseDateKey(jstDateKey(new Date()))
 
 const currentDate = ref(
-  new Date(now.getFullYear(), now.getMonth(), 1),
+  new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
 )
 
 const selectedDate = ref(formatDateKey(now))
@@ -449,31 +443,31 @@ const weekDays = [
   { label: '土', class: 'saturday' },
 ]
 
-const currentYear = computed(() => currentDate.value.getFullYear())
-const currentMonth = computed(() => currentDate.value.getMonth())
+const currentYear = computed(() => currentDate.value.getUTCFullYear())
+const currentMonth = computed(() => currentDate.value.getUTCMonth())
 
 const calendarDays = computed(() => {
-  const firstDay = new Date(
+  const firstDay = new Date(Date.UTC(
     currentYear.value,
     currentMonth.value,
     1,
-  )
+  ))
 
   const start = new Date(firstDay)
-  start.setDate(start.getDate() - start.getDay())
+  start.setUTCDate(start.getUTCDate() - start.getUTCDay())
 
   const days = []
 
   for (let i = 0; i < 42; i++) {
     const date = new Date(start)
-    date.setDate(start.getDate() + i)
+    date.setUTCDate(start.getUTCDate() + i)
 
     const key = formatDateKey(date)
 
     days.push({
       date,
       key,
-      isCurrentMonth: date.getMonth() === currentMonth.value,
+      isCurrentMonth: date.getUTCMonth() === currentMonth.value,
       isToday: key === formatDateKey(now),
       events: getEventsForDate(key),
       taskDeadlines: getTaskDeadlinesForDate(key),
@@ -495,56 +489,72 @@ const formatSelectedDate = computed(() => {
   const date = parseDateKey(selectedDate.value)
 
   return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
     month: 'long',
     day: 'numeric',
     weekday: 'long',
-  }).format(date)
+  }).format(new Date(`${selectedDate.value}T12:00:00+09:00`))
 })
 
 function formatDateKey(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
+  const year = date.getUTCFullYear()
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(date.getUTCDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
 }
 
 function parseDateKey(value: string): Date {
-  const parts = value.split('-')
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
 
-  const year = Number(parts[0])
-  const month = Number(parts[1])
-  const day = Number(parts[2])
+  if (!match) {
+    throw new Error('Invalid date key')
+  }
 
-  return new Date(year, month - 1, day)
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const date = new Date(Date.UTC(year, month - 1, day))
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    throw new Error('Invalid calendar date')
+  }
+
+  return date
 }
 
 function getMonthRange() {
-  const from = new Date(
+  const from = new Date(Date.UTC(
     currentYear.value,
     currentMonth.value,
     1,
-  )
+  ))
+  from.setUTCDate(from.getUTCDate() - 7)
 
-  from.setDate(from.getDate() - 7)
-
-  const to = new Date(
+  const to = new Date(Date.UTC(
     currentYear.value,
     currentMonth.value + 1,
     0,
-  )
-
-  to.setDate(to.getDate() + 7)
+  ))
+  to.setUTCDate(to.getUTCDate() + 7)
 
   return {
-    from: from.toISOString(),
-    to: to.toISOString(),
+    from: jstDateTimeLocalToIso(`${formatDateKey(from)}T00:00`),
+    to: jstDateTimeLocalToIso(`${formatDateKey(to)}T00:00`),
   }
 }
 
 function getEventsForDate(dateKey: string): CalendarEvent[] {
-  const dayStart = new Date(`${dateKey}T00:00:00`)
-  const dayEnd = new Date(`${dateKey}T23:59:59.999`)
+  const dayStart = new Date(jstDateTimeLocalToIso(`${dateKey}T00:00`))
+  const nextDate = parseDateKey(dateKey)
+  nextDate.setUTCDate(nextDate.getUTCDate() + 1)
+  const dayEnd = new Date(
+    new Date(jstDateTimeLocalToIso(`${formatDateKey(nextDate)}T00:00`)).getTime() - 1,
+  )
 
   return events.value
     .filter((event) => {
@@ -562,8 +572,12 @@ function getEventsForDate(dateKey: string): CalendarEvent[] {
 }
 
 function getTaskDeadlinesForDate(dateKey: string): Task[] {
-  const dayStart = new Date(`${dateKey}T00:00:00`)
-  const dayEnd = new Date(`${dateKey}T23:59:59.999`)
+  const dayStart = new Date(jstDateTimeLocalToIso(`${dateKey}T00:00`))
+  const nextDate = parseDateKey(dateKey)
+  nextDate.setUTCDate(nextDate.getUTCDate() + 1)
+  const dayEnd = new Date(
+    new Date(jstDateTimeLocalToIso(`${formatDateKey(nextDate)}T00:00`)).getTime() - 1,
+  )
 
   return tasks.value
     .filter((task) => {
@@ -587,6 +601,7 @@ function getTaskDeadlinesForDate(dateKey: string): Task[] {
 
 function formatTaskDeadline(value: string): string {
   return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
     hour: 'numeric',
     minute: '2-digit',
   }).format(new Date(value))
@@ -644,31 +659,26 @@ async function loadTasks() {
 }
 
 function changeMonth(offset: number) {
-  currentDate.value = new Date(
+  const newMonthDate = new Date(Date.UTC(
     currentYear.value,
     currentMonth.value + offset,
     1,
-  )
+  ))
 
-  const newMonthDate = new Date(
-    currentYear.value,
-    currentMonth.value + offset,
-    1,
-  )
-
+  currentDate.value = newMonthDate
   selectedDate.value = formatDateKey(newMonthDate)
 
   loadEvents()
 }
 
 function goToday() {
-  const today = new Date()
+  const today = parseDateKey(jstDateKey(new Date()))
 
-  currentDate.value = new Date(
-    today.getFullYear(),
-    today.getMonth(),
+  currentDate.value = new Date(Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
     1,
-  )
+  ))
 
   selectedDate.value = formatDateKey(today)
 
@@ -680,40 +690,29 @@ function selectDate(dateKey: string) {
 
   const date = parseDateKey(dateKey)
 
-  if (date.getMonth() !== currentMonth.value) {
-    currentDate.value = new Date(
-      date.getFullYear(),
-      date.getMonth(),
+  if (date.getUTCMonth() !== currentMonth.value ||
+      date.getUTCFullYear() !== currentYear.value) {
+    currentDate.value = new Date(Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
       1,
-    )
+    ))
 
     loadEvents()
   }
 }
 
-function toDateTimeLocal(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-
-  return `${year}-${month}-${day}T${hours}:${minutes}`
+function toDateTimeLocal(value: string | Date): string {
+  return formatJstDateTimeLocal(value)
 }
 
 function openCreateDialog(dateKey: string) {
   editingEvent.value = null
 
-  const date = parseDateKey(dateKey)
-  date.setHours(18, 0, 0, 0)
-
-  const end = new Date(date)
-  end.setHours(19, 0, 0, 0)
-
   eventForm.title = ''
   eventForm.description = ''
-  eventForm.starts_at = toDateTimeLocal(date)
-  eventForm.ends_at = toDateTimeLocal(end)
+  eventForm.starts_at = `${dateKey}T18:00`
+  eventForm.ends_at = `${dateKey}T19:00`
   eventForm.is_all_day = false
   eventForm.location = ''
   eventForm.category_id = categories.value[0]?.id ?? ''
@@ -726,7 +725,7 @@ function openEvent(event: CalendarEvent) {
 }
 
 function toISOStringFromLocal(value: string): string {
-  return new Date(value).toISOString()
+  return jstDateTimeLocalToIso(value)
 }
 
 async function saveEvent() {
@@ -788,6 +787,7 @@ async function deleteEvent() {
 
 function formatEventTime(event: CalendarEvent): string {
   return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(event.starts_at))
@@ -801,6 +801,7 @@ function formatEventRange(event: CalendarEvent): string {
   const start = new Date(event.starts_at)
 
   const startText = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(start)
@@ -810,6 +811,7 @@ function formatEventRange(event: CalendarEvent): string {
   }
 
   const endText = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(event.ends_at))

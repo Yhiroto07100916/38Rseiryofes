@@ -658,6 +658,7 @@ import {
   type Task,
   useApi,
 } from '~/composables/useApi'
+import { jstDateKey, jstDateTimeLocalToIso } from '~/utils/jst'
 import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({
@@ -738,6 +739,7 @@ const formatDate = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -752,6 +754,7 @@ const formatMonthDay = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     month: 'numeric',
     day: 'numeric',
   }).format(date)
@@ -765,6 +768,7 @@ const formatTime = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(date)
@@ -818,18 +822,13 @@ const loadEvents = async () => {
 
   try {
     const now = new Date()
+    const [year, month, day] = jstDateKey(now).split('-').map(Number)
+    const toDate = new Date(Date.UTC(year, month - 1, day + 14))
 
     const from = now.toISOString()
-
-    const to = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() + 14,
-      23,
-      59,
-      59,
-      999,
-    ).toISOString()
+    const to = jstDateTimeLocalToIso(
+      `${jstDateKey(toDate)}T23:59:59.999`,
+    )
 
     const response = await getCalendarEvents(from, to)
 
@@ -890,18 +889,13 @@ const loadAttendance = async () => {
 
   try {
     const now = new Date()
+    const [year, month, day] = jstDateKey(now).split('-').map(Number)
+    const toDate = new Date(Date.UTC(year, month - 1, day + 14))
 
     const from = now.toISOString()
-
-    const to = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() + 14,
-      23,
-      59,
-      59,
-      999,
-    ).toISOString()
+    const to = jstDateTimeLocalToIso(
+      `${jstDateKey(toDate)}T23:59:59.999`,
+    )
 
     const response = await getCalendarEvents(from, to)
 
