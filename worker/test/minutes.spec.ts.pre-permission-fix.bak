@@ -1,0 +1,126 @@
+declare const __D1_MIGRATIONS__: string;
+
+import { applyD1Migrations, env, SELF } from "cloudflare:test";
+import { beforeAll, describe, expect, it } from "vitest";
+
+const userId = crypto.randomUUID();
+const sessionId = crypto.randomUUID();
+
+async function grantPermissions(keys: string[]) {
+  for (const key of keys) {
+    await env.DB.prepare(`
+      INSERT INTO user_permissions (user_id, permission_id, effect)
+      SELECT ?, id, 'allow'
+      FROM permissions
+      WHERE key = ?
+    `).bind(userId, key).run();
+  }
+}
+
+async function request(
+  path: string,
+  method = "GET",
+  body?: Record<string, unknown>,
+) {
+  return SELF.fetch(`http://example.com${path}`, {
+    method,
+    headers: {
+      Cookie: `session_id=${sessionId}`,
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+}
+
+beforeAll(async () => {
+  await applyD1Migrations(env.DB, JSON.parse(__D1_MIGRATIONS__));
+
+  await env.DB.prepare(`
+    INSERT INTO users (id, student_number, name, nickname)
+    VALUES (?, ?, ?, NULL)
+  `).bind(userId, `minutes-test-${userId}`, "議事録テストユーザー").run();
+
+  await env.DB.prepare(`
+    INSERT INTO sessions (id, user_id, expires_at)
+    VALUES (?, ?, datetime('now', '+1 day'))
+  `).bind(sessionId, userId).run();
+});
+
+describe("Minutes API", () => {
+  it("requires authentication", async () => {
+    const response = await SELF.fetch("http://example.com/api/minutes");
+    expect(response.status).toBe(401);
+  });
+
+  it("enforces permissions and supports create, read, update and delete", async () => {
+    const denied = await request("/api/minutes", "POST", {
+      title: "権限なし",
+      meeting_at: "2026-10-26T10:00:00+09:00",
+    });
+    expect(denied.status).toBe(403);
+
+    await grantPermissions([
+      "minutes.view",
+      "minutes.create",
+      "minutes.edit",
+      "minutes.delete",
+    ]);
+
+    const createdResponse = await request("/api/minutes", "POST", {
+      title: "議事録テスト",
+      meeting_at: "2026-10-26T10:00:00+09:00",
+      location: "教室",
+      attendees: "A、B",
+      absentees: "C",
+      agenda: "文化祭準備",
+      discussion: "進捗を確認した",
+      decisions: "担当を確定する",
+    });
+    expect(createdResponse.status).toBe(201);
+
+    const created = await createdResponse.json() as {
+      minute: { id: string; title: string };
+      task_ids: string[];
+    };
+    expect(created.minute.title).toBe("議事録テスト");
+    expect(created.task_ids).toEqual([]);
+
+    const id = created.minute.id;
+    const readResponse = await request(`/api/minutes/${id}`);
+    expect(readResponse.status).toBe(200);
+
+    const updatedResponse = await request(`/api/minutes/${id}`, "PATCH", {
+      title: "更新済み議事録",
+      decisions: "担当と期限を確定する",
+    });
+    expect(updatedResponse.status).toBe(200);
+    const updated = await updatedResponse.json() as {
+      minute: { title: string; decisions: string };
+    };
+    expect(updated.minute.title).toBe("更新済み議事録");
+    expect(updated.minute.decisions).toBe("担当と期限を確定する");
+
+    const listResponse = await request("/api/minutes");
+    expect(listResponse.status).toBe(200);
+    const list = await listResponse.json() as {
+      minutes: Array<{ id: string }>;
+    };
+    expect(list.minutes.some((item) => item.id === id)).toBe(true);
+
+    const deletedResponse = await request(`/api/minutes/${id}`, "DELETE");
+    expect(deletedResponse.status).toBe(200);
+
+    const missingResponse = await request(`/api/minutes/${id}`);
+    expect(missingResponse.status).toBe(404);
+  });
+
+  it("rejects invalid data", async () => {
+    await grantPermissions(["minutes.create"]);
+
+    const response = await request("/api/minutes", "POST", {
+      title: "",
+      meeting_at: "not-a-date",
+    });
+    expect(response.status).toBe(400);
+  });
+});

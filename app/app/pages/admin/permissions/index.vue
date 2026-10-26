@@ -55,6 +55,7 @@ const categoryLabels: Record<string, string> = {
   accounting: '会計',
   members: 'メンバー',
   attendance: '出欠',
+  minutes: '議事録',
 }
 
 const targetLabel = computed(() => {

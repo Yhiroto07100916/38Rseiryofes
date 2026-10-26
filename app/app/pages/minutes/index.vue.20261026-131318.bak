@@ -1,0 +1,649 @@
+<template>
+  <v-container fluid class="pa-4 pa-sm-6">
+    <div class="d-flex align-center mb-6">
+      <LayoutBackButton />
+      <div>
+        <h1 class="text-h5 font-weight-bold">議事録</h1>
+        <p class="text-body-2 text-medium-emphasis mt-1">
+          会議の議題・議論・決定事項を記録します
+        </p>
+      </div>
+      <v-spacer />
+      <v-btn
+        icon="mdi-refresh"
+        variant="text"
+        aria-label="更新"
+        :loading="loading"
+        @click="loadMinutes"
+      />
+    </div>
+
+    <template v-if="auth.hasPermission('minutes.view')">
+      <div class="d-flex align-center mb-3 ga-2">
+        <div class="text-subtitle-1 font-weight-bold">議事録一覧</div>
+        <v-chip size="small" variant="tonal">{{ minutes.length }}件</v-chip>
+        <v-spacer />
+        <v-btn
+          v-if="auth.hasPermission('minutes.create')"
+          color="primary"
+          prepend-icon="mdi-plus"
+          @click="openCreate"
+        >
+          新規作成
+        </v-btn>
+      </div>
+
+      <v-alert v-if="errorMessage" type="error" variant="tonal" class="mb-4">
+        {{ errorMessage }}
+      </v-alert>
+
+      <div v-if="loading">
+        <v-skeleton-loader v-for="n in 3" :key="n" type="article" class="mb-3" />
+      </div>
+
+      <v-card v-else-if="minutes.length === 0" variant="outlined" rounded="xl">
+        <v-card-text class="text-center py-10">
+          <v-icon icon="mdi-notebook-edit-outline" size="48" class="mb-3" />
+          <div class="text-h6 font-weight-bold">議事録はまだありません</div>
+          <p class="text-body-2 text-medium-emphasis mt-2">
+            会議で話し合ったことや決定事項を記録しましょう。
+          </p>
+        </v-card-text>
+      </v-card>
+
+      <v-card
+        v-for="item in minutes"
+        :key="item.id"
+        variant="outlined"
+        rounded="xl"
+        class="mb-3"
+      >
+        <v-card-text class="pa-4">
+          <div class="d-flex align-start ga-3">
+            <div class="flex-grow-1 min-width-0">
+              <div class="d-flex flex-wrap align-center ga-2 mb-2">
+                <v-chip size="small" color="primary" variant="tonal">
+                  {{ formatDate(item.meeting_at) }}
+                </v-chip>
+                <span v-if="item.location" class="text-body-2 text-medium-emphasis">
+                  {{ item.location }}
+                </span>
+              </div>
+              <div class="text-subtitle-1 font-weight-bold">{{ item.title }}</div>
+              <p v-if="item.agenda" class="text-body-2 mt-2 preview-text">
+                {{ item.agenda }}
+              </p>
+              <div class="d-flex flex-wrap ga-2 mt-3">
+                <v-chip v-if="item.attendees" size="small" variant="outlined">
+                  <v-icon start icon="mdi-account-group-outline" />
+                  出席者記録あり
+                </v-chip>
+                <v-chip v-if="item.decisions" size="small" color="success" variant="tonal">
+                  決定事項あり
+                </v-chip>
+              </div>
+            </div>
+            <v-icon icon="mdi-notebook-edit-outline" color="primary" size="28" />
+          </div>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="px-4">
+          <v-btn
+            variant="text"
+            color="primary"
+            prepend-icon="mdi-eye-outline"
+            @click="openDetail(item.id)"
+          >
+            詳細
+          </v-btn>
+          <v-spacer />
+          <v-btn
+            v-if="auth.hasPermission('minutes.edit')"
+            icon="mdi-pencil-outline"
+            variant="text"
+            aria-label="編集"
+            @click="openEdit(item)"
+          />
+          <v-btn
+            v-if="auth.hasPermission('minutes.delete')"
+            icon="mdi-delete-outline"
+            variant="text"
+            color="error"
+            aria-label="削除"
+            @click="deleteMinute(item)"
+          />
+        </v-card-actions>
+      </v-card>
+    </template>
+
+    <v-card v-else variant="outlined" rounded="xl">
+      <v-card-text class="text-center py-10">
+        <v-icon icon="mdi-lock-outline" size="48" class="mb-3" />
+        <div class="text-h6 font-weight-bold">閲覧権限がありません</div>
+        <p class="text-body-2 text-medium-emphasis mt-2">
+          議事録を閲覧する権限がありません。
+        </p>
+      </v-card-text>
+    </v-card>
+
+    <v-dialog v-model="formDialog" max-width="800" persistent scrollable>
+      <v-card rounded="xl">
+        <v-card-title class="pa-5">
+          {{ editingId ? '議事録を編集' : '議事録を新規作成' }}
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-5">
+          <v-form @submit.prevent="saveMinute">
+            <v-text-field
+              v-model="form.title"
+              label="会議名・タイトル"
+              maxlength="200"
+              counter="200"
+              required
+              variant="outlined"
+              class="mb-2"
+            />
+            <CommonJstDateTimePicker
+              v-model="form.meeting_at"
+              label="会議日時"
+              :required="true"
+              class="mb-2"
+            />
+            <v-text-field
+              v-model="form.location"
+              label="場所（任意）"
+              maxlength="200"
+              variant="outlined"
+              class="mb-2"
+            />
+            <v-textarea
+              v-model="form.attendees"
+              label="出席者"
+              hint="出席した人を入力します"
+              persistent-hint
+              rows="2"
+              maxlength="10000"
+              variant="outlined"
+              class="mb-2"
+            />
+            <v-textarea
+              v-model="form.absentees"
+              label="欠席者"
+              rows="2"
+              maxlength="10000"
+              variant="outlined"
+              class="mb-2"
+            />
+            <v-textarea
+              v-model="form.agenda"
+              label="議題"
+              rows="3"
+              maxlength="20000"
+              counter
+              variant="outlined"
+              class="mb-2"
+            />
+            <v-textarea
+              v-model="form.discussion"
+              label="議論・話し合いの内容"
+              rows="5"
+              maxlength="50000"
+              counter
+              variant="outlined"
+              class="mb-2"
+            />
+            <v-textarea
+              v-model="form.decisions"
+              label="決定事項"
+              rows="4"
+              maxlength="20000"
+              counter
+              variant="outlined"
+              class="mb-2"
+            />
+            <CommonJstDateTimePicker
+              v-model="form.next_meeting_at"
+              label="次回会議日時（任意）"
+              :clearable="true"
+              class="mb-2"
+            />
+            <v-select
+              v-model="form.task_ids"
+              :items="taskItems"
+              item-title="title"
+              item-value="id"
+              label="関連タスク（任意）"
+              hint="この会議に関連するタスクを選択します"
+              persistent-hint
+              multiple
+              chips
+              closable-chips
+              clearable
+              :loading="tasksLoading"
+              variant="outlined"
+              class="mb-2"
+            />
+            <v-alert v-if="tasksError" type="warning" variant="tonal" class="mt-2">
+              {{ tasksError }}
+            </v-alert>
+          </v-form>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn variant="text" :disabled="saving" @click="formDialog = false">
+            キャンセル
+          </v-btn>
+          <v-btn
+            color="primary"
+            :loading="saving"
+            :disabled="!form.title.trim() || !form.meeting_at"
+            @click="saveMinute"
+          >
+            保存
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="detailDialog" max-width="800" scrollable>
+      <v-card rounded="xl">
+        <v-card-title class="d-flex align-center pa-5">
+          <span>議事録の詳細</span>
+          <v-spacer />
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            aria-label="閉じる"
+            @click="detailDialog = false"
+          />
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-5">
+          <div v-if="detailLoading" class="py-6">
+            <v-progress-linear indeterminate />
+          </div>
+          <template v-else-if="detail">
+            <div class="text-h6 font-weight-bold">{{ detail.minute.title }}</div>
+            <div class="text-body-2 text-medium-emphasis mt-2">
+              会議日時：{{ formatDateTime(detail.minute.meeting_at) }}
+            </div>
+            <div v-if="detail.minute.location" class="mt-2">
+              場所：{{ detail.minute.location }}
+            </div>
+
+            <v-divider class="my-4" />
+            <section v-for="section in detailSections" :key="section.label" class="mb-5">
+              <div class="text-subtitle-1 font-weight-bold mb-2">{{ section.label }}</div>
+              <p class="detail-text">{{ section.value || '記録なし' }}</p>
+            </section>
+
+            <section class="mb-5">
+              <div class="text-subtitle-1 font-weight-bold mb-2">次回会議</div>
+              <p>{{ detail.minute.next_meeting_at ? formatDateTime(detail.minute.next_meeting_at) : '未設定' }}</p>
+            </section>
+
+            <section>
+              <div class="text-subtitle-1 font-weight-bold mb-2">関連タスク</div>
+              <v-chip
+                v-for="taskId in detail.task_ids"
+                :key="taskId"
+                size="small"
+                variant="tonal"
+                class="mr-1 mb-1"
+              >
+                {{ taskTitle(taskId) }}
+              </v-chip>
+              <p v-if="detail.task_ids.length === 0" class="text-body-2 text-medium-emphasis">
+                関連タスクはありません。
+              </p>
+            </section>
+
+            <div class="text-caption text-medium-emphasis mt-5">
+              最終更新：{{ formatDateTime(detail.minute.updated_at) }}
+            </div>
+          </template>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn variant="text" @click="detailDialog = false">閉じる</v-btn>
+          <v-btn
+            v-if="detail && auth.hasPermission('minutes.edit')"
+            color="primary"
+            prepend-icon="mdi-pencil-outline"
+            @click="editFromDetail"
+          >
+            編集
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-snackbar v-model="snackbarVisible" :color="snackbarColor" timeout="3500">
+      {{ snackbarText }}
+    </v-snackbar>
+  </v-container>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { formatJstDateTimeLocal, jstDateTimeLocalToIso } from '~/utils/jst'
+import { useApi, type Task } from '~/composables/useApi'
+import { useSnackbar } from '~/composables/useSnackbar'
+import { useAuthStore } from '~/stores/auth'
+
+definePageMeta({ middleware: 'auth' })
+
+interface Minute {
+  id: string
+  title: string
+  meeting_at: string
+  location: string | null
+  attendees: string
+  absentees: string
+  agenda: string
+  discussion: string
+  decisions: string
+  next_meeting_at: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+interface MinuteDetail {
+  minute: Minute
+  task_ids: string[]
+}
+
+interface MinuteForm {
+  title: string
+  meeting_at: string
+  location: string
+  attendees: string
+  absentees: string
+  agenda: string
+  discussion: string
+  decisions: string
+  next_meeting_at: string
+  task_ids: string[]
+}
+
+const auth = useAuthStore()
+const { apiFetch, getTasks } = useApi()
+const snackbar = useSnackbar()
+
+const minutes = ref<Minute[]>([])
+const tasks = ref<Task[]>([])
+const loading = ref(false)
+const saving = ref(false)
+const tasksLoading = ref(false)
+const detailLoading = ref(false)
+const formDialog = ref(false)
+const detailDialog = ref(false)
+const editingId = ref<string | null>(null)
+const detail = ref<MinuteDetail | null>(null)
+const errorMessage = ref('')
+const tasksError = ref('')
+const snackbarVisible = ref(false)
+const snackbarText = ref('')
+const snackbarColor = ref('success')
+
+function toLocalDateTime(value: string | null | undefined): string {
+  if (!value) return ''
+  try {
+    return formatJstDateTimeLocal(value)
+  } catch {
+    return ''
+  }
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return '未設定'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(date)
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) return '未設定'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function showMessage(message: string, color = 'success') {
+  snackbarText.value = message
+  snackbarColor.value = color
+  snackbarVisible.value = true
+}
+
+const emptyForm = (): MinuteForm => ({
+  title: '',
+  meeting_at: toLocalDateTime(new Date().toISOString()),
+  location: '',
+  attendees: '',
+  absentees: '',
+  agenda: '',
+  discussion: '',
+  decisions: '',
+  next_meeting_at: '',
+  task_ids: [],
+})
+
+const form = ref<MinuteForm>(emptyForm())
+
+const taskItems = computed(() => tasks.value.map((task) => ({
+  id: task.id,
+  title: task.title,
+})))
+
+const detailSections = computed(() => {
+  if (!detail.value) return []
+  const minute = detail.value.minute
+  return [
+    { label: '出席者', value: minute.attendees },
+    { label: '欠席者', value: minute.absentees },
+    { label: '議題', value: minute.agenda },
+    { label: '議論・話し合いの内容', value: minute.discussion },
+    { label: '決定事項', value: minute.decisions },
+  ]
+})
+
+function taskTitle(id: string): string {
+  return tasks.value.find((task) => task.id === id)?.title ?? `タスク（${id}）`
+}
+
+async function loadMinutes() {
+  if (!auth.hasPermission('minutes.view')) return
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    const response = await apiFetch<{ minutes: Minute[] }>('/api/minutes')
+    minutes.value = response.minutes
+  } catch (error) {
+    console.error('Failed to load minutes:', error)
+    errorMessage.value = '議事録の読み込みに失敗しました。権限や API の状態を確認してください。'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadTasks() {
+  tasksLoading.value = true
+  tasksError.value = ''
+  try {
+    const response = await getTasks()
+    tasks.value = response.tasks
+  } catch (error) {
+    console.error('Failed to load tasks for minutes:', error)
+    tasksError.value = 'タスク一覧を読み込めませんでした。議事録の保存はできますが、関連タスクの選択はできません。'
+  } finally {
+    tasksLoading.value = false
+  }
+}
+
+function openCreate() {
+  editingId.value = null
+  form.value = emptyForm()
+  formDialog.value = true
+  if (tasks.value.length === 0) void loadTasks()
+}
+
+function openEdit(item: Minute) {
+  editingId.value = item.id
+  form.value = {
+    title: item.title,
+    meeting_at: toLocalDateTime(item.meeting_at),
+    location: item.location ?? '',
+    attendees: item.attendees,
+    absentees: item.absentees,
+    agenda: item.agenda,
+    discussion: item.discussion,
+    decisions: item.decisions,
+    next_meeting_at: toLocalDateTime(item.next_meeting_at),
+    task_ids: [],
+  }
+  formDialog.value = true
+  if (tasks.value.length === 0) void loadTasks()
+  void loadMinuteTaskIds(item.id)
+}
+
+async function loadMinuteTaskIds(id: string) {
+  try {
+    const response = await apiFetch<MinuteDetail>(`/api/minutes/${id}`)
+    if (editingId.value === id) form.value.task_ids = response.task_ids
+  } catch (error) {
+    console.error('Failed to load minute task links:', error)
+    showMessage('関連タスクの読み込みに失敗しました。', 'error')
+  }
+}
+
+async function saveMinute() {
+  if (saving.value) return
+  if (!form.value.title.trim() || !form.value.meeting_at) {
+    showMessage('タイトルと会議日時を入力してください。', 'error')
+    return
+  }
+
+  let meetingAt: string
+  let nextMeetingAt: string | null = null
+  try {
+    meetingAt = jstDateTimeLocalToIso(form.value.meeting_at)
+    if (form.value.next_meeting_at) {
+      nextMeetingAt = jstDateTimeLocalToIso(form.value.next_meeting_at)
+    }
+  } catch {
+    showMessage('日時の入力を確認してください。', 'error')
+    return
+  }
+
+  const payload = {
+    title: form.value.title.trim(),
+    meeting_at: meetingAt,
+    location: form.value.location.trim() || null,
+    attendees: form.value.attendees.trim(),
+    absentees: form.value.absentees.trim(),
+    agenda: form.value.agenda.trim(),
+    discussion: form.value.discussion.trim(),
+    decisions: form.value.decisions.trim(),
+    next_meeting_at: nextMeetingAt,
+    task_ids: form.value.task_ids,
+  }
+
+  saving.value = true
+  try {
+    if (editingId.value) {
+      await apiFetch(`/api/minutes/${editingId.value}`, {
+        method: 'PATCH',
+        body: payload,
+      })
+      showMessage('議事録を更新しました。')
+    } else {
+      await apiFetch('/api/minutes', {
+        method: 'POST',
+        body: payload,
+      })
+      showMessage('議事録を作成しました。')
+    }
+    const shouldRefreshDetail = detailDialog.value && editingId.value !== null
+    const refreshId = editingId.value
+    formDialog.value = false
+    await loadMinutes()
+    if (shouldRefreshDetail && refreshId) await openDetail(refreshId)
+  } catch (error) {
+    console.error('Failed to save minute:', error)
+    showMessage('保存に失敗しました。入力内容・操作権限・API の状態を確認してください。', 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function openDetail(id: string) {
+  detailDialog.value = true
+  detailLoading.value = true
+  detail.value = null
+  try {
+    detail.value = await apiFetch<MinuteDetail>(`/api/minutes/${id}`)
+    if (tasks.value.length === 0) void loadTasks()
+  } catch (error) {
+    console.error('Failed to load minute detail:', error)
+    showMessage('議事録の詳細を読み込めませんでした。', 'error')
+    detailDialog.value = false
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+function editFromDetail() {
+  if (!detail.value) return
+  const item = detail.value.minute
+  detailDialog.value = false
+  openEdit(item)
+}
+
+async function deleteMinute(item: Minute) {
+  if (!window.confirm(`「${item.title}」を削除しますか？\nこの操作は取り消せません。`)) return
+  try {
+    await apiFetch(`/api/minutes/${item.id}`, { method: 'DELETE' })
+    if (detail.value?.minute.id === item.id) detailDialog.value = false
+    showMessage('議事録を削除しました。')
+    await loadMinutes()
+  } catch (error) {
+    console.error('Failed to delete minute:', error)
+    showMessage('削除に失敗しました。操作権限を確認してください。', 'error')
+  }
+}
+
+onMounted(() => {
+  void loadMinutes()
+})
+</script>
+
+<style scoped>
+.preview-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.detail-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+</style>
