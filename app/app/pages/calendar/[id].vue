@@ -386,9 +386,9 @@
             class="mt-1"
           />
 
-          <JstDateTimePicker v-model="eventForm.starts_at" label="開始" class="mt-2" />
+          <CommonJstDateTimePicker v-model="eventForm.starts_at" label="開始" class="mt-2" />
 
-          <JstDateTimePicker v-model="eventForm.ends_at" label="終了" class="mt-2" />
+          <CommonJstDateTimePicker v-model="eventForm.ends_at" label="終了" class="mt-2" />
 
           <v-text-field
             v-model="eventForm.location"
