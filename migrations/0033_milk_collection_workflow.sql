@@ -32,3 +32,23 @@ INSERT OR IGNORE INTO permissions(id,key,name,description,category) VALUES
 ('permission-milk-collection-record-contact','milk_collection.record_contact','牛乳パック店舗連絡記録','店舗への電話結果を記録できる','milk_collection'),
 ('permission-milk-collection-manage-schedule','milk_collection.manage_schedule','牛乳パック受け取り管理','受け取り日程と実績を管理できる','milk_collection'),
 ('permission-milk-collection-comment','milk_collection.comment','牛乳パックコメント','申請にコメントできる','milk_collection');
+
+-- 基本閲覧・提案・コメントはクラス全体に付与し、レビューはクラ代に付与する。
+INSERT OR IGNORE INTO account_role_permissions (account_role_id, permission_id, effect)
+SELECT ar.id, p.id, 'allow'
+FROM account_roles ar
+JOIN permissions p ON p.key IN (
+  'milk_collection.view',
+  'milk_collection.create',
+  'milk_collection.comment'
+)
+WHERE ar.name = 'classmate';
+
+INSERT OR IGNORE INTO role_permissions (role_id, permission_id, effect)
+SELECT r.id, p.id, 'allow'
+FROM roles r
+JOIN permissions p ON p.key IN (
+  'milk_collection.review',
+  'milk_collection.submit_to_chief'
+)
+WHERE r.name = 'class_representative';
