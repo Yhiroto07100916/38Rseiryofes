@@ -21,6 +21,10 @@
 import {computed,onMounted,reactive,ref} from 'vue'
 import {useApi,type MilkCollectionDetailResponse,type MilkCollectionRequest,type MilkCollectionStatus} from '~/composables/useApi'
 import {useAuthStore} from '~/stores/auth'
+
+definePageMeta({
+  middleware: 'auth',
+})
 const api=useApi(),auth=useAuthStore()
 const requests=ref<MilkCollectionRequest[]>([]),loading=ref(false),saving=ref(false),errorMessage=ref(''),search=ref(''),statusFilter=ref<MilkCollectionStatus|null>(null),createDialog=ref(false),detailDialog=ref(false),detail=ref<MilkCollectionDetailResponse|null>(null),actionNote=ref(''),commentText=ref(''),scheduledAt=ref(''),collectedQuantity=ref<number|null>(null)
 const form=reactive({store_name:'',address:'',contact_info:'',expected_quantity:null as number|null,proposal_reason:''})
