@@ -52,6 +52,19 @@ export async function handleMilkCollection(request: Request, env: Env, path: str
  if(method==="PATCH"&&!sub){
   const b=await request.json().catch(()=>null) as Record<string,unknown>|null
   if(!b)return json({error:"Invalid body"},400)
+  if(b.action==="edit_resubmit"){
+   const auth=await requireAuth(request,env); if(auth instanceof Response)return auth
+   const owned=await env.DB.prepare("SELECT created_by FROM milk_collection_requests WHERE id=?").bind(id).first<{created_by:string}>()
+   if(!owned||owned.created_by!==auth.user.id)return json({error:"提案者本人のみ修正できます"},403)
+   if(current.status!=="changes_requested")return json({error:"修正依頼中の候補のみ再提出できます"},409)
+   if(typeof b.store_name!=="string"||!b.store_name.trim()||typeof b.address!=="string"||!b.address.trim()||typeof b.contact_info!=="string"||!b.contact_info.trim())return json({error:"店舗名・住所・連絡先は必須です"},400)
+   const quantity=Number.isInteger(b.expected_quantity)&&Number(b.expected_quantity)>=0?Number(b.expected_quantity):null
+   const reason=typeof b.proposal_reason==="string"?b.proposal_reason.trim():""
+   await env.DB.prepare("UPDATE milk_collection_requests SET title=?,store_name=?,address=?,contact_info=?,expected_quantity=?,proposal_reason=?,status='submitted',updated_at=CURRENT_TIMESTAMP WHERE id=?")
+    .bind(b.store_name.trim(),b.store_name.trim(),b.address.trim(),b.contact_info.trim(),quantity,reason,id).run()
+   await history(env,id,auth.user.id,"resubmitted","changes_requested","submitted",{store_name:b.store_name.trim(),address:b.address.trim(),contact_info:b.contact_info.trim(),expected_quantity:quantity,proposal_reason:reason})
+   return json({ok:true,status:"submitted"})
+  }
   const from=current.status; let to:Status=from, permission="", action=""; const updates:Record<string,unknown>={}
   if(b.action==="request_changes"||b.action==="representative_reviewed"){
    permission="milk_collection.review"
