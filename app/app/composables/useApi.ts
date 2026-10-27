@@ -485,7 +485,7 @@ export const useApi = () => {
   }
 
   const getMilkCollectionRequests = () => apiFetch<{ requests: MilkCollectionRequest[] }>('/api/milk-collection')
-  const createMilkCollectionRequest = (data: { title:string; store_name:string; address?:string; contact_info?:string; expected_quantity?:number|null; proposal_reason:string }) => apiFetch<{id:string}>('/api/milk-collection',{method:'POST',body:data})
+  const createMilkCollectionRequest = (data: { store_name:string; address:string; contact_info:string; expected_quantity?:number|null; proposal_reason:string }) => apiFetch<{id:string}>('/api/milk-collection',{method:'POST',body:data})
   const getMilkCollectionRequest = (id:string) => apiFetch<MilkCollectionDetailResponse>(`/api/milk-collection/${id}`)
   const updateMilkCollectionRequest = (id:string,data:Record<string,unknown>) => apiFetch<{ok:boolean;status:MilkCollectionStatus}>(`/api/milk-collection/${id}`,{method:'PATCH',body:data})
   const addMilkCollectionComment = (id:string,body:string) => apiFetch<{id:string}>(`/api/milk-collection/${id}/comments`,{method:'POST',body:{body}})

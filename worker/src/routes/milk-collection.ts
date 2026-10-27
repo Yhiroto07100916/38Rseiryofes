@@ -22,9 +22,9 @@ export async function handleMilkCollection(request: Request, env: Env, path: str
  if(method==="POST"&&!id){
   const auth=await permitted(request,env,"milk_collection.create"); if(auth instanceof Response)return auth
   const b=await request.json().catch(()=>null) as Record<string,unknown>|null
-  if(!b||typeof b.title!=="string"||!b.title.trim()||typeof b.store_name!=="string"||!b.store_name.trim()||typeof b.proposal_reason!=="string"||!b.proposal_reason.trim())return json({error:"title、store_name、proposal_reason は必須です"},400)
+  if(!b||typeof b.store_name!=="string"||!b.store_name.trim()||typeof b.address!=="string"||!b.address.trim()||typeof b.contact_info!=="string"||!b.contact_info.trim()||typeof b.proposal_reason!=="string"||!b.proposal_reason.trim())return json({error:"store_name、address、contact_info、proposal_reason は必須です"},400)
   const rid=crypto.randomUUID()
-  await env.DB.prepare("INSERT INTO milk_collection_requests(id,title,store_name,address,contact_info,expected_quantity,proposal_reason,created_by) VALUES(?,?,?,?,?,?,?,?)").bind(rid,b.title.trim(),b.store_name.trim(),typeof b.address==="string"?b.address.trim()||null:null,typeof b.contact_info==="string"?b.contact_info.trim()||null:null,Number.isInteger(b.expected_quantity)&&Number(b.expected_quantity)>=0?Number(b.expected_quantity):null,b.proposal_reason.trim(),auth.user.id).run()
+  await env.DB.prepare("INSERT INTO milk_collection_requests(id,title,store_name,address,contact_info,expected_quantity,proposal_reason,created_by) VALUES(?,?,?,?,?,?,?,?)").bind(rid,b.store_name.trim(),b.store_name.trim(),b.address.trim(),b.contact_info.trim(),Number.isInteger(b.expected_quantity)&&Number(b.expected_quantity)>=0?Number(b.expected_quantity):null,b.proposal_reason.trim(),auth.user.id).run()
   await history(env,rid,auth.user.id,"submitted",null,"submitted")
   return json({id:rid},201)
  }
