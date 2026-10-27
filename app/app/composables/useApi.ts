@@ -52,6 +52,13 @@ export interface MilkCollectionDetailResponse {
   history: MilkCollectionHistory[]
 }
 
+
+export type MilkCollectionStatus = 'submitted' | 'changes_requested' | 'representative_reviewed' | 'chief_review_pending' | 'chief_approved' | 'chief_rejected' | 'contact_pending' | 'contacted' | 'store_approved' | 'store_rejected' | 'scheduling' | 'collecting' | 'completed' | 'cancelled'
+export interface MilkCollectionRequest { id:string; title:string; store_name:string; address:string|null; contact_info:string|null; expected_quantity:number|null; proposal_reason:string; status:MilkCollectionStatus; representative_note:string|null; chief_review_result:string|null; chief_review_note:string|null; store_contact_result:string|null; store_contact_note:string|null; scheduled_at:string|null; first_collection_at:string|null; collected_quantity:number|null; created_by:string; proposer_name:string|null; created_at:string; updated_at:string }
+export interface MilkCollectionComment { id:string; request_id:string; author_id:string; author_name:string|null; body:string; created_at:string }
+export interface MilkCollectionHistory { id:string; request_id:string; actor_id:string; actor_name:string|null; action:string; from_status:MilkCollectionStatus|null; to_status:MilkCollectionStatus|null; details:string|null; created_at:string }
+export interface MilkCollectionDetailResponse { request:MilkCollectionRequest; comments:MilkCollectionComment[]; history:MilkCollectionHistory[] }
+
 export interface CalendarCategory {
   id: string
   name: string
@@ -531,8 +538,19 @@ export const useApi = () => {
     )
   }
 
+  const getMilkCollectionRequests = () => apiFetch<{ requests: MilkCollectionRequest[] }>('/api/milk-collection')
+  const createMilkCollectionRequest = (data: { title:string; store_name:string; address?:string; contact_info?:string; expected_quantity?:number|null; proposal_reason:string }) => apiFetch<{id:string}>('/api/milk-collection',{method:'POST',body:data})
+  const getMilkCollectionRequest = (id:string) => apiFetch<MilkCollectionDetailResponse>(`/api/milk-collection/${id}`)
+  const updateMilkCollectionRequest = (id:string,data:Record<string,unknown>) => apiFetch<{ok:boolean;status:MilkCollectionStatus}>(`/api/milk-collection/${id}`,{method:'PATCH',body:data})
+  const addMilkCollectionComment = (id:string,body:string) => apiFetch<{id:string}>(`/api/milk-collection/${id}/comments`,{method:'POST',body:{body}})
+
   return {
     apiFetch,
+    getMilkCollectionRequests,
+    createMilkCollectionRequest,
+    getMilkCollectionRequest,
+    updateMilkCollectionRequest,
+    addMilkCollectionComment,
     getTasks,
     updateTask,
     getTask,
