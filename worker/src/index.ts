@@ -16,6 +16,7 @@ import { handleReceiptOcr } from "./routes/receipt-ocr"
 import { handleSurveys } from "./routes/surveys"
 import { handleDecisions } from "./routes/decisions"
 import { handleMinutes } from "./routes/minutes"
+import { handleMilkCollection } from "./routes/milk-collection"
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -615,6 +616,20 @@ export default {
       }
     }
 
+
+    if (
+      url.pathname === "/api/milk-collection" ||
+      url.pathname.startsWith("/api/milk-collection/")
+    ) {
+      const path = url.pathname.slice("/api/milk-collection".length)
+      const pathParts = path.split("/").filter(Boolean)
+      try {
+        return withCors(request, await handleMilkCollection(request, env, pathParts))
+      } catch (error) {
+        console.error("Milk collection API error:", error)
+        return withCors(request, Response.json({ error: "Internal Server Error" }, { status: 500 }))
+      }
+    }
 
     if (
       url.pathname === "/api/minutes" ||
