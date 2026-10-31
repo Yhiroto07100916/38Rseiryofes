@@ -12,6 +12,8 @@ export interface CalendarEvent {
   category_id: string | null
   category_name: string | null
   category_color: string | null
+  created_by_name: string | null
+  created_by_nickname: string | null
   created_by: string
   created_at: string
   updated_at: string
@@ -110,12 +112,16 @@ async function getCalendarEvent(
         e.category_id,
         c.name AS category_name,
         c.color AS category_color,
+        creator.name AS created_by_name,
+        creator.nickname AS created_by_nickname,
         e.created_by,
         e.created_at,
         e.updated_at
       FROM calendar_events e
       LEFT JOIN calendar_categories c
         ON c.id = e.category_id
+      LEFT JOIN users creator
+        ON creator.id = e.created_by
       WHERE e.id = ?
     `)
     .bind(eventId)
@@ -209,6 +215,8 @@ export async function handleCalendar(
         FROM calendar_events e
         LEFT JOIN calendar_categories c
           ON c.id = e.category_id
+        LEFT JOIN users creator
+          ON creator.id = e.created_by
         WHERE e.starts_at < ?
           AND (e.ends_at IS NULL OR e.ends_at >= ?)
         ORDER BY e.starts_at ASC, e.id ASC

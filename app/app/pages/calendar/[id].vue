@@ -71,6 +71,21 @@
 
           <div class="detail-item">
             <v-icon size="22" color="primary">
+              mdi-account-outline
+            </v-icon>
+
+            <div>
+              <div class="text-body-2 text-medium-emphasis">
+                作成者
+              </div>
+              <div class="text-body-1">
+                {{ event.created_by_nickname || event.created_by_name || '不明' }}
+              </div>
+            </div>
+          </div>
+
+          <div class="detail-item">
+            <v-icon size="22" color="primary">
               mdi-tag-outline
             </v-icon>
 
