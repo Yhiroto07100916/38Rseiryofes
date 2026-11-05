@@ -3,7 +3,7 @@
 - 対象リポジトリ: `Yhiroto07100916/38Rseiryofes`
 - 対象ブランチ: `feature/web-push-notifications`
 - 基準ブランチ: `main`
-- 状態: 実装前仕様
+- 状態: 実装中（コード追加済み・環境設定と実機検証待ち）
 - 作成日: 2026-11-05
 
 ## 1. 概要
@@ -130,11 +130,11 @@
 ## 10. 想定するシステム構成
 
 - フロントエンド: 既存Nuxt 4 / Vue / TypeScript / Vuetify。
-- PWA: 既存の`@vite-pwa/nuxt`とWeb App Manifest設定を活用し、必要なService Worker処理を追加する。
+- PWA: 既存の`@vite-pwa/nuxt`を維持し、既存のWorkbox Service Workerと競合しないよう、`/push/`スコープに専用Service Workerを登録する。
 - API: 既存Cloudflare WorkerにPush Subscription登録・解除APIと送信処理を追加する。
 - DB: Cloudflare D1にSubscriptionと通知ジョブを管理するテーブルを追加する。
-- 送信: VAPIDを利用したWeb Push。Cloudflare Workersで動作する実装方法・依存ライブラリを選定し、Node.js専用APIへの依存を避ける。
-- 再送: D1に保存した送信ジョブをCloudflare Workerの定期実行で処理する。
+- 送信: VAPIDを利用したWeb Push。`@pushforge/builder` 2.0.5を使用し、Web Crypto APIとfetchでCloudflare Workersから送信する。
+- 再送: D1の`push_notification_deliveries`をCloudflare Workerの毎分Cron Triggerで処理する。ローカルでも手動でscheduled handlerを呼び出せる。
 - 既存のお知らせ作成処理（`POST /api/news`）と連携し、新規作成時だけ通知ジョブを作成する。
 
 ## 11. セキュリティ・運用要件
@@ -184,3 +184,20 @@
 - 仕様上の曖昧さやCloudflareの制約が見つかった場合、独断で仕様を変えず、実装前に理由と選択肢を説明する。
 - mainブランチには直接コミットしない。作業は`feature/web-push-notifications`で行う。
 - 実装完了後は変更ファイル、DBマイグレーション、環境変数・Secret設定、テスト結果、実機確認が必要な項目を日本語で報告する。
+
+
+## 15. 実装済みのファイル（作業ブランチ）
+
+- `app/app/composables/usePushNotifications.ts`: ブラウザ側の登録・解除・状態確認。
+- `app/public/push/sw.js`: Push受信と通知タップ時の遷移。
+- `app/app/pages/me/index.vue`: 通知設定UI。
+- `worker/src/routes/push.ts`: 登録・解除API、Push送信、再送処理。
+- `worker/src/index.ts`: Push APIルーティングとscheduled handler。
+- `worker/src/routes/news.ts`: 新規お知らせ作成後の通知ジョブ作成・初回送信。
+- `migrations/0034_create_web_push_notifications.sql`: Subscriptionと送信ジョブのテーブル。
+- `worker/src/env.d.ts`: VAPID環境変数の型。
+- `worker/wrangler.jsonc` / `worker/wrangler.local.jsonc`: 毎分Cron Trigger。
+- `worker/test/push.spec.ts`: 通知本文の長さとPush endpoint検証のテスト。
+- `docs/development/web-push-setup.md`: VAPID鍵・ローカル・本番環境の設定手順。
+
+本番で動作させるには、VAPID鍵の設定、本番D1マイグレーション、Workerデプロイ、iPhone/Android実機テストが別途必要。これらはこの実装作業では実行しない。
