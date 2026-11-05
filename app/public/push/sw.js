@@ -34,7 +34,11 @@ self.addEventListener('notificationclick', (event) => {
   const rawUrl = event.notification.data && event.notification.data.url
   let targetUrl = '/'
 
-  if (typeof rawUrl === 'string' && rawUrl.startsWith('/')) {
+  if (
+    typeof rawUrl === 'string' &&
+    rawUrl.startsWith('/') &&
+    !rawUrl.startsWith('//')
+  ) {
     targetUrl = rawUrl
   }
 
