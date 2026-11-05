@@ -303,6 +303,15 @@ async function processOneDelivery(
   env: Env,
   delivery: PushDeliveryRecord,
 ): Promise<void> {
+  if (delivery.attempt_count >= MAX_ATTEMPTS) {
+    await updateDelivery(env, delivery.delivery_id, {
+      status: "failed",
+      attemptCount: MAX_ATTEMPTS,
+      error: "Maximum attempts reached after an interrupted send",
+    })
+    return
+  }
+
   const attemptNumber = delivery.attempt_count + 1
   const claimed = await env.DB
     .prepare(`
