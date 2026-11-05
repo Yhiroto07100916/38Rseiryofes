@@ -502,6 +502,18 @@
             </v-alert>
 
             <v-btn
+              v-if="pushStatus === 'permission-denied'"
+              variant="outlined"
+              block
+              class="mb-3"
+              :loading="pushBusy"
+              :disabled="pushBusy"
+              @click="refreshPushStatus"
+            >
+              通知の許可状態を再確認
+            </v-btn>
+
+            <v-btn
               v-if="pushStatus === 'registered'"
               color="error"
               variant="outlined"
