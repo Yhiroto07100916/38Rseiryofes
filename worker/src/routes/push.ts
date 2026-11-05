@@ -222,7 +222,7 @@ export async function enqueueNewsPushDeliveries(
 
 async function sendPush(
   env: Env,
-  subscription: PushSubscriptionRecord,
+  subscription: Pick<PushSubscriptionRecord, "endpoint" | "p256dh" | "auth">,
   news: { id: string; title: string; detail: string },
 ): Promise<Response> {
   if (!env.VAPID_PRIVATE_KEY) {
