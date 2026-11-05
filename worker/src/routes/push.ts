@@ -88,7 +88,7 @@ export async function handlePush(
   }
 
   if (request.method === "GET" && pathParts.length === 1 && pathParts[0] === "config") {
-    if (!env.VAPID_PUBLIC_KEY) {
+    if (!isPushConfigured(env)) {
       return jsonError("Push notifications are not configured", 503)
     }
 
