@@ -166,17 +166,25 @@
 15. 既存のお知らせ閲覧・作成・編集・削除、ログイン、他機能に回帰がない。
 16. ビルド・型チェック・関連テストの結果と、未検証事項が明確に報告される。
 
-## 13. 実装時に確定する事項
+## 13. 実装で採用した構成と残作業
 
-以下はリポジトリ調査後に実装方針を決める。
+実装で採用した構成:
 
-- 設定UIの最終配置（現時点の第一候補は`/me`）。
-- Cloudflare Workers互換のWeb Push実装方法・依存ライブラリ。
-- D1テーブルの具体的な列・インデックス・マイグレーション番号。
-- WorkerのCron Trigger設定とローカルテスト方法。
-- 本番・PreviewそれぞれのVAPID Secret設定手順。
-- iOS / Android実機での確認手順。
+- 設定UI: `/me`（マイページ）に設置。
+- Push送信ライブラリ: `@pushforge/builder` 2.0.5。
+- Push用Service Worker: `/push/sw.js`、scopeは`/push/`。既存のPWA用Service Workerとは別登録。
+- D1テーブル: `push_subscriptions`、`push_notification_deliveries`。
+- 再送: 毎分のCron Trigger。ローカル環境でも手動実行可能。
+- VAPID環境変数: `VAPID_PUBLIC_KEY`、`VAPID_PRIVATE_KEY`、`VAPID_SUBJECT`。
 
+実装後に必要な作業:
+
+- VAPID鍵の生成とローカル・Cloudflare Worker Secretへの登録。
+- ローカルD1マイグレーションの適用とWorkerテスト。
+- iPhone・Android実機での登録・受信・解除確認。
+- レビュー後の本番D1マイグレーションとWorkerデプロイ。
+
+環境設定の手順は`docs/development/web-push-setup.md`を参照する。
 ## 14. 実装上の注意
 
 - 既存のコード・命名・API・DB設計に合わせ、必要最小限の変更にする。
