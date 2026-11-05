@@ -123,8 +123,8 @@
 ### 9.3 ブラウザ側での状態確認
 
 - 設定画面を開いたときにNotification.permissionとPush Subscriptionの状態を確認する。
-- permissionがdenied、またはPush Subscriptionが存在しないことを確認した場合、対応するサーバー側登録情報を削除する。
-- permissionがdefaultの場合は、ユーザーがまだ選択していない状態として扱い、勝手に許可要求を出さない。
+- permissionがgranted以外（deniedまたはdefault）の場合は、対応するサーバー側登録情報を削除し、ブラウザ側Subscriptionも解除する。
+- permissionがdefaultの場合も、ユーザーがまだ許可していない状態として扱い、自動で許可要求は出さない。再登録は設定画面のボタン操作から行う。
 - OS側で許可が取り消された瞬間にサーバーが必ず検知できるわけではない。次回サイト利用時または送信時に検知する。
 
 ## 10. 想定するシステム構成
