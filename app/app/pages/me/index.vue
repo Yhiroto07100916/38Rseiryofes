@@ -514,7 +514,7 @@
             </v-btn>
 
             <v-btn
-              v-else-if="pushSupported && pushStatus !== 'unsupported'"
+              v-else-if="pushSupported && pushStatus !== 'unsupported' && pushStatus !== 'permission-denied'"
               color="primary"
               variant="flat"
               block
