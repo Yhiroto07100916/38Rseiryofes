@@ -391,7 +391,7 @@ async function processOneDelivery(
     await updateDelivery(env, delivery.delivery_id, {
       status: "pending",
       attemptCount: attemptNumber,
-      nextAttemptAt: `datetime('now', '+${delay} minutes')`,
+      retryDelayMinutes: delay,
       error: message.slice(0, 300),
     })
   }
