@@ -36,7 +36,7 @@ export function isAllowedPushEndpoint(value: string): boolean {
   try {
     const url = new URL(value)
 
-    if (url.protocol !== "https:" || url.username || url.password) {
+    if (url.protocol !== "https:" || url.username || url.password || (url.port !== "" && url.port !== "443")) {
       return false
     }
 
@@ -44,8 +44,10 @@ export function isAllowedPushEndpoint(value: string): boolean {
 
     return (
       host === "fcm.googleapis.com" ||
+      host === "push.apple.com" ||
       host.endsWith(".push.apple.com") ||
       host.endsWith(".push.services.mozilla.com") ||
+      host === "notify.windows.com" ||
       host.endsWith(".notify.windows.com")
     )
   } catch {
@@ -427,7 +429,12 @@ export async function processDuePushDeliveries(env: Env): Promise<void> {
     .bind(MAX_BATCH_SIZE)
     .all<PushDeliveryRecord>()
 
-  await Promise.all(
-    result.results.map((delivery) => processOneDelivery(env, delivery)),
-  )
+  // 暗号化と外部送信を一度に大量実行しないよう、10件ずつ処理する。
+  for (let offset = 0; offset < result.results.length; offset += 10) {
+    const batch = result.results.slice(offset, offset + 10)
+
+    await Promise.all(
+      batch.map((delivery) => processOneDelivery(env, delivery)),
+    )
+  }
 }
