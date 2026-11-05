@@ -253,7 +253,7 @@ export const usePushNotifications = () => {
     error.value = ''
 
     try {
-      const registration = await navigator.serviceWorker.getRegistration('/push/')
+      const registration = await getPushRegistration()
       const subscription = registration
         ? await registration.pushManager.getSubscription()
         : null
