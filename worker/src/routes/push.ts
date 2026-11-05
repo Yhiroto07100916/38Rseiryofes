@@ -267,7 +267,7 @@ async function updateDelivery(
   values: {
     status: "pending" | "sent" | "failed"
     attemptCount: number
-    nextAttemptAt?: string
+    retryDelayMinutes?: number
     error?: string | null
   },
 ): Promise<void> {
@@ -277,7 +277,10 @@ async function updateDelivery(
       SET
         status = ?,
         attempt_count = ?,
-        next_attempt_at = COALESCE(?, next_attempt_at),
+        next_attempt_at = CASE
+          WHEN ? IS NULL THEN next_attempt_at
+          ELSE datetime('now', '+' || ? || ' minutes')
+        END,
         lease_until = NULL,
         last_error = ?,
         updated_at = CURRENT_TIMESTAMP
@@ -286,7 +289,8 @@ async function updateDelivery(
     .bind(
       values.status,
       values.attemptCount,
-      values.nextAttemptAt ?? null,
+      values.retryDelayMinutes ?? null,
+      values.retryDelayMinutes ?? null,
       values.error ?? null,
       deliveryId,
     )
@@ -356,7 +360,7 @@ async function processOneDelivery(
       await updateDelivery(env, delivery.delivery_id, {
         status: "pending",
         attemptCount: attemptNumber,
-        nextAttemptAt: `datetime('now', '+${delay} minutes')`,
+        retryDelayMinutes: delay,
         error: `Push service returned ${response.status}`,
       })
       return
