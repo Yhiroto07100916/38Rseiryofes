@@ -21,6 +21,14 @@ function toApplicationServerKey(value: string): Uint8Array {
   return Uint8Array.from(raw, (character) => character.charCodeAt(0))
 }
 
+function getPushRegistration(): Promise<ServiceWorkerRegistration | undefined> {
+  const pushScope = new URL('/push/', window.location.origin).href
+
+  return navigator.serviceWorker.getRegistrations().then((registrations) =>
+    registrations.find((registration) => registration.scope === pushScope),
+  )
+}
+
 function isIosDevice(): boolean {
   return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
@@ -118,7 +126,7 @@ export const usePushNotifications = () => {
 
     try {
       const permission = Notification.permission
-      const registration = await navigator.serviceWorker.getRegistration('/push/')
+      const registration = await getPushRegistration()
       const subscription = registration
         ? await registration.pushManager.getSubscription()
         : null
