@@ -133,7 +133,7 @@ export const usePushNotifications = () => {
         ? await registration.pushManager.getSubscription()
         : null
 
-      if (permission === 'denied') {
+      if (permission !== 'granted') {
         const endpoint = subscription?.endpoint ||
           localStorage.getItem(ENDPOINT_STORAGE_KEY)
 
@@ -146,7 +146,9 @@ export const usePushNotifications = () => {
         }
 
         localStorage.removeItem(ENDPOINT_STORAGE_KEY)
-        status.value = 'permission-denied'
+        status.value = permission === 'denied'
+          ? 'permission-denied'
+          : 'not-registered'
         return
       }
 
