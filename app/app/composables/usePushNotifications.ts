@@ -170,6 +170,9 @@ export const usePushNotifications = () => {
         localStorage.setItem(ENDPOINT_STORAGE_KEY, subscription.endpoint)
         status.value = 'registered'
       } else {
+        // サーバー側で無効扱いになったSubscriptionを再利用しない。
+        await subscription.unsubscribe()
+        localStorage.removeItem(ENDPOINT_STORAGE_KEY)
         status.value = 'not-registered'
       }
     } catch (cause) {
