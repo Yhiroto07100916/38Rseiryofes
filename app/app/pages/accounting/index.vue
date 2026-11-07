@@ -534,8 +534,21 @@
                 :key="item.id"
               >
                 <v-list-item>
+                  <template #prepend>
+                    <UserAvatar
+                      v-if="item.user_id"
+                      :user="{
+                        id: item.user_id,
+                        name: item.user_name || '',
+                        nickname: item.user_nickname || null,
+                        avatar_key: item.user_avatar_key,
+                      }"
+                      :size="36"
+                      class="mr-2"
+                    />
+                  </template>
                   <v-list-item-title class="font-weight-medium">
-                    {{ item.user_name || item.user_nickname || '支払者未設定' }}
+                    {{ item.user_nickname || item.user_name || '支払者未設定' }}
                   </v-list-item-title>
 
                   <v-list-item-subtitle class="mt-1">
@@ -1063,6 +1076,7 @@ interface Receipt {
   paid_by_user_id?: string | null
   paid_by_name?: string | null
   paid_by_nickname?: string | null
+  paid_by_avatar_key?: string | null
   description?: string | null
   reimbursement_status?: ReimbursementStatus | null
   items: ReceiptItem[]
@@ -1089,6 +1103,8 @@ interface Reimbursement {
   user_id?: string | null
   user_name?: string | null
   user_nickname?: string | null
+  user_avatar_key?: string | null
+  paid_by_avatar_key?: string | null
   amount: number
   status: ReimbursementStatus
   store_name?: string | null
