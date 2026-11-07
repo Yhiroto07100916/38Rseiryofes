@@ -89,6 +89,73 @@ async function getFile(
     .first()
 }
 
+async function canViewLinkedFile(
+  env: Env,
+  userId: string,
+  fileId: string,
+): Promise<boolean> {
+  const links = await env.DB
+    .prepare(`
+      SELECT
+        EXISTS (
+          SELECT 1 FROM receipt_files
+          WHERE file_id = ?
+        ) AS has_receipt,
+        EXISTS (
+          SELECT 1 FROM task_files
+          WHERE file_id = ?
+        ) AS has_task,
+        EXISTS (
+          SELECT 1 FROM decision_files
+          WHERE file_id = ?
+        ) AS has_decision,
+        EXISTS (
+          SELECT 1 FROM submission_record_files
+          WHERE file_id = ?
+        ) AS has_submission
+    `)
+    .bind(fileId, fileId, fileId, fileId)
+    .first<{
+      has_receipt: number
+      has_task: number
+      has_decision: number
+      has_submission: number
+    }>()
+
+  if (!links) {
+    return false
+  }
+
+  if (
+    links.has_receipt &&
+    !(await hasPermission(env, userId, "accounting.view"))
+  ) {
+    return false
+  }
+
+  if (
+    links.has_task &&
+    !(await hasPermission(env, userId, "tasks.view"))
+  ) {
+    return false
+  }
+
+  if (
+    links.has_decision &&
+    !(await hasPermission(env, userId, "decisions.view"))
+  ) {
+    return false
+  }
+
+  // 提出物の添付ファイルは専用ダウンロードAPIからのみ取得させる。
+  // submissions.view を持つユーザーでも汎用ファイルAPIでは取得できない。
+  if (links.has_submission) {
+    return false
+  }
+
+  return true
+}
+
 export async function handleFiles(
   request: Request,
   env: Env,
@@ -438,17 +505,72 @@ export async function handleFiles(
         bindings.push(term, term, term)
       }
 
+      const [canViewReceipts, canViewTasks, canViewDecisions] =
+        await Promise.all([
+          hasPermission(env, auth.user.id, "accounting.view"),
+          hasPermission(env, auth.user.id, "tasks.view"),
+          hasPermission(env, auth.user.id, "decisions.view"),
+        ])
+
+      query += `
+        AND NOT EXISTS (
+          SELECT 1
+          FROM submission_record_files srf
+          WHERE srf.file_id = f.id
+        )
+        AND (
+          NOT EXISTS (
+            SELECT 1 FROM receipt_files rf
+            WHERE rf.file_id = f.id
+          )
+          OR ?
+        )
+        AND (
+          NOT EXISTS (
+            SELECT 1 FROM task_files tf
+            WHERE tf.file_id = f.id
+          )
+          OR ?
+        )
+        AND (
+          NOT EXISTS (
+            SELECT 1 FROM decision_files df
+            WHERE df.file_id = f.id
+          )
+          OR ?
+        )
+      `
+      bindings.push(
+        canViewReceipts ? 1 : 0,
+        canViewTasks ? 1 : 0,
+        canViewDecisions ? 1 : 0,
+      )
+
       query += " ORDER BY f.created_at DESC LIMIT ?"
       bindings.push(limit)
 
       const result = await env.DB
         .prepare(query)
         .bind(...bindings)
-        .all()
+        .all<{
+          id: string
+          object_key: string
+          original_name: string
+          content_type: string
+          size: number
+          category: string
+          uploaded_by: string
+          created_at: string
+          archived_at: string | null
+          ai_status: string
+          ai_summary: string | null
+        }>()
+
+      const visibleFiles = result.results ?? []
 
       return json({
-        files: result.results ?? [],
-        count: result.results?.length ?? 0,
+        files: visibleFiles,
+        count: visibleFiles.length,
       })
     }
 
@@ -683,6 +805,20 @@ export async function handleFiles(
       }
 
       if (request.method === "GET") {
+        if (file.archived_at) {
+          return json({ error: "File not found" }, 404)
+        }
+
+        const canView = await canViewLinkedFile(
+          env,
+          auth.user.id,
+          file.id,
+        )
+
+        if (!canView) {
+          return json({ error: "Forbidden" }, 403)
+        }
+
         const object = await env.FILES_BUCKET.get(objectKey)
 
         if (!object) {
@@ -697,7 +833,7 @@ export async function handleFiles(
         headers.set("etag", object.httpEtag)
         headers.set(
           "Cache-Control",
-          "private, max-age=3600",
+          "private, no-store",
         )
 
         return new Response(object.body, {
@@ -771,6 +907,46 @@ export async function handleFiles(
           {
             error: "This file is attached to a task",
             code: "FILE_HAS_TASK_LINK",
+          },
+          409,
+        )
+      }
+
+      const decisionLink = await env.DB
+        .prepare(`
+          SELECT 1
+          FROM decision_files
+          WHERE file_id = ?
+          LIMIT 1
+        `)
+        .bind(file.id)
+        .first()
+
+      if (decisionLink) {
+        return json(
+          {
+            error: "This file is attached to a decision",
+            code: "FILE_HAS_DECISION_LINK",
+          },
+          409,
+        )
+      }
+
+      const submissionLink = await env.DB
+        .prepare(`
+          SELECT 1
+          FROM submission_record_files
+          WHERE file_id = ?
+          LIMIT 1
+        `)
+        .bind(file.id)
+        .first()
+
+      if (submissionLink) {
+        return json(
+          {
+            error: "This file is attached to a submission",
+            code: "FILE_HAS_SUBMISSION_LINK",
           },
           409,
         )

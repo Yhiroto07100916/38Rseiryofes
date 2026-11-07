@@ -560,6 +560,215 @@ describe("Submissions API", () => {
     expect(actions).toContain("complete");
   });
 
+  it("rejects files uploaded by another user", async () => {
+    const submitter = await createFixture()
+    const otherUser = await createFixture()
+
+    await grantPermissions(submitter.userId, [
+      "submissions.create",
+      "submissions.edit",
+      "submissions.submit",
+    ])
+
+    const submissionId = await createSubmission(submitter)
+
+    const readyResponse = await changeStatus(
+      submitter,
+      submissionId,
+      "ready_to_submit",
+    )
+
+    expect(readyResponse.status).toBe(200)
+
+    const response = await SELF.fetch(
+      `http://example.com/api/submissions/${submissionId}/records`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: submitter.cookie,
+        },
+        body: JSON.stringify({
+          note: "他人のファイルを添付するテスト",
+          file_ids: [otherUser.fileId],
+        }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+
+    const count = await env.DB.prepare(`
+      SELECT COUNT(*) AS count
+      FROM submission_records
+      WHERE submission_id = ?
+    `)
+      .bind(submissionId)
+      .first<{ count: number }>()
+
+    expect(count?.count).toBe(0)
+  });
+
+  it("allows classmates to view submissions and files without mutation permissions", async () => {
+    const owner = await createFixture()
+    const classmate = await createFixture()
+
+    await grantPermissions(owner.userId, [
+      "submissions.create",
+      "submissions.edit",
+      "submissions.submit",
+      "submissions.view",
+    ])
+
+    const submissionId = await createSubmission(owner)
+
+    const readyResponse = await changeStatus(
+      owner,
+      submissionId,
+      "ready_to_submit",
+    )
+
+    expect(readyResponse.status).toBe(200)
+
+    const objectKey = `submission-test/${owner.fileId}`
+    await env.FILES_BUCKET.put(objectKey, "submission test file", {
+      httpMetadata: {
+        contentType: "application/pdf",
+      },
+    })
+
+    const submitResponse = await SELF.fetch(
+      `http://example.com/api/submissions/${submissionId}/records`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: owner.cookie,
+        },
+        body: JSON.stringify({
+          note: "閲覧権限テスト",
+          file_ids: [owner.fileId],
+        }),
+      },
+    )
+
+    expect(submitResponse.status).toBe(201)
+
+    await grantPermissions(classmate.userId, [
+      "submissions.view",
+    ])
+
+    const listResponse = await SELF.fetch(
+      "http://example.com/api/submissions",
+      {
+        headers: {
+          Cookie: classmate.cookie,
+        },
+      },
+    )
+
+    expect(listResponse.status).toBe(200)
+
+    const listBody = await listResponse.json() as {
+      submissions: Array<{ id: string }>
+    }
+
+    expect(
+      listBody.submissions.some((item) => item.id === submissionId),
+    ).toBe(true)
+
+    const detailResponse = await SELF.fetch(
+      `http://example.com/api/submissions/${submissionId}`,
+      {
+        headers: {
+          Cookie: classmate.cookie,
+        },
+      },
+    )
+
+    expect(detailResponse.status).toBe(200)
+
+    const downloadResponse = await SELF.fetch(
+      `http://example.com/api/submissions/${submissionId}/files/${owner.fileId}`,
+      {
+        headers: {
+          Cookie: classmate.cookie,
+        },
+      },
+    )
+
+    expect(downloadResponse.status).toBe(200)
+    expect(await downloadResponse.text()).toBe("submission test file")
+
+    const genericDownloadResponse = await SELF.fetch(
+      `http://example.com/api/files/${objectKey}`,
+      {
+        headers: {
+          Cookie: classmate.cookie,
+        },
+      },
+    )
+
+    expect(genericDownloadResponse.status).toBe(403)
+
+    const createResponse = await SELF.fetch(
+      "http://example.com/api/submissions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: classmate.cookie,
+        },
+        body: JSON.stringify({
+          title: "閲覧者による作成",
+          destination: "テスト",
+        }),
+      },
+    )
+
+    expect(createResponse.status).toBe(403)
+
+    const editResponse = await SELF.fetch(
+      `http://example.com/api/submissions/${submissionId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: classmate.cookie,
+        },
+        body: JSON.stringify({
+          title: "不正な変更",
+        }),
+      },
+    )
+
+    expect(editResponse.status).toBe(403)
+
+    const statusResponse = await changeStatus(
+      classmate,
+      submissionId,
+      "complete",
+    )
+
+    expect(statusResponse.status).toBe(403)
+
+    const recordResponse = await SELF.fetch(
+      `http://example.com/api/submissions/${submissionId}/records`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: classmate.cookie,
+        },
+        body: JSON.stringify({
+          note: "閲覧者による提出",
+          file_ids: [],
+        }),
+      },
+    )
+
+    expect(recordResponse.status).toBe(403)
+  });
+
   it("rejects invalid status transitions", async () => {
     const fixture = await createFixture();
 

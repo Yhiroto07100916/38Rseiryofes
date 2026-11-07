@@ -120,6 +120,8 @@ function addHistory(
 async function validateFiles(
   env: Env,
   fileIds: string[],
+  userId: string,
+  submissionId: string,
 ): Promise<string | null> {
   if (fileIds.length > 20) {
     return "一度に紐付けられるファイルは20件までです"
@@ -137,16 +139,37 @@ async function validateFiles(
 
   const result = await env.DB
     .prepare(`
-      SELECT id
-      FROM files
-      WHERE id IN (${placeholders})
-        AND archived_at IS NULL
+      SELECT f.id
+      FROM files f
+      WHERE f.id IN (${placeholders})
+        AND f.archived_at IS NULL
+        AND f.uploaded_by = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM receipt_files rf
+          WHERE rf.file_id = f.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM task_files tf
+          WHERE tf.file_id = f.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM decision_files df
+          WHERE df.file_id = f.id
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM submission_record_files srf
+          JOIN submission_records sr
+            ON sr.id = srf.record_id
+          WHERE srf.file_id = f.id
+            AND sr.submission_id != ?
+        )
     `)
-    .bind(...fileIds)
+    .bind(...fileIds, userId, submissionId)
     .all<{ id: string }>()
 
   if (result.results.length !== fileIds.length) {
-    return "存在しないファイル、またはアーカイブ済みのファイルが含まれています"
+    return "自分がアップロードした未使用のファイル、またはこの提出物に紐付いたファイルのみ添付できます"
   }
 
   return null
@@ -324,6 +347,64 @@ export async function handleSubmissions(
 
   if (!id) {
     return json({ error: "Not Found" }, 404)
+  }
+
+  if (
+    method === "GET" &&
+    sub === "files" &&
+    pathParts.length === 3
+  ) {
+    const auth = await permitted(request, env, "submissions.view")
+
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const current = await getSubmission(env, id)
+
+    if (!current) {
+      return json({ error: "Not Found" }, 404)
+    }
+
+    const fileId = decodeURIComponent(pathParts[2])
+
+    const file = await env.DB
+      .prepare(`
+        SELECT f.object_key, f.archived_at
+        FROM files f
+        JOIN submission_record_files srf
+          ON srf.file_id = f.id
+        JOIN submission_records sr
+          ON sr.id = srf.record_id
+        WHERE f.id = ?
+          AND sr.submission_id = ?
+        LIMIT 1
+      `)
+      .bind(fileId, id)
+      .first<{
+        object_key: string
+        archived_at: string | null
+      }>()
+
+    if (!file || file.archived_at) {
+      return json({ error: "File not found" }, 404)
+    }
+
+    const object = await env.FILES_BUCKET.get(file.object_key)
+
+    if (!object) {
+      return json({ error: "File object not found" }, 404)
+    }
+
+    const headers = new Headers()
+    object.writeHttpMetadata(headers)
+    headers.set("etag", object.httpEtag)
+    headers.set("Cache-Control", "private, no-store")
+
+    return new Response(object.body, {
+      status: 200,
+      headers,
+    })
   }
 
   if (method === "GET" && !sub) {
@@ -625,7 +706,7 @@ export async function handleSubmissions(
       return json({ error: "file_ids の形式が不正です" }, 400)
     }
 
-    const fileError = await validateFiles(env, fileIds)
+    const fileError = await validateFiles(env, fileIds, auth.user.id, id)
 
     if (fileError) {
       return json({ error: fileError }, 400)
@@ -677,6 +758,12 @@ export async function handleSubmissions(
               AND version = ?
               AND status = ?
           )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM submission_records
+            WHERE submission_id = ?
+              AND attempt_number = ?
+          )
         `)
         .bind(
           recordId,
@@ -687,6 +774,8 @@ export async function handleSubmissions(
           id,
           current.version + 1,
           nextStatus,
+          id,
+          attemptNumber,
         ),
 
       ...fileIds.map((fileId) =>
