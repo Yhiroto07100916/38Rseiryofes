@@ -1,10 +1,17 @@
 <template>
   <v-container class="py-6 px-4">
-    <div class="mb-6">
-      <h1 class="text-h5 font-weight-bold">
-        マイページ
-      </h1>
-      
+    <div class="d-flex align-center mb-6">
+      <v-icon
+        icon="mdi-account-circle"
+        size="40"
+        class="mr-2"
+      />
+
+      <div class="flex-grow-1" style="min-width: 0">
+        <h1 class="text-h5 font-weight-bold">
+          マイページ
+        </h1>
+      </div>
     </div>
 
     <v-row>
