@@ -915,6 +915,7 @@ export async function handleScripts(
                 u.student_number,
                 u.name,
                 u.nickname,
+                u.avatar_key,
                 sc.cast_order,
                 sc.created_at
               FROM script_casts sc
@@ -1027,6 +1028,7 @@ export async function handleScripts(
                     u.student_number,
                     u.name,
                     u.nickname,
+                    u.avatar_key,
                     sc.cast_order,
                     sc.created_at
                   FROM script_casts sc
@@ -1146,6 +1148,7 @@ export async function handleScripts(
                 u.student_number,
                 u.name,
                 u.nickname,
+                u.avatar_key,
                 sc.cast_order,
                 sc.created_at
               FROM script_casts sc
