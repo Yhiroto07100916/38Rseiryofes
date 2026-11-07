@@ -183,6 +183,15 @@ export default {
     }
 
     if (
+      url.pathname === "/api/tool-rental" ||
+      url.pathname.startsWith("/api/tool-rental/")
+    ) {
+      const path = url.pathname.slice("/api/tool-rental".length)
+      const pathParts = path.split("/").filter(Boolean)
+      return withCors(request, await handleToolRental(request, env, pathParts))
+    }
+
+    if (
       url.pathname === "/api/equipment" ||
       url.pathname.startsWith("/api/equipment/")
     ) {
