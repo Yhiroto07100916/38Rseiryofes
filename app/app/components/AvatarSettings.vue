@@ -13,25 +13,24 @@
         <input ref="fileInput" class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" @change="selectAvatar">
       </div>
     </div>
-    <v-alert v-if="errorMessage" type="error" variant="tonal" density="compact" class="mt-4">{{ errorMessage }}</v-alert>
-    <v-alert v-if="successMessage" type="success" variant="tonal" density="compact" class="mt-4">{{ successMessage }}</v-alert>
+    
+    
   </section>
 </template>
 
 <script setup lang="ts">
+import { useSnackbar } from "~/composables/useSnackbar"
 import { onBeforeUnmount, ref } from 'vue'
 import { useApi } from '~/composables/useApi'
 import { useAuthStore } from '~/stores/auth'
 
 const auth = useAuthStore()
+const snackbar = useSnackbar()
 const { apiFetch } = useApi()
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const previewUrl = ref('')
 const uploading = ref(false)
-const errorMessage = ref('')
-const successMessage = ref('')
-
 const clearPreview = () => {
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
   previewUrl.value = ''
@@ -39,18 +38,16 @@ const clearPreview = () => {
 }
 
 const selectAvatar = (event: Event) => {
-  errorMessage.value = ''
-  successMessage.value = ''
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    errorMessage.value = 'JPEG・PNG・WebP形式の画像を選択してください。'
+    snackbar.error('JPEG・PNG・WebP形式の画像を選択してください。')
     input.value = ''
     return
   }
   if (file.size === 0 || file.size > 2 * 1024 * 1024) {
-    errorMessage.value = '画像は2MB以下にしてください。'
+    snackbar.error('画像は2MB以下にしてください。')
     input.value = ''
     return
   }
@@ -62,8 +59,6 @@ const selectAvatar = (event: Event) => {
 const uploadAvatar = async () => {
   if (!selectedFile.value || !auth.user) return
   uploading.value = true
-  errorMessage.value = ''
-  successMessage.value = ''
   try {
     const form = new FormData()
     form.append('avatar', selectedFile.value)
@@ -71,9 +66,9 @@ const uploadAvatar = async () => {
     auth.user = { ...auth.user, avatar_key: response.avatar_key }
     clearPreview()
     if (fileInput.value) fileInput.value.value = ''
-    successMessage.value = 'プロフィール画像を変更しました。'
+    snackbar.success('プロフィール画像を変更しました。')
   } catch (error: any) {
-    errorMessage.value = error?.data?.error || error?.message || '画像のアップロードに失敗しました。'
+    snackbar.error(error?.data?.error || error?.message || '画像のアップロードに失敗しました。')
   } finally {
     uploading.value = false
   }
@@ -82,16 +77,14 @@ const uploadAvatar = async () => {
 const removeAvatar = async () => {
   if (!auth.user?.avatar_key || uploading.value) return
   uploading.value = true
-  errorMessage.value = ''
-  successMessage.value = ''
   try {
     await apiFetch('/api/auth/avatar', { method: 'DELETE' })
     auth.user = { ...auth.user, avatar_key: null }
     clearPreview()
     if (fileInput.value) fileInput.value.value = ''
-    successMessage.value = 'プロフィール画像を削除しました。'
+    snackbar.success('プロフィール画像を削除しました。')
   } catch (error: any) {
-    errorMessage.value = error?.data?.error || error?.message || '画像の削除に失敗しました。'
+    snackbar.error(error?.data?.error || error?.message || '画像の削除に失敗しました。')
   } finally {
     uploading.value = false
   }
