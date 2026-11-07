@@ -819,6 +819,7 @@ definePageMeta({
     student_number: string
     name: string
     nickname: string | null
+    avatar_key: string | null
   }
   
   interface Character {
