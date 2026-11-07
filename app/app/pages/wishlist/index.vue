@@ -12,6 +12,8 @@ const saving = ref(false)
 const dialog = ref(false)
 const errorMessage = ref('')
 const editingId = ref<string | null>(null)
+const canCreate = ref(false)
+const canReview = ref(false)
 
 const emptyForm = () => ({
   title: '',
@@ -35,9 +37,8 @@ const priorityItems = [
 
 const statusItems = [
   { title: '購入希望', value: 'requested' },
-  { title: '購入予定', value: 'approved' },
+  { title: '購入予定', value: 'planned' },
   { title: '購入済み', value: 'purchased' },
-  { title: '見送り', value: 'rejected' },
 ]
 
 const totalEstimatedCost = computed(() =>
@@ -66,6 +67,8 @@ async function loadItems() {
   try {
     const response = await api.getWishlistItems()
     items.value = response.items
+    canCreate.value = response.capabilities.can_create
+    canReview.value = response.capabilities.can_review
   } catch (error) {
     console.error(error)
     errorMessage.value = 'ほしい物リストを取得できませんでした。閲覧権限を確認してください。'
@@ -111,7 +114,7 @@ async function saveItem() {
       quantity: form.quantity,
       estimated_cost: form.estimated_cost,
       priority: form.priority,
-      status: form.status,
+      ...(canReview.value ? { status: form.status } : {}),
       memo: form.memo || null,
     }
 
@@ -166,11 +169,12 @@ onMounted(loadItems)
       </div>
 
       <v-btn
+        v-if="canCreate"
         color="primary"
         prepend-icon="mdi-plus"
         @click="openCreateDialog"
       >
-        物品を追加
+        購入希望を提出
       </v-btn>
     </div>
 
@@ -227,7 +231,7 @@ onMounted(loadItems)
               登録者：{{ item.created_by_nickname || item.created_by_name || '不明' }}
             </v-card-subtitle>
             <template #append>
-              <v-menu>
+              <v-menu v-if="item.can_edit || item.can_delete">
                 <template #activator="{ props: menuProps }">
                   <v-btn
                     v-bind="menuProps"
@@ -239,11 +243,13 @@ onMounted(loadItems)
                 </template>
                 <v-list density="compact">
                   <v-list-item
+                    v-if="item.can_edit"
                     prepend-icon="mdi-pencil"
                     title="編集"
                     @click="openEditDialog(item)"
                   />
                   <v-list-item
+                    v-if="item.can_delete"
                     prepend-icon="mdi-delete-outline"
                     title="削除"
                     base-color="error"
@@ -305,7 +311,7 @@ onMounted(loadItems)
     <v-dialog v-model="dialog" max-width="640" persistent>
       <v-card rounded="xl">
         <v-card-title class="pa-5">
-          {{ editingId ? '物品を編集' : '物品を追加' }}
+          {{ editingId ? '購入希望を編集' : '購入希望を提出' }}
         </v-card-title>
         <v-divider />
         <v-card-text class="pa-5">
@@ -356,6 +362,7 @@ onMounted(loadItems)
             </v-col>
             <v-col cols="6">
               <v-select
+                v-if="canReview"
                 v-model="form.status"
                 :items="statusItems"
                 label="状態"
