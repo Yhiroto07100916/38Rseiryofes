@@ -171,7 +171,8 @@ async function getTaskAssignments(
         u.id,
         u.student_number,
         u.name,
-        u.nickname
+        u.nickname,
+        u.avatar_key
       FROM task_assignees ta
       INNER JOIN users u
         ON u.id = ta.user_id
@@ -184,6 +185,7 @@ async function getTaskAssignments(
       student_number: string
       name: string
       nickname: string | null
+      avatar_key: string | null
     }>()
 
   const roles = await env.DB
@@ -1313,6 +1315,7 @@ export async function handleTasks(
           tc.user_id,
           u.name AS user_name,
           u.nickname AS user_nickname,
+          u.avatar_key AS avatar_key,
           tc.content,
           tc.created_at,
           tc.updated_at
@@ -1329,6 +1332,7 @@ export async function handleTasks(
         user_id: string
         user_name: string
         user_nickname: string | null
+        avatar_key: string | null
         content: string
         created_at: string
         updated_at: string
