@@ -77,7 +77,7 @@ function normalizeDate(value: unknown): string | null {
   const date = Array.isArray(value) ? value[0] : value
 
   if (typeof date === 'string') {
-    const match = /^(\\d{4}-\\d{2}-\\d{2})/.exec(date)
+    const match = /^(\d{4}-\d{2}-\d{2})/.exec(date)
     return match?.[1] ?? null
   }
 
