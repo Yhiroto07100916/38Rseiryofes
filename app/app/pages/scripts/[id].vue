@@ -792,8 +792,8 @@
 definePageMeta({
   permissions: ['script.view'],
   middleware: ['auth'],
-    layout: false,
-  })
+  layout: false,
+})
   
   type BlockType = 'dialogue' | 'direction' | 'sound' | 'lighting'
   
