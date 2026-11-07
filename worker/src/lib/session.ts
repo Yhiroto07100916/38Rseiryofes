@@ -117,6 +117,33 @@ export function createExpiredSessionCookie(
   ].join("; ")
 }
 
+export function createLoginSessionHeaders(
+  sessionId: string,
+  secure: boolean,
+  domain?: string,
+): Headers {
+  const headers = new Headers()
+  headers.append("Set-Cookie", createExpiredSessionCookie(secure))
+  headers.append(
+    "Set-Cookie",
+    createSessionCookie(sessionId, secure, domain),
+  )
+  return headers
+}
+
+export function createLogoutSessionHeaders(
+  secure: boolean,
+  domain?: string,
+): Headers {
+  const headers = new Headers()
+  headers.append("Set-Cookie", createExpiredSessionCookie(secure))
+  headers.append(
+    "Set-Cookie",
+    createExpiredSessionCookie(secure, domain),
+  )
+  return headers
+}
+
 export async function getSessionUser(
   request: Request,
   env: SessionEnv,
