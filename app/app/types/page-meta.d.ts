@@ -1,5 +1,3 @@
-import type { RouteMeta } from 'vue-router'
-
 declare module '#app' {
   interface PageMeta {
     permissions?: string[]
