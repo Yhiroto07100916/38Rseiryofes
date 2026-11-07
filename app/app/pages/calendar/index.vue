@@ -386,7 +386,8 @@ import {
 } from '~/utils/jst'
 
 definePageMeta({
-  middleware: 'auth',
+    permissions: ['schedule.view'],
+middleware: 'auth',
 })
 
 import { useDisplay } from 'vuetify'
