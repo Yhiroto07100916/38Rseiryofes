@@ -1,0 +1,131 @@
+declare const __D1_MIGRATIONS__: string;
+
+import { applyD1Migrations, env, SELF } from "cloudflare:test";
+import { beforeAll, describe, expect, it } from "vitest";
+
+beforeAll(async () => {
+  const migrations = JSON.parse(__D1_MIGRATIONS__);
+  await applyD1Migrations(env.DB, migrations);
+});
+
+async function createUser(label: string) {
+  const userId = crypto.randomUUID();
+  const sessionId = crypto.randomUUID();
+
+  await env.DB.prepare(`
+    INSERT INTO users (id, student_number, name)
+    VALUES (?, ?, ?)
+  `).bind(userId, `tool-rental-${crypto.randomUUID()}`, label).run();
+
+  await env.DB.prepare(`
+    INSERT INTO sessions (id, user_id, expires_at)
+    VALUES (?, ?, datetime('now', '+1 day'))
+  `).bind(sessionId, userId).run();
+
+  return { userId, cookie: `session_id=${sessionId}` };
+}
+
+async function grant(userId: string, keys: string[]) {
+  for (const key of keys) {
+    await env.DB.prepare(`
+      INSERT INTO user_permissions (user_id, permission_id, effect)
+      SELECT ?, id, 'allow' FROM permissions WHERE key = ?
+    `).bind(userId, key).run();
+  }
+}
+
+async function createTool(userId: string, name: string, quantity: number) {
+  const id = crypto.randomUUID();
+  await env.DB.prepare(`
+    INSERT INTO tool_rental_tools (id, name, category, total_quantity, created_by)
+    VALUES (?, ?, 'test', ?, ?)
+  `).bind(id, name, quantity, userId).run();
+  return id;
+}
+
+describe("Tool rental API", () => {
+  it("creates a tool only for managers", async () => {
+    const manager = await createUser("管理者");
+    await grant(manager.userId, ["tool_rental.manage", "tool_rental.view"]);
+
+    const response = await SELF.fetch("http://example.com/api/tool-rental/tools", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: manager.cookie },
+      body: JSON.stringify({ name: "ドライバー", category: "手工具", total_quantity: 3 }),
+    });
+
+    expect(response.status).toBe(201);
+    const tool = await response.json() as { name: string; available_quantity: number };
+    expect(tool.name).toBe("ドライバー");
+    expect(tool.available_quantity).toBe(3);
+  });
+
+  it("rejects checkout without permission", async () => {
+    const user = await createUser("閲覧者");
+    const toolId = await createTool(user.userId, "レンチ", 2);
+
+    const response = await SELF.fetch("http://example.com/api/tool-rental/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: user.cookie },
+      body: JSON.stringify({ tool_id: toolId, borrower_name: "借用者", quantity: 1 }),
+    });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("prevents over-checkout even when requests happen together", async () => {
+    const manager = await createUser("受付担当");
+    await grant(manager.userId, ["tool_rental.view", "tool_rental.checkout"]);
+    const toolId = await createTool(manager.userId, "ペンチ", 1);
+
+    const makeRequest = () => SELF.fetch("http://example.com/api/tool-rental/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: manager.cookie },
+      body: JSON.stringify({ tool_id: toolId, borrower_name: "借用者", quantity: 1 }),
+    });
+
+    const responses = await Promise.all([makeRequest(), makeRequest()]);
+    expect(responses.filter((response) => response.status === 201)).toHaveLength(1);
+    expect(responses.filter((response) => response.status === 409)).toHaveLength(1);
+  });
+
+  it("records a return only once", async () => {
+    const manager = await createUser("返却担当");
+    await grant(manager.userId, ["tool_rental.view", "tool_rental.checkout", "tool_rental.return"]);
+    const toolId = await createTool(manager.userId, "六角レンチ", 2);
+
+    const checkout = await SELF.fetch("http://example.com/api/tool-rental/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: manager.cookie },
+      body: JSON.stringify({ tool_id: toolId, borrower_name: "借用者", quantity: 1 }),
+    });
+    expect(checkout.status).toBe(201);
+    const loan = await checkout.json() as { id: string };
+
+    const returnRequest = () => SELF.fetch(`http://example.com/api/tool-rental/loans/${loan.id}/return`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: manager.cookie },
+      body: JSON.stringify({}),
+    });
+
+    const responses = await Promise.all([returnRequest(), returnRequest()]);
+    expect(responses.filter((response) => response.status === 200)).toHaveLength(1);
+    expect(responses.filter((response) => response.status === 409)).toHaveLength(1);
+  });
+
+  it("keeps historical records when a tool is archived", async () => {
+    const manager = await createUser("管理担当");
+    await grant(manager.userId, ["tool_rental.view", "tool_rental.manage"]);
+    const toolId = await createTool(manager.userId, "古い工具", 1);
+
+    const response = await SELF.fetch(`http://example.com/api/tool-rental/tools/${toolId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: manager.cookie },
+      body: JSON.stringify({ is_active: false }),
+    });
+
+    expect(response.status).toBe(200);
+    const tool = await response.json() as { is_active: number };
+    expect(tool.is_active).toBe(0);
+  });
+});
