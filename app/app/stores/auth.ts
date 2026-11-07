@@ -67,9 +67,7 @@ export const useAuthStore = defineStore('auth', () => {
         if (revision === authRevision) {
           initialized.value = true
 
-          if (fetchMePromise === request) {
-            fetchMePromise = null
-          }
+          fetchMePromise = null
         }
       }
     })()
