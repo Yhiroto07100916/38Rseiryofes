@@ -14,8 +14,8 @@ export interface WishlistItem {
   estimated_cost: number | null
   priority: 'low' | 'normal' | 'high' | 'urgent'
   status: 'requested' | 'planned' | 'purchased'
-  can_edit: boolean
-  can_delete: boolean
+  can_edit?: boolean
+  can_delete?: boolean
   memo: string | null
   created_by: string
   created_by_name: string | null
