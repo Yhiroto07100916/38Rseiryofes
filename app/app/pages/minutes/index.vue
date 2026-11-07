@@ -197,7 +197,8 @@ import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({
   permissions: ['minutes.view'],
-  middleware: 'auth' })
+  middleware: 'auth',
+})
 
 interface Minute {
   id: string
