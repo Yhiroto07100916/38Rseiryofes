@@ -28,28 +28,38 @@ export const useAuthStore = defineStore('auth', () => {
   const roles = ref<AuthRole[]>([])
   const accountRoles = ref<AuthRole[]>([])
   const initialized = ref(false)
+  let fetchMePromise: Promise<AuthUser | null> | null = null
 
   const isLoggedIn = computed(() => user.value !== null)
 
   const { apiFetch } = useApi()
 
-  const fetchMe = async () => {
-    try {
-      const response = await apiFetch<LoginResponse>('/api/auth/me')
-      user.value = response.user
-      permissions.value = response.permissions
-      roles.value = response.roles
-      accountRoles.value = response.account_roles
-      return user.value
-    } catch {
-      user.value = null
-      permissions.value = []
-      roles.value = []
-      accountRoles.value = []
-      return null
-    } finally {
-      initialized.value = true
+  const fetchMe = () => {
+    if (fetchMePromise) {
+      return fetchMePromise
     }
+
+    fetchMePromise = (async () => {
+      try {
+        const response = await apiFetch<LoginResponse>('/api/auth/me')
+        user.value = response.user
+        permissions.value = response.permissions
+        roles.value = response.roles
+        accountRoles.value = response.account_roles
+        return user.value
+      } catch {
+        user.value = null
+        permissions.value = []
+        roles.value = []
+        accountRoles.value = []
+        return null
+      } finally {
+        initialized.value = true
+        fetchMePromise = null
+      }
+    })()
+
+    return fetchMePromise
   }
 
   const login = async (
