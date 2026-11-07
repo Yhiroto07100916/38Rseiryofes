@@ -146,6 +146,7 @@
 const { apiFetch } = useApi()
 
 definePageMeta({
+  permissions: ['script.view'],
   middleware: ['auth'],
 })
 
