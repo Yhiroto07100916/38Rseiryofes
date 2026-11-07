@@ -132,7 +132,7 @@ describe("role member endpoints", () => {
       { headers: { Cookie: cookie } },
     )
     expect(roleListResponse.status).toBe(200)
-    const roleList = await roleListResponse.json<{
+    const roleList = await roleListResponse.json() as {
       roles: Array<{ id: string; member_count: number }>
     }>()
     expect(roleList.roles.find(role => role.id === roleId)?.member_count).toBe(1)
@@ -142,7 +142,7 @@ describe("role member endpoints", () => {
       { headers: { Cookie: cookie } },
     )
     expect(roleMembersResponse.status).toBe(200)
-    const roleMembers = await roleMembersResponse.json<{
+    const roleMembers = await roleMembersResponse.json() as {
       users: Array<{ id: string; assigned: number }>
     }>()
     expect(roleMembers.users.find(user => user.id === firstUserId)?.assigned).toBe(1)
@@ -153,7 +153,7 @@ describe("role member endpoints", () => {
       { headers: { Cookie: cookie } },
     )
     expect(accountRoleListResponse.status).toBe(200)
-    const accountRoleList = await accountRoleListResponse.json<{
+    const accountRoleList = await accountRoleListResponse.json() as {
       account_roles: Array<{ id: string; member_count: number }>
     }>()
     expect(
@@ -165,7 +165,7 @@ describe("role member endpoints", () => {
       { headers: { Cookie: cookie } },
     )
     expect(accountRoleMembersResponse.status).toBe(200)
-    const accountRoleMembers = await accountRoleMembersResponse.json<{
+    const accountRoleMembers = await accountRoleMembersResponse.json() as {
       users: Array<{ id: string; assigned: number }>
     }>()
     expect(
