@@ -13,11 +13,19 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo('/login')
   }
 
-  const middleware = Array.isArray(to.meta.middleware)
-    ? to.meta.middleware
-    : [to.meta.middleware]
+  const routeMiddleware = to.meta.middleware
+  const middlewareNames = (
+    Array.isArray(routeMiddleware)
+      ? routeMiddleware
+      : routeMiddleware
+        ? [routeMiddleware]
+        : []
+  ).filter(
+    (middleware): middleware is string =>
+      typeof middleware === 'string',
+  )
 
-  if (middleware.includes('admin')) {
+  if (middlewareNames.includes('admin')) {
     const isAdmin = auth.accountRoles.some(
       (role) => role.name === 'admin',
     )
@@ -27,7 +35,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     }
   }
 
-  if (middleware.includes('class-representative')) {
+  if (middlewareNames.includes('class-representative')) {
     const isClassRepresentative = auth.accountRoles.some(
       (role) =>
         role.name === 'class_representative' ||
