@@ -209,6 +209,8 @@ export async function handleCalendar(
           e.category_id,
           c.name AS category_name,
           c.color AS category_color,
+          creator.name AS created_by_name,
+          creator.nickname AS created_by_nickname,
           e.created_by,
           e.created_at,
           e.updated_at
