@@ -1,8 +1,8 @@
 <template>
   <v-container class="py-6 px-4">
     <div class="d-flex align-center mb-6">
-      <v-icon
-        icon="mdi-account-circle"
+      <user-avatar
+        :user="auth.user"
         size="40"
         class="mr-2"
       />
