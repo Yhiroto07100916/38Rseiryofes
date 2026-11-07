@@ -193,6 +193,13 @@ async function handleLogin(
   const access = await getAuthData(env, user.id)
 
   const secure = new URL(request.url).protocol === "https:"
+  const cookieDomain = getSessionCookieDomain(request)
+  const headers = new Headers()
+  headers.append("Set-Cookie", createExpiredSessionCookie(secure))
+  headers.append(
+    "Set-Cookie",
+    createSessionCookie(sessionId, secure, cookieDomain),
+  )
 
   return Response.json(
     {
@@ -205,15 +212,7 @@ async function handleLogin(
       },
       ...access,
     },
-    {
-      headers: {
-        "Set-Cookie": createSessionCookie(
-          sessionId,
-          secure,
-          getSessionCookieDomain(request),
-        ),
-      },
-    },
+    { headers },
   )
 }
 
@@ -224,17 +223,17 @@ async function handleLogout(
   await deleteSession(request, env)
 
   const secure = new URL(request.url).protocol === "https:"
+  const cookieDomain = getSessionCookieDomain(request)
+  const headers = new Headers()
+  headers.append("Set-Cookie", createExpiredSessionCookie(secure))
+  headers.append(
+    "Set-Cookie",
+    createExpiredSessionCookie(secure, cookieDomain),
+  )
 
   return Response.json(
     { message: "Logged out" },
-    {
-      headers: {
-        "Set-Cookie": createExpiredSessionCookie(
-          secure,
-          getSessionCookieDomain(request),
-        ),
-      },
-    },
+    { headers },
   )
 }
 
