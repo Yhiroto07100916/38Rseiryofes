@@ -39,19 +39,32 @@
     </v-btn>
 
     <v-btn
-      value="/"
-      to="/me"
+    v-if="auth.user?.avatar_key"
+    value="/"
+    to="/me"
     >
-      <v-icon icon="mdi-account" />
-      <span>マイページ</span>
+    <UserAvatar :user="auth.user" size="24" />
+    <span>マイページ</span>
+    </v-btn>
+
+    <v-btn
+    v-else
+    value="/"
+    to="/me"
+    >
+    <v-icon icon="mdi-account-circle" />
+    <span>マイページ</span>
     </v-btn>
   </v-bottom-navigation>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed,ref,watch } from 'vue'
+import UserAvatar from '../UserAvatar.vue';
 
 const route = useRoute()
+const auth = useAuthStore()
+
 
 const currentRoute = computed(() => route.path)
 </script>

@@ -10,11 +10,7 @@
       <section class="account-section">
         <template v-if="auth.isLoggedIn">
           <div class="account-header">
-            <v-icon
-              icon="mdi-account-circle"
-              size="40"
-              class="account-icon"
-            />
+            <UserAvatar :user="auth.user" :size="48" />
 
             <div class="account-info">
               <div class="account-status">

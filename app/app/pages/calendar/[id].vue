@@ -295,6 +295,9 @@
                         : '未回答'
                 }`"
               >
+                <template #prepend>
+                  <UserAvatar :user="person" :size="36" class="mr-2" />
+                </template>
                 <template #append>
                   <v-menu v-if="canEditOtherAttendance">
                     <template #activator="{ props }">

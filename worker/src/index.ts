@@ -18,6 +18,7 @@ import { handleSurveys } from "./routes/surveys"
 import { handleDecisions } from "./routes/decisions"
 import { handleMinutes } from "./routes/minutes"
 import { handleMilkCollection } from "./routes/milk-collection"
+import { handleAvatarImage, handleAvatarMutation, processQueuedAvatarDeletions } from "./routes/avatars"
 import { handleSubmissions } from "./routes/submissions"
 
 function getCorsHeaders(request: Request): Headers {
@@ -326,6 +327,26 @@ export default {
             { status: 500 },
           ),
         )
+      }
+    }
+
+    if (url.pathname === "/api/auth/avatar") {
+      try {
+        return withCors(request, await handleAvatarMutation(request, env))
+      } catch (error) {
+        console.error("Avatar mutation API error:", error)
+        return withCors(request, Response.json({ error: "Internal Server Error" }, { status: 500 }))
+      }
+    }
+
+    if (url.pathname === "/api/avatars" || url.pathname.startsWith("/api/avatars/")) {
+      const path = url.pathname.slice("/api/avatars".length)
+      const pathParts = path.split("/").filter(Boolean)
+      try {
+        return withCors(request, await handleAvatarImage(request, env, pathParts))
+      } catch (error) {
+        console.error("Avatar image API error:", error)
+        return withCors(request, Response.json({ error: "Internal Server Error" }, { status: 500 }))
       }
     }
 
@@ -724,5 +745,13 @@ export default {
         { status: 404 },
       ),
     )
+  },
+
+  async scheduled(_controller, env): Promise<void> {
+    try {
+      await processQueuedAvatarDeletions(env, 50)
+    } catch (error) {
+      console.error("Scheduled avatar cleanup failed:", error)
+    }
   },
 } satisfies ExportedHandler<Env>
