@@ -456,8 +456,8 @@ const openEditDialog = async (user: User) => {
   }
 }
 
-const closeDialog = () => {
-  if (saving.value) {
+const closeDialog = (force = false) => {
+  if (saving.value && !force) {
     return
   }
 
@@ -473,8 +473,8 @@ const openPasswordDialog = (user: User) => {
   passwordDialogOpen.value = true
 }
 
-const closePasswordDialog = () => {
-  if (passwordSaving.value) {
+const closePasswordDialog = (force = false) => {
+  if (passwordSaving.value && !force) {
     return
   }
 
@@ -513,7 +513,7 @@ const setPassword = async () => {
       },
     )
 
-    closePasswordDialog()
+    closePasswordDialog(true)
   } catch (error: unknown) {
     const apiError = error as {
       data?: {
@@ -620,7 +620,7 @@ const saveUser = async () => {
       users.value.push(newUser)
     }
 
-    closeDialog()
+    closeDialog(true)
   } catch (error: unknown) {
     const apiError = error as {
       data?: {
