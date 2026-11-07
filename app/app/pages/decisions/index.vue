@@ -382,7 +382,8 @@ import { useSnackbar } from '~/composables/useSnackbar'
 import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({
-  middleware: 'auth',
+    permissions: ['decisions.view'],
+middleware: 'auth',
 })
 
 interface SurveyChoice {
