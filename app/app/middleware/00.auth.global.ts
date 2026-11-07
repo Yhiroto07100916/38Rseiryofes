@@ -4,8 +4,11 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
 
   const auth = useAuthStore()
+  const nuxtApp = useNuxtApp()
+  const shouldRefreshSession =
+    import.meta.client && !nuxtApp.isHydrating
 
-  if (!auth.initialized) {
+  if (!auth.initialized || shouldRefreshSession) {
     await auth.fetchMe()
   }
 
