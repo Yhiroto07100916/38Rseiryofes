@@ -13,6 +13,18 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo('/login')
   }
 
+  const routeMeta = to.meta as typeof to.meta & {
+    permissions?: string[]
+  }
+  const requiredPermissions = routeMeta.permissions ?? []
+  const hasAllRequiredPermissions = requiredPermissions.every(
+    (permission) => auth.hasPermission(permission),
+  )
+
+  if (!hasAllRequiredPermissions) {
+    return navigateTo('/')
+  }
+
   const routeMiddleware = to.meta.middleware
   const middlewareNames = (
     Array.isArray(routeMiddleware)
