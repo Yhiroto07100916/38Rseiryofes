@@ -17,7 +17,7 @@ import { handleSurveys } from "./routes/surveys"
 import { handleDecisions } from "./routes/decisions"
 import { handleMinutes } from "./routes/minutes"
 import { handleMilkCollection } from "./routes/milk-collection"
-import { handleAvatarImage, handleAvatarMutation } from "./routes/avatars"
+import { handleAvatarImage, handleAvatarMutation, processQueuedAvatarDeletions } from "./routes/avatars"
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -701,5 +701,13 @@ export default {
         { status: 404 },
       ),
     )
+  },
+
+  async scheduled(_controller, env): Promise<void> {
+    try {
+      await processQueuedAvatarDeletions(env, 50)
+    } catch (error) {
+      console.error("Scheduled avatar cleanup failed:", error)
+    }
   },
 } satisfies ExportedHandler<Env>
