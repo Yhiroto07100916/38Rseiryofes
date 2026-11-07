@@ -4,12 +4,13 @@ import {
 } from "../lib/authz"
 import { hashPassword, verifyPassword } from "../lib/password"
 import {
-  createExpiredSessionCookie,
+  createLoginSessionHeaders,
+  createLogoutSessionHeaders,
   createSession,
-  createSessionCookie,
   deleteOtherSessions,
   deleteSession,
   getSessionId,
+  getSessionCookieDomain,
   getSessionUser,
 } from "../lib/session"
 
@@ -192,6 +193,11 @@ async function handleLogin(
   const access = await getAuthData(env, user.id)
 
   const secure = new URL(request.url).protocol === "https:"
+  const headers = createLoginSessionHeaders(
+    sessionId,
+    secure,
+    getSessionCookieDomain(request),
+  )
 
   return Response.json(
     {
@@ -204,14 +210,7 @@ async function handleLogin(
       },
       ...access,
     },
-    {
-      headers: {
-        "Set-Cookie": createSessionCookie(
-          sessionId,
-          secure,
-        ),
-      },
-    },
+    { headers },
   )
 }
 
@@ -222,16 +221,14 @@ async function handleLogout(
   await deleteSession(request, env)
 
   const secure = new URL(request.url).protocol === "https:"
+  const headers = createLogoutSessionHeaders(
+    secure,
+    getSessionCookieDomain(request),
+  )
 
   return Response.json(
     { message: "Logged out" },
-    {
-      headers: {
-        "Set-Cookie": createExpiredSessionCookie(
-          secure,
-        ),
-      },
-    },
+    { headers },
   )
 }
 
