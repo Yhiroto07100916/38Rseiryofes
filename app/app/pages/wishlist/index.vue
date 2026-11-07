@@ -57,6 +57,16 @@ function statusLabel(status: WishlistItem['status']) {
   return statusItems.find((item) => item.value === status)?.title ?? status
 }
 
+function statusColor(status: WishlistItem['status']) {
+  const colors: Record<WishlistItem['status'], string> = {
+    requested: 'info',
+    planned: 'warning',
+    purchased: 'success',
+  }
+
+  return colors[status]
+}
+
 function priorityLabel(priority: WishlistItem['priority']) {
   return priorityItems.find((item) => item.value === priority)?.title ?? priority
 }
@@ -286,7 +296,13 @@ onMounted(loadItems)
 
           <v-card-text>
             <div class="d-flex flex-wrap ga-2 mb-3">
-              <v-chip size="small" variant="tonal">{{ statusLabel(item.status) }}</v-chip>
+              <v-chip
+                size="small"
+                variant="tonal"
+                :color="statusColor(item.status)"
+              >
+                {{ statusLabel(item.status) }}
+              </v-chip>
               <v-chip size="small" variant="tonal" color="primary">
                 優先度：{{ priorityLabel(item.priority) }}
               </v-chip>
