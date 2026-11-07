@@ -1,7 +1,7 @@
 <template>
   <v-container class="py-6 px-4">
     <div class="d-flex align-center mb-6">
-      <user-avatar
+      <UserAvatar
         :user="auth.user"
         size="40"
         class="mr-2"
