@@ -2,6 +2,7 @@ type SessionEnv = Pick<Env, "DB">
 
 const SESSION_COOKIE_NAME = "session_id"
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000
+const PRODUCTION_COOKIE_DOMAIN = ".38r-seiryofes.com"
 
 export interface SessionUser {
   id: string
@@ -47,6 +48,16 @@ export function getSessionId(request: Request): string | null {
   return parseCookies(request)[SESSION_COOKIE_NAME] ?? null
 }
 
+export function getSessionCookieDomain(request: Request): string | undefined {
+  const hostname = new URL(request.url).hostname.toLowerCase()
+
+  if (hostname === "api.38r-seiryofes.com") {
+    return PRODUCTION_COOKIE_DOMAIN
+  }
+
+  return undefined
+}
+
 export async function createSession(
   env: SessionEnv,
   userId: string,
@@ -74,6 +85,7 @@ export async function createSession(
 export function createSessionCookie(
   sessionId: string,
   secure: boolean,
+  domain?: string,
 ): string {
   const maxAge = Math.floor(
     SESSION_DURATION_MS / 1000,
@@ -85,12 +97,14 @@ export function createSessionCookie(
     ...(secure ? ["Secure"] : []),
     "SameSite=Lax",
     "Path=/",
+    ...(domain ? [`Domain=${domain}`] : []),
     `Max-Age=${maxAge}`,
   ].join("; ")
 }
 
 export function createExpiredSessionCookie(
   secure: boolean,
+  domain?: string,
 ): string {
   return [
     `${SESSION_COOKIE_NAME}=`,
@@ -98,8 +112,36 @@ export function createExpiredSessionCookie(
     ...(secure ? ["Secure"] : []),
     "SameSite=Lax",
     "Path=/",
+    ...(domain ? [`Domain=${domain}`] : []),
     "Max-Age=0",
   ].join("; ")
+}
+
+export function createLoginSessionHeaders(
+  sessionId: string,
+  secure: boolean,
+  domain?: string,
+): Headers {
+  const headers = new Headers()
+  headers.append("Set-Cookie", createExpiredSessionCookie(secure))
+  headers.append(
+    "Set-Cookie",
+    createSessionCookie(sessionId, secure, domain),
+  )
+  return headers
+}
+
+export function createLogoutSessionHeaders(
+  secure: boolean,
+  domain?: string,
+): Headers {
+  const headers = new Headers()
+  headers.append("Set-Cookie", createExpiredSessionCookie(secure))
+  headers.append(
+    "Set-Cookie",
+    createExpiredSessionCookie(secure, domain),
+  )
+  return headers
 }
 
 export async function getSessionUser(
