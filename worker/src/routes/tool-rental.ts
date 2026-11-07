@@ -152,8 +152,8 @@ export async function handleToolRental(
     if (denied) return denied
 
     const url = new URL(request.url)
-    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 100))
-    const offset = Math.max(0, Number(url.searchParams.get("offset")) || 0)
+    const limit = Math.min(200, Math.max(1, Math.floor(Number(url.searchParams.get("limit")) || 100)))
+    const offset = Math.max(0, Math.floor(Number(url.searchParams.get("offset")) || 0))
     const result = await env.DB.prepare(`
       SELECT
         l.id, l.tool_id, t.name AS tool_name, l.borrower_name,
@@ -230,13 +230,22 @@ export async function handleToolRental(
       SET name = ?, category = ?, description = ?, total_quantity = ?,
           is_active = ?, external_tool_id = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
+        AND ? >= COALESCE((
+          SELECT SUM(quantity)
+          FROM tool_rental_loans
+          WHERE tool_id = ? AND status = 'checked_out'
+        ), 0)
     `).bind(
       name, category,
       body.description === undefined ? existing.description : optionalText(body.description),
       quantity, isActive,
       body.external_tool_id === undefined ? existing.external_tool_id : optionalText(body.external_tool_id),
-      resourceId,
+      resourceId, quantity, resourceId,
     ).run()
+
+    if (updated.meta.changes !== 1) {
+      return json({ error: "貸出中の数量を下回る在庫数には変更できません" }, 409)
+    }
 
     return json(await getTool(env, resourceId))
   }
