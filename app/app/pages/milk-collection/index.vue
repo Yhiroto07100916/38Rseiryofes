@@ -713,8 +713,8 @@ import {
 import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({
-    permissions: ['milk_collection.view'],
-middleware: 'auth',
+  permissions: ['milk_collection.view'],
+  middleware: 'auth',
 })
 
 const api = useApi()
