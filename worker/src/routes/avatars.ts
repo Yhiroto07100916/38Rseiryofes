@@ -54,6 +54,65 @@ function detectImageType(
   return null
 }
 
+type AvatarDeletionRow = {
+  object_key: string
+  attempts: number
+}
+
+export async function processQueuedAvatarDeletions(
+  env: AvatarEnv,
+  limit = 20,
+): Promise<void> {
+  const result = await env.DB
+    .prepare(
+      "SELECT object_key, attempts FROM avatar_deletion_queue ORDER BY created_at ASC LIMIT ?",
+    )
+    .bind(limit)
+    .all<AvatarDeletionRow>()
+
+  for (const row of result.results ?? []) {
+    if (!row.object_key.startsWith("avatars/")) {
+      console.error("Rejected invalid avatar deletion key:", row.object_key)
+      continue
+    }
+
+    try {
+      await env.FILES_BUCKET.delete(row.object_key)
+      await env.DB
+        .prepare("DELETE FROM avatar_deletion_queue WHERE object_key = ?")
+        .bind(row.object_key)
+        .run()
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error)
+
+      console.error("Failed to delete queued avatar:", row.object_key, error)
+
+      try {
+        await env.DB
+          .prepare(
+            "UPDATE avatar_deletion_queue SET attempts = attempts + 1, last_error = ? WHERE object_key = ?",
+          )
+          .bind(message.slice(0, 1000), row.object_key)
+          .run()
+      } catch (queueError) {
+        console.error("Failed to update avatar deletion retry state:", queueError)
+      }
+    }
+  }
+}
+
+function queueAvatarDeletion(
+  env: AvatarEnv,
+  objectKey: string,
+): D1PreparedStatement {
+  return env.DB
+    .prepare(
+      "INSERT OR IGNORE INTO avatar_deletion_queue (object_key) VALUES (?)",
+    )
+    .bind(objectKey)
+}
+
 export async function handleAvatarMutation(
   request: Request,
   env: AvatarEnv,
@@ -116,22 +175,39 @@ export async function handleAvatarMutation(
       },
     })
 
+    const statements: D1PreparedStatement[] = []
+
+    if (
+      user.avatar_key &&
+      user.avatar_key.startsWith(`avatars/${user.id}/`) &&
+      user.avatar_key !== key
+    ) {
+      statements.push(queueAvatarDeletion(env, user.avatar_key))
+    }
+
+    statements.push(
+      env.DB
+        .prepare(
+          "UPDATE users SET avatar_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .bind(key, user.id),
+    )
+
     try {
-      await env.DB
-        .prepare("UPDATE users SET avatar_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-        .bind(key, user.id)
-        .run()
+      await env.DB.batch(statements)
     } catch (error) {
-      await env.FILES_BUCKET.delete(key)
+      try {
+        await env.FILES_BUCKET.delete(key)
+      } catch (deleteError) {
+        console.error("Failed to clean up unreferenced new avatar:", key, deleteError)
+      }
       throw error
     }
 
-    if (user.avatar_key && user.avatar_key !== key) {
-      try {
-        await env.FILES_BUCKET.delete(user.avatar_key)
-      } catch (error) {
-        console.error("Failed to delete previous avatar:", error)
-      }
+    try {
+      await processQueuedAvatarDeletions(env, 1)
+    } catch (error) {
+      console.error("Avatar cleanup will be retried by the scheduled task:", error)
     }
 
     return json({ avatar_key: key })
@@ -142,15 +218,26 @@ export async function handleAvatarMutation(
       return json({ avatar_key: null })
     }
 
-    await env.DB
-      .prepare("UPDATE users SET avatar_key = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-      .bind(user.id)
-      .run()
+    const statements: D1PreparedStatement[] = []
+
+    if (user.avatar_key.startsWith(`avatars/${user.id}/`)) {
+      statements.push(queueAvatarDeletion(env, user.avatar_key))
+    }
+
+    statements.push(
+      env.DB
+        .prepare(
+          "UPDATE users SET avatar_key = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .bind(user.id),
+    )
+
+    await env.DB.batch(statements)
 
     try {
-      await env.FILES_BUCKET.delete(user.avatar_key)
+      await processQueuedAvatarDeletions(env, 1)
     } catch (error) {
-      console.error("Failed to delete avatar object:", error)
+      console.error("Avatar cleanup will be retried by the scheduled task:", error)
     }
 
     return json({ avatar_key: null })
