@@ -18,15 +18,7 @@
         >
           <v-card-text class="pa-5">
             <div class="d-flex align-center mb-5">
-              <v-avatar
-                size="56"
-                color="primary"
-                class="mr-4"
-              >
-                <span class="text-h6 font-weight-bold">
-                  {{ userInitial }}
-                </span>
-              </v-avatar>
+              <UserAvatar :user="auth.user" :size="56" class="mr-4" />
 
               <div class="min-width-0">
                 <div class="text-h6 font-weight-bold text-truncate">
@@ -40,6 +32,10 @@
                   {{ auth.user.name }}
                 </div>
               </div>
+            </div>
+
+            <div class="mb-5">
+              <AvatarSettings />
             </div>
 
             <div class="profile-row">
@@ -723,12 +719,6 @@ const passwordForm = ref({
   current_password: '',
   new_password: '',
   new_password_confirmation: '',
-})
-
-const userInitial = computed(() => {
-  const name = auth.user?.nickname || auth.user?.name || ''
-
-  return name.charAt(0) || '?'
 })
 
 const formatDate = (value: string) => {
