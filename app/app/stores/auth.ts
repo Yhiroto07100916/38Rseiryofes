@@ -18,8 +18,8 @@ interface AuthRole {
 interface LoginResponse {
   user: AuthUser
   permissions: string[]
-  roles: AuthRole[]
-  account_roles: AuthRole[]
+  roles?: AuthRole[]
+  account_roles?: AuthRole[]
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -43,9 +43,9 @@ export const useAuthStore = defineStore('auth', () => {
       try {
         const response = await apiFetch<LoginResponse>('/api/auth/me')
         user.value = response.user
-        permissions.value = response.permissions
-        roles.value = response.roles
-        accountRoles.value = response.account_roles
+        permissions.value = response.permissions ?? []
+        roles.value = response.roles ?? []
+        accountRoles.value = response.account_roles ?? []
         return user.value
       } catch {
         user.value = null
@@ -75,10 +75,14 @@ export const useAuthStore = defineStore('auth', () => {
     })
 
     user.value = response.user
-    permissions.value = response.permissions
-    roles.value = response.roles
-    accountRoles.value = response.account_roles
+    permissions.value = response.permissions ?? []
+    roles.value = response.roles ?? []
+    accountRoles.value = response.account_roles ?? []
     initialized.value = true
+
+    if (!response.roles || !response.account_roles) {
+      await fetchMe()
+    }
 
     return response.user
   }
