@@ -64,6 +64,14 @@ describe("Session cookie domain", () => {
         new Request("http://localhost:8787/api/auth/login"),
       ),
     ).toBeUndefined();
+    expect(
+      getSessionCookieDomain(
+        new Request("https://api.38r-seiryofes.com.attacker.example/api/auth/login"),
+      ),
+    ).toBeUndefined();
+    expect(
+      createSessionCookie("local-token", true),
+    ).not.toContain("Domain=");
   });
 
   it("sends legacy-cookie cleanup and the new session cookie as separate headers", () => {
