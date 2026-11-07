@@ -1042,25 +1042,15 @@ const loadAccountRoleMembers = async (role: AccountRole) => {
   accountRoleMembersError.value = ''
 
   try {
-    const usersResponse = await apiFetch<{ users: User[] }>('/api/users')
+    const response = await apiFetch<{
+      users: Array<User & { assigned: number }>
+    }>(`/api/account-roles/${role.id}/members`)
 
-    const loadedMembers: AccountRoleMember[] = []
-
-    for (const user of usersResponse.users) {
-      const userRoles = await apiFetch<UserAccountRolesResponse>(
-        `/api/users/${user.id}/account-roles`,
-      )
-
-      loadedMembers.push({
-        ...user,
-        assigned: userRoles.account_roles.some(
-          accountRole => accountRole.id === role.id,
-        ),
-        saving: false,
-      })
-    }
-
-    accountRoleMembers.value = loadedMembers
+    accountRoleMembers.value = response.users.map(user => ({
+      ...user,
+      assigned: user.assigned === 1,
+      saving: false,
+    }))
     updateAccountRoleMemberCount(role.id)
   } catch (error) {
     console.error(error)
@@ -1251,25 +1241,15 @@ const loadMembers = async (role: Role) => {
   membersError.value = ''
 
   try {
-    const usersResponse = await apiFetch<{ users: User[] }>('/api/users')
+    const response = await apiFetch<{
+      users: Array<User & { assigned: number }>
+    }>(`/api/roles/${role.id}/members`)
 
-    const loadedMembers: RoleMember[] = []
-
-    for (const user of usersResponse.users) {
-      const userRoles = await apiFetch<UserRolesResponse>(
-        `/api/users/${user.id}/roles`,
-      )
-
-      loadedMembers.push({
-        ...user,
-        assigned: userRoles.roles.some(
-          userRole => userRole.id === role.id,
-        ),
-        saving: false,
-      })
-    }
-
-    members.value = loadedMembers
+    members.value = response.users.map(user => ({
+      ...user,
+      assigned: user.assigned === 1,
+      saving: false,
+    }))
     updateRoleMemberCount(role.id)
   } catch (error) {
     console.error(error)
