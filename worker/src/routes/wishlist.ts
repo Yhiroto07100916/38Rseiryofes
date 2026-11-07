@@ -280,10 +280,13 @@ export async function handleWishlist(
 
   if (
     body.status !== undefined &&
-    status !== existing.status &&
     !(await hasPermission(env, auth.user.id, "wishlist.review"))
   ) {
     return json({ error: "Forbidden", permission: "wishlist.review" }, 403)
+  }
+
+  if (!hasContentChanges && body.status === undefined) {
+    return json({ error: "更新内容がありません" }, 400)
   }
 
   let quantity: number
