@@ -65,7 +65,7 @@ export async function processQueuedAvatarDeletions(
 ): Promise<void> {
   const result = await env.DB
     .prepare(
-      "SELECT object_key, attempts FROM avatar_deletion_queue ORDER BY created_at ASC LIMIT ?",
+      "SELECT object_key, attempts FROM avatar_deletion_queue WHERE next_attempt_at <= CURRENT_TIMESTAMP ORDER BY next_attempt_at ASC LIMIT ?",
     )
     .bind(limit)
     .all<AvatarDeletionRow>()
@@ -91,7 +91,7 @@ export async function processQueuedAvatarDeletions(
       try {
         await env.DB
           .prepare(
-            "UPDATE avatar_deletion_queue SET attempts = attempts + 1, last_error = ? WHERE object_key = ?",
+            "UPDATE avatar_deletion_queue SET attempts = attempts + 1, last_error = ?, next_attempt_at = datetime(CURRENT_TIMESTAMP, '+15 minutes') WHERE object_key = ?",
           )
           .bind(message.slice(0, 1000), row.object_key)
           .run()
