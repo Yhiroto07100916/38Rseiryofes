@@ -188,7 +188,22 @@ export default {
     ) {
       const path = url.pathname.slice("/api/tool-rental".length)
       const pathParts = path.split("/").filter(Boolean)
-      return withCors(request, await handleToolRental(request, env, pathParts))
+
+      try {
+        return withCors(
+          request,
+          await handleToolRental(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("Tool rental API error:", error)
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
+            { status: 500 },
+          ),
+        )
+      }
     }
 
     if (
