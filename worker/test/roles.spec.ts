@@ -65,7 +65,7 @@ async function createAdminSession() {
 
   const adminRole = await env.DB
     .prepare("SELECT id FROM account_roles WHERE name = 'admin'")
-    .first<{ id: string }>()
+    .first<{ id: string }
 
   if (!adminRole) {
     throw new Error("Seeded admin account role was not found")
@@ -134,7 +134,7 @@ describe("role member endpoints", () => {
     expect(roleListResponse.status).toBe(200)
     const roleList = await roleListResponse.json() as {
       roles: Array<{ id: string; member_count: number }>
-    }>()
+    }
     expect(roleList.roles.find(role => role.id === roleId)?.member_count).toBe(1)
 
     const roleMembersResponse = await SELF.fetch(
@@ -144,7 +144,7 @@ describe("role member endpoints", () => {
     expect(roleMembersResponse.status).toBe(200)
     const roleMembers = await roleMembersResponse.json() as {
       users: Array<{ id: string; assigned: number }>
-    }>()
+    }
     expect(roleMembers.users.find(user => user.id === firstUserId)?.assigned).toBe(1)
     expect(roleMembers.users.find(user => user.id === secondUserId)?.assigned).toBe(0)
 
@@ -155,7 +155,7 @@ describe("role member endpoints", () => {
     expect(accountRoleListResponse.status).toBe(200)
     const accountRoleList = await accountRoleListResponse.json() as {
       account_roles: Array<{ id: string; member_count: number }>
-    }>()
+    }
     expect(
       accountRoleList.account_roles.find(role => role.id === accountRoleId)?.member_count,
     ).toBe(1)
@@ -167,7 +167,7 @@ describe("role member endpoints", () => {
     expect(accountRoleMembersResponse.status).toBe(200)
     const accountRoleMembers = await accountRoleMembersResponse.json() as {
       users: Array<{ id: string; assigned: number }>
-    }>()
+    }
     expect(
       accountRoleMembers.users.find(user => user.id === firstUserId)?.assigned,
     ).toBe(1)
