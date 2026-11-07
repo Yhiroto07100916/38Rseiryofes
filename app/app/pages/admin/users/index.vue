@@ -75,16 +75,11 @@
           :class="{ 'border-t': index !== 0 }"
         >
           <template #prepend>
-            <v-avatar
-              color="primary"
-              variant="tonal"
-              size="44"
+            <UserAvatar
+              :user="user"
+              :size="44"
               class="mr-3"
-            >
-              <span class="font-weight-bold">
-                {{ getInitial(user.name) }}
-              </span>
-            </v-avatar>
+            />
           </template>
 
           <v-list-item-title class="font-weight-bold">
@@ -340,6 +335,7 @@ interface User {
   student_number: string
   name: string
   nickname: string | null
+  avatar_key?: string | null
   created_at: string
   updated_at: string
 }
@@ -460,8 +456,8 @@ const openEditDialog = async (user: User) => {
   }
 }
 
-const closeDialog = () => {
-  if (saving.value) {
+const closeDialog = (force = false) => {
+  if (saving.value && !force) {
     return
   }
 
@@ -477,8 +473,8 @@ const openPasswordDialog = (user: User) => {
   passwordDialogOpen.value = true
 }
 
-const closePasswordDialog = () => {
-  if (passwordSaving.value) {
+const closePasswordDialog = (force = false) => {
+  if (passwordSaving.value && !force) {
     return
   }
 
@@ -517,7 +513,7 @@ const setPassword = async () => {
       },
     )
 
-    closePasswordDialog()
+    closePasswordDialog(true)
   } catch (error: unknown) {
     const apiError = error as {
       data?: {
@@ -624,7 +620,7 @@ const saveUser = async () => {
       users.value.push(newUser)
     }
 
-    closeDialog()
+    closeDialog(true)
   } catch (error: unknown) {
     const apiError = error as {
       data?: {
@@ -688,9 +684,6 @@ const deleteUser = async (user: User) => {
   }
 }
 
-const getInitial = (name: string) => {
-  return name.trim().charAt(0) || '?'
-}
 
 onMounted(async () => {
   await Promise.all([

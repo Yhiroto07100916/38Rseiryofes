@@ -1,3 +1,4 @@
+import { isFileLinkConflict } from "../lib/file-link-errors"
 import { hasPermission, requireAuth } from "../lib/authz"
 
 export interface Task {
@@ -171,7 +172,8 @@ async function getTaskAssignments(
         u.id,
         u.student_number,
         u.name,
-        u.nickname
+        u.nickname,
+        u.avatar_key
       FROM task_assignees ta
       INNER JOIN users u
         ON u.id = ta.user_id
@@ -184,6 +186,7 @@ async function getTaskAssignments(
       student_number: string
       name: string
       nickname: string | null
+      avatar_key: string | null
     }>()
 
   const roles = await env.DB
@@ -240,7 +243,8 @@ export async function handleTasks(
           id,
           student_number,
           name,
-          nickname
+          nickname,
+          avatar_key
         FROM users
         ORDER BY student_number
       `)
@@ -249,6 +253,7 @@ export async function handleTasks(
         student_number: string
         name: string
         nickname: string | null
+        avatar_key: string | null
       }>()
 
     return Response.json({
@@ -758,6 +763,17 @@ export async function handleTasks(
 
       await env.DB.batch(statements)
     } catch (error) {
+      if (isFileLinkConflict(error)) {
+        return Response.json(
+          {
+            error: "このファイルは別の領域ですでに使用されています",
+            message: "このファイルは別の領域ですでに使用されています",
+            code: "FILE_LINK_CONFLICT",
+          },
+          { status: 409 },
+        )
+      }
+
       console.error("Failed to create task:", error)
 
       return Response.json(
@@ -1257,6 +1273,17 @@ export async function handleTasks(
 
       await env.DB.batch(statements)
     } catch (error) {
+      if (isFileLinkConflict(error)) {
+        return Response.json(
+          {
+            error: "このファイルは別の領域ですでに使用されています",
+            message: "このファイルは別の領域ですでに使用されています",
+            code: "FILE_LINK_CONFLICT",
+          },
+          { status: 409 },
+        )
+      }
+
       console.error("Failed to update task:", error)
 
       return Response.json(
@@ -1313,6 +1340,7 @@ export async function handleTasks(
           tc.user_id,
           u.name AS user_name,
           u.nickname AS user_nickname,
+          u.avatar_key AS avatar_key,
           tc.content,
           tc.created_at,
           tc.updated_at
@@ -1329,6 +1357,7 @@ export async function handleTasks(
         user_id: string
         user_name: string
         user_nickname: string | null
+        avatar_key: string | null
         content: string
         created_at: string
         updated_at: string
@@ -1412,6 +1441,7 @@ export async function handleTasks(
           tc.user_id,
           u.name AS user_name,
           u.nickname AS user_nickname,
+          u.avatar_key AS avatar_key,
           tc.content,
           tc.created_at,
           tc.updated_at
@@ -1427,6 +1457,7 @@ export async function handleTasks(
         user_id: string
         user_name: string
         user_nickname: string | null
+        avatar_key: string | null
         content: string
         created_at: string
         updated_at: string
@@ -1533,6 +1564,7 @@ export async function handleTasks(
           tc.user_id,
           u.name AS user_name,
           u.nickname AS user_nickname,
+          u.avatar_key AS avatar_key,
           tc.content,
           tc.created_at,
           tc.updated_at
@@ -1548,6 +1580,7 @@ export async function handleTasks(
         user_id: string
         user_name: string
         user_nickname: string | null
+        avatar_key: string | null
         content: string
         created_at: string
         updated_at: string

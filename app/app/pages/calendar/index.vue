@@ -3,9 +3,7 @@
     <div class="calendar-header">
       <div>
         <h1 class="text-h5 font-weight-bold">カレンダー</h1>
-        <p class="text-body-2 text-medium-emphasis mt-1">
-          38Rの予定をみんなで共有
-        </p>
+        
       </div>
 
       <v-btn
@@ -193,6 +191,10 @@
 
             <div class="text-body-2 text-medium-emphasis mt-1">
               {{ formatEventRange(event) }}
+            </div>
+
+            <div class="text-caption text-medium-emphasis mt-1">
+              作成者：{{ event.created_by_nickname || event.created_by_name || '不明' }}
             </div>
 
             <div

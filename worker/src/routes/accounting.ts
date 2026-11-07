@@ -1,3 +1,4 @@
+import { isFileLinkConflict } from "../lib/file-link-errors"
 import { hasPermission, requireAuth } from "../lib/authz"
 
 type Env = {
@@ -259,10 +260,12 @@ async function getReceipt(
         r.paid_by_user_id,
         u.name AS paid_by_name,
         u.nickname AS paid_by_nickname,
+        u.avatar_key AS paid_by_avatar_key,
         r.description,
         r.created_by,
         creator.name AS created_by_name,
         creator.nickname AS created_by_nickname,
+        creator.avatar_key AS created_by_avatar_key,
         r.created_at,
         r.updated_at
       FROM receipts r
@@ -312,12 +315,14 @@ async function getReceipt(
         rr.user_id,
         u.name AS user_name,
         u.nickname AS user_nickname,
+        u.avatar_key AS user_avatar_key,
         rr.amount,
         rr.status,
         rr.paid_at,
         rr.paid_by,
         payer.name AS paid_by_name,
         payer.nickname AS paid_by_nickname,
+        payer.avatar_key AS paid_by_avatar_key,
         rr.note,
         rr.created_at,
         rr.updated_at
@@ -710,6 +715,7 @@ export async function handleAccounting(
                 r.paid_by_user_id,
                 u.name AS paid_by_name,
                 u.nickname AS paid_by_nickname,
+                u.avatar_key AS paid_by_avatar_key,
                 r.description,
                 r.created_by,
                 r.created_at,
@@ -1972,12 +1978,14 @@ export async function handleAccounting(
               rr.user_id,
               u.name AS user_name,
               u.nickname AS user_nickname,
+              u.avatar_key AS user_avatar_key,
               rr.amount,
               rr.status,
               rr.paid_at,
               rr.paid_by,
               payer.name AS paid_by_name,
               payer.nickname AS paid_by_nickname,
+              payer.avatar_key AS paid_by_avatar_key,
               rr.note,
               rr.created_at,
               rr.updated_at,
@@ -2082,6 +2090,16 @@ export async function handleAccounting(
     return json({ message: "Not Found" }, 404)
   } catch (error) {
     const message = errorMessage(error)
+
+    if (isFileLinkConflict(error)) {
+      return json(
+        {
+          message: "このファイルは別の領域ですでに使用されています",
+          code: "FILE_LINK_CONFLICT",
+        },
+        409,
+      )
+    }
 
     if (
       message.toLowerCase().includes("unauthorized") ||

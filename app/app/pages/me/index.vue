@@ -1,12 +1,17 @@
 <template>
   <v-container class="py-6 px-4">
-    <div class="mb-6">
-      <h1 class="text-h5 font-weight-bold">
-        マイページ
-      </h1>
-      <p class="text-body-2 text-medium-emphasis mt-1">
-        あなたの星陵祭準備をまとめて確認できます
-      </p>
+    <div class="d-flex align-center mb-6">
+      <v-icon
+        icon="mdi-account-circle"
+        size="40"
+        class="mr-2"
+      />
+
+      <div class="flex-grow-1" style="min-width: 0">
+        <h1 class="text-h5 font-weight-bold">
+          マイページ
+        </h1>
+      </div>
     </div>
 
     <v-row>
@@ -18,15 +23,7 @@
         >
           <v-card-text class="pa-5">
             <div class="d-flex align-center mb-5">
-              <v-avatar
-                size="56"
-                color="primary"
-                class="mr-4"
-              >
-                <span class="text-h6 font-weight-bold">
-                  {{ userInitial }}
-                </span>
-              </v-avatar>
+              <UserAvatar :user="auth.user" :size="56" class="mr-4" />
 
               <div class="min-width-0">
                 <div class="text-h6 font-weight-bold text-truncate">
@@ -462,6 +459,12 @@
           </v-card-title>
 
           <v-card-text class="px-5 pb-5">
+            <div class="mb-4">
+              <AvatarSettings />
+            </div>
+
+            <v-divider class="mb-2" />
+
             <v-list class="pa-0">
               <v-list-item
                 prepend-icon="mdi-account-edit-outline"
@@ -515,23 +518,9 @@
         </v-card-title>
 
         <v-card-text class="px-5">
-          <v-alert
-            v-if="nicknameError"
-            type="error"
-            variant="tonal"
-            class="mb-4"
-          >
-            {{ nicknameError }}
-          </v-alert>
+          
 
-          <v-alert
-            v-if="nicknameSuccess"
-            type="success"
-            variant="tonal"
-            class="mb-4"
-          >
-            ニックネームを変更しました。
-          </v-alert>
+          
 
           <v-text-field
             v-model="nickname"
@@ -576,23 +565,9 @@
         </v-card-title>
 
         <v-card-text class="px-5">
-          <v-alert
-            v-if="passwordError"
-            type="error"
-            variant="tonal"
-            class="mb-4"
-          >
-            {{ passwordError }}
-          </v-alert>
+          
 
-          <v-alert
-            v-if="passwordSuccess"
-            type="success"
-            variant="tonal"
-            class="mb-4"
-          >
-            パスワードを変更しました。
-          </v-alert>
+          
 
           <v-text-field
             v-model="passwordForm.current_password"
@@ -647,6 +622,7 @@
 </template>
 
 <script setup lang="ts">
+import { useSnackbar } from "~/composables/useSnackbar"
 import {
   computed,
   onMounted,
@@ -688,6 +664,7 @@ interface RelevantNews extends News {
 }
 
 const auth = useAuthStore()
+const snackbar = useSnackbar()
 
 const {
   apiFetch,
@@ -710,25 +687,15 @@ const relevantNews = ref<RelevantNews[]>([])
 
 const nicknameDialog = ref(false)
 const changingNickname = ref(false)
-const nicknameError = ref('')
-const nicknameSuccess = ref(false)
 const nickname = ref('')
 
 const passwordDialog = ref(false)
 const changingPassword = ref(false)
-const passwordError = ref('')
-const passwordSuccess = ref(false)
 
 const passwordForm = ref({
   current_password: '',
   new_password: '',
   new_password_confirmation: '',
-})
-
-const userInitial = computed(() => {
-  const name = auth.user?.nickname || auth.user?.name || ''
-
-  return name.charAt(0) || '?'
 })
 
 const formatDate = (value: string) => {
@@ -957,19 +924,15 @@ const closeNicknameDialog = () => {
   }
 
   nicknameDialog.value = false
-  nicknameError.value = ''
-  nicknameSuccess.value = false
   nickname.value = auth.user?.nickname || ''
 }
 
 const changeNickname = async () => {
-  nicknameError.value = ''
-  nicknameSuccess.value = false
 
   const value = nickname.value.trim()
 
   if (value.length > 30) {
-    nicknameError.value = 'ニックネームは30文字以内にしてください。'
+    snackbar.error('ニックネームは30文字以内にしてください。')
     return
   }
 
@@ -982,6 +945,7 @@ const changeNickname = async () => {
         student_number: string
         name: string
         nickname: string | null
+        avatar_key: string | null
       }
     }>('/api/auth/profile', {
       method: 'PATCH',
@@ -992,7 +956,7 @@ const changeNickname = async () => {
 
     auth.user = response.user
 
-    nicknameSuccess.value = true
+    snackbar.success('ニックネームを変更しました。')
 
     setTimeout(() => {
       if (nicknameDialog.value) {
@@ -1000,11 +964,12 @@ const changeNickname = async () => {
       }
     }, 1200)
   } catch (error: any) {
-    nicknameError.value =
+    snackbar.error(
       error?.data?.error ||
       error?.data?.detail ||
       error?.message ||
-      'ニックネームの変更に失敗しました。'
+      'ニックネームの変更に失敗しました。',
+    )
   } finally {
     changingNickname.value = false
   }
@@ -1016,8 +981,6 @@ const closePasswordDialog = () => {
   }
 
   passwordDialog.value = false
-  passwordError.value = ''
-  passwordSuccess.value = false
 
   passwordForm.value = {
     current_password: '',
@@ -1027,20 +990,18 @@ const closePasswordDialog = () => {
 }
 
 const changePassword = async () => {
-  passwordError.value = ''
-  passwordSuccess.value = false
 
   if (
     !passwordForm.value.current_password ||
     !passwordForm.value.new_password ||
     !passwordForm.value.new_password_confirmation
   ) {
-    passwordError.value = 'すべての項目を入力してください。'
+    snackbar.error('すべての項目を入力してください。')
     return
   }
 
   if (passwordForm.value.new_password.length < 8) {
-    passwordError.value = '新しいパスワードは8文字以上にしてください。'
+    snackbar.error('新しいパスワードは8文字以上にしてください。')
     return
   }
 
@@ -1048,7 +1009,7 @@ const changePassword = async () => {
     passwordForm.value.new_password !==
     passwordForm.value.new_password_confirmation
   ) {
-    passwordError.value = '新しいパスワードが一致していません。'
+    snackbar.error('新しいパスワードが一致していません。')
     return
   }
 
@@ -1060,7 +1021,7 @@ const changePassword = async () => {
       body: passwordForm.value,
     })
 
-    passwordSuccess.value = true
+    snackbar.success('パスワードを変更しました。')
 
     passwordForm.value = {
       current_password: '',
@@ -1074,10 +1035,11 @@ const changePassword = async () => {
       }
     }, 1200)
   } catch (error: any) {
-    passwordError.value =
+    snackbar.error(
       error?.data?.detail ||
       error?.message ||
-      'パスワードの変更に失敗しました。'
+      'パスワードの変更に失敗しました。',
+    )
   } finally {
     changingPassword.value = false
   }

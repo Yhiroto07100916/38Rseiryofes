@@ -11,9 +11,7 @@
           タスク詳細
         </h1>
 
-        <p class="text-body-2 text-medium-emphasis mt-1">
-          クラス全体に関するタスク
-        </p>
+        
       </div>
 
       <v-spacer />
@@ -158,7 +156,15 @@
                 closable-chips
                 class="mt-2"
                 :loading="usersLoading"
-              />
+              >
+                <template #item="{ props, item }">
+                  <v-list-item v-bind="props">
+                    <template #prepend>
+                      <UserAvatar :user="item.raw" :size="32" class="mr-2" />
+                    </template>
+                  </v-list-item>
+                </template>
+              </v-autocomplete>
 
               <v-autocomplete
                 v-model="editForm.assigneeRoleIds"
@@ -274,19 +280,19 @@
                 担当者
               </span>
 
-              <span>
-                {{
-                  task.assignments.users.length > 0
-                    ? task.assignments.users
-                        .map((user) =>
-                          user.nickname
-                            ? `${user.nickname} (${user.name})`
-                            : user.name,
-                        )
-                        .join('、')
-                    : 'なし'
-                }}
-              </span>
+              <div class="d-flex align-center flex-wrap ga-2">
+                <template v-if="task.assignments.users.length > 0">
+                  <div
+                    v-for="user in task.assignments.users"
+                    :key="user.id"
+                    class="d-inline-flex align-center ga-1"
+                  >
+                    <UserAvatar :user="user" :size="28" />
+                    <span>{{ user.nickname || user.name }}</span>
+                  </div>
+                </template>
+                <span v-else>なし</span>
+              </div>
             </div>
 
             <div class="detail-item">
@@ -431,6 +437,16 @@
             class="comment-item"
           >
             <div class="d-flex align-center">
+              <UserAvatar
+                :user="{
+                  id: comment.user_id,
+                  name: comment.user_name,
+                  nickname: comment.user_nickname,
+                  avatar_key: comment.avatar_key,
+                }"
+                :size="32"
+                class="mr-2"
+              />
               <span class="font-weight-bold">
                 {{
                   comment.user_nickname ||
@@ -600,6 +616,7 @@ const users = ref<
     student_number: string
     name: string
     nickname: string | null
+    avatar_key: string | null
     displayName: string
   }[]
 >([])
@@ -857,6 +874,7 @@ const loadAssignmentOptions = async () => {
             student_number: string
             name: string
             nickname: string | null
+            avatar_key: string | null
           }[]
         }>('/api/tasks/assignment-users'),
         apiFetch<{

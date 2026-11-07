@@ -31,6 +31,8 @@ export interface CalendarEvent {
   category_id: string | null
   category_name: string | null
   category_color: string | null
+  created_by_name: string | null
+  created_by_nickname: string | null
   created_by: string
   created_at: string
   updated_at: string
@@ -56,6 +58,7 @@ export interface CalendarNonrespondent {
   student_number: string
   name: string
   nickname: string | null
+  avatar_key: string | null
   status: CalendarAttendanceStatus | null
 }
 
@@ -127,6 +130,7 @@ export interface TaskAssignmentUser {
   student_number: string
   name: string
   nickname: string | null
+  avatar_key: string | null
 }
 
 export interface TaskAssignmentRole {
@@ -184,6 +188,7 @@ export interface TaskComment {
   user_id: string
   user_name: string
   user_nickname: string | null
+  avatar_key: string | null
   content: string
   created_at: string
   updated_at: string

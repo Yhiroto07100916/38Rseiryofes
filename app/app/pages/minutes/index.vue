@@ -1,11 +1,14 @@
 <template>
   <v-container fluid class="pa-4 pa-sm-6">
     <div class="d-flex align-center ga-3 mb-6">
+      <LayoutBackButton />
+
+      <v-avatar color="primary" variant="tonal" rounded="lg">
+        <v-icon icon="mdi-clipboard-text-multiple" />
+      </v-avatar>
       <div class="flex-grow-1">
         <h1 class="text-h5 font-weight-bold">議事録</h1>
-        <p class="text-body-2 text-medium-emphasis mt-1">
-          会議の内容を自由に書き留めます
-        </p>
+        
       </div>
       <v-btn
         v-if="auth.hasPermission('minutes.create')"
@@ -35,10 +38,10 @@
       <v-row>
         <v-col cols="12" md="4" lg="3">
           <v-card variant="outlined" rounded="xl">
-            <v-card-title class="text-subtitle-1">メモ一覧</v-card-title>
+            <v-card-title class="text-subtitle-1">議事録一覧</v-card-title>
             <v-text-field
               v-model="searchQuery"
-              label="メモを検索"
+              label="議事録を検索"
               placeholder="タイトル・本文を検索"
               prepend-inner-icon="mdi-magnify"
               variant="solo"

@@ -1,3 +1,5 @@
+type SessionEnv = Pick<Env, "DB">
+
 const SESSION_COOKIE_NAME = "session_id"
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -6,6 +8,7 @@ export interface SessionUser {
   student_number: string
   name: string
   nickname: string | null
+  avatar_key: string | null
 }
 
 function parseCookies(request: Request): Record<string, string> {
@@ -45,7 +48,7 @@ export function getSessionId(request: Request): string | null {
 }
 
 export async function createSession(
-  env: Env,
+  env: SessionEnv,
   userId: string,
 ): Promise<string> {
   const sessionId = crypto.randomUUID()
@@ -101,7 +104,7 @@ export function createExpiredSessionCookie(
 
 export async function getSessionUser(
   request: Request,
-  env: Env,
+  env: SessionEnv,
 ): Promise<SessionUser | null> {
   const sessionId = getSessionId(request)
 
@@ -146,7 +149,8 @@ export async function getSessionUser(
         id,
         student_number,
         name,
-        nickname
+        nickname,
+        avatar_key
       FROM users
       WHERE id = ?
     `)
@@ -158,7 +162,7 @@ export async function getSessionUser(
 
 export async function deleteSession(
   request: Request,
-  env: Env,
+  env: SessionEnv,
 ): Promise<void> {
   const sessionId = getSessionId(request)
 
@@ -174,7 +178,7 @@ export async function deleteSession(
 
 
 export async function deleteOtherSessions(
-  env: Env,
+  env: SessionEnv,
   userId: string,
   currentSessionId: string,
 ): Promise<void> {

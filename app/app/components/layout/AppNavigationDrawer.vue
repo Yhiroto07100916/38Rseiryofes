@@ -10,11 +10,7 @@
       <section class="account-section">
         <template v-if="auth.isLoggedIn">
           <div class="account-header">
-            <v-icon
-              icon="mdi-account-circle"
-              size="40"
-              class="account-icon"
-            />
+            <UserAvatar :user="auth.user" :size="48" />
 
             <div class="account-info">
               <div class="account-status">
@@ -112,21 +108,22 @@
       <v-divider />
 
       <nav class="drawer-navigation">
-        <NuxtLink
-          v-for="item in items"
-          :key="item.title"
-          :to="item.to"
-          class="drawer-item"
-          :class="{ 'is-active': route.path === item.to }"
-          @click="isOpen = false"
-        >
-          <v-icon
-            :icon="item.icon"
-            size="23"
-            class="drawer-item-icon"
-          />
-          <span>{{ item.title }}</span>
-        </NuxtLink>
+        <template v-for="item in items" :key="item.title">
+          <NuxtLink
+            v-if="!item.permission || auth.hasPermission(item.permission)"
+            :to="item.to"
+            class="drawer-item"
+            :class="{ 'is-active': route.path === item.to }"
+            @click="isOpen = false"
+          >
+            <v-icon
+              :icon="item.icon"
+              size="23"
+              class="drawer-item-icon"
+            />
+            <span>{{ item.title }}</span>
+          </NuxtLink>
+        </template>
       </nav>
     </div>
   </v-navigation-drawer>
@@ -137,6 +134,7 @@ interface NavigationItem {
   title: string
   icon: string
   to: string
+  permission?: string
 }
 
 const isOpen = defineModel<boolean>({
@@ -173,12 +171,13 @@ const fetchAccountRole = async () => {
 }
 
 const items: NavigationItem[] = [
-  {icon: "mdi-bullhorn", title:"お知らせ", to:"/news"},
-  {icon: "mdi-file-document", title:"書類", to:"/files"},
-  {title: 'アンケート・投票',icon: 'mdi-vote-outline',to: '/surveys',},
-  {title: '意思決定記録',icon: 'mdi-notebook-check-outline',to: '/decisions',},
-  {title: '議事録', icon: 'mdi-clipboard-text-multiple', to: '/minutes'},
-  {title: '牛乳パック外部受け取り', icon: 'mdi-recycle', to: '/milk-collection'},
+{ icon: "mdi-bullhorn", title: "NEWS", to: "/news" },
+{ icon: "mdi-clipboard-check-outline", title: "提出物管理", to: "/submissions", permission: "submissions.view" },
+{ title: "投票", icon: "mdi-vote-outline", to: "/surveys" },
+{ title: "議事録", icon: "mdi-clipboard-text-multiple", to: "/minutes" },
+{ title: "決定事項", icon: "mdi-notebook-check-outline", to: "/decisions" },
+{ icon: "mdi-file-document", title: "書類", to: "/files" },
+{ title: "牛乳パック外部受け取り", icon: "mdi-recycle", to: "/milk-collection" },
 ]
 
 watch(
