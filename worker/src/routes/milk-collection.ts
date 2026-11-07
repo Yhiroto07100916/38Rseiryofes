@@ -84,7 +84,7 @@ export async function handleMilkCollection(request: Request, env: Env, path: str
    if(b.action==="scheduling"&&from!=="store_approved")return json({error:"店舗の許可後に日程調整へ進めます"},409)
    if(b.action==="collecting"&&!["store_approved","scheduling"].includes(from))return json({error:"店舗許可後に受け取りを開始できます"},409)
    if(b.action==="completed"&&from!=="collecting")return json({error:"受け取り開始後に完了できます"},409)
-   to=b.action as Status;action=b.action
+   to=b.action as Status;action=String(b.action)
    if(b.scheduled_at!==undefined)updates.scheduled_at=typeof b.scheduled_at==="string"?b.scheduled_at:null
    if(b.first_collection_at!==undefined)updates.first_collection_at=typeof b.first_collection_at==="string"?b.first_collection_at:null
    if(b.collected_quantity!==undefined)updates.collected_quantity=Number.isInteger(b.collected_quantity)&&Number(b.collected_quantity)>=0?Number(b.collected_quantity):null

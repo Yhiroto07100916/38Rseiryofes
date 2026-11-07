@@ -2,21 +2,23 @@
   <v-container class="supplies-page py-8">
     <v-row justify="center">
       <v-col cols="12" lg="10">
-        <LayoutBackButton />
+        <div class="d-flex align-center ga-3 mb-6">
+          <LayoutBackButton />
 
-        <div class="page-header mt-4">
-          <div>
-            <div class="page-eyebrow">
-              SUPPLIES
+          <v-avatar color="primary" variant="tonal" rounded="lg">
+            <v-icon icon="mdi-package-variant-closed" />
+          </v-avatar>
+
+          <div class="page-header mt-4 flex-grow-1">
+            <div>
+              <div class="page-eyebrow">
+                SUPPLIES
+              </div>
+
+              <h1 class="page-title">
+                備品
+              </h1>
             </div>
-
-            <h1 class="page-title">
-              備品・小道具
-            </h1>
-
-            <p class="page-description">
-              星陵祭準備に必要なものの準備状況を管理します。
-            </p>
           </div>
 
           <v-btn
@@ -37,10 +39,7 @@
         >
           <v-card-text>
             <v-row>
-              <v-col
-                cols="12"
-                md="5"
-              >
+              <v-col cols="12" md="5">
                 <v-text-field
                   v-model="search"
                   label="検索"
@@ -53,10 +52,7 @@
                 />
               </v-col>
 
-              <v-col
-                cols="6"
-                md="3"
-              >
+              <v-col cols="6" md="3">
                 <v-select
                   v-model="categoryFilter"
                   :items="categoryFilterItems"
@@ -68,10 +64,7 @@
                 />
               </v-col>
 
-              <v-col
-                cols="6"
-                md="3"
-              >
+              <v-col cols="6" md="3">
                 <v-select
                   v-model="statusFilter"
                   :items="statusFilterItems"
@@ -205,6 +198,7 @@
                   />
                   <span>
                     {{ item.owner_nickname || item.owner_name || '' }}
+
                     <template v-if="item.role_name">
                       <span v-if="item.owner_name || item.owner_nickname">・</span>
                       {{ item.role_name }}
@@ -253,15 +247,19 @@
             />
 
             <h2 class="empty-title">
-              {{ search || categoryFilter || statusFilter
-                ? '条件に一致する備品がありません'
-                : 'まだ備品が登録されていません' }}
+              {{
+                search || categoryFilter || statusFilter
+                  ? '条件に一致する備品がありません'
+                  : 'まだ備品が登録されていません'
+              }}
             </h2>
 
             <p class="empty-description">
-              {{ search || categoryFilter || statusFilter
-                ? '検索条件や絞り込み条件を変更してみてください。'
-                : '必要な備品や小道具を追加してください。' }}
+              {{
+                search || categoryFilter || statusFilter
+                  ? '検索条件や絞り込み条件を変更してみてください。'
+                  : '必要な備品や小道具を追加してください。'
+              }}
             </p>
 
             <v-btn

@@ -1,5 +1,7 @@
 import { getSessionId, getSessionUser, type SessionUser } from "./session"
 
+type AuthEnv = Pick<Env, "DB">
+
 export interface AuthContext {
   user: SessionUser
   sessionId: string
@@ -9,7 +11,7 @@ type PermissionEffect = "allow" | "deny"
 
 export async function requireAuth(
   request: Request,
-  env: Env,
+  env: AuthEnv,
 ): Promise<AuthContext | Response> {
   const sessionId = getSessionId(request)
 
@@ -37,7 +39,7 @@ export async function requireAuth(
 
 export async function requireAccountRole(
   request: Request,
-  env: Env,
+  env: AuthEnv,
   roleName: string,
 ): Promise<AuthContext | Response> {
   const auth = await requireAuth(request, env)
@@ -70,7 +72,7 @@ export async function requireAccountRole(
 }
 
 async function isAdmin(
-  env: Env,
+  env: AuthEnv,
   userId: string,
 ): Promise<boolean> {
   const result = await env.DB
@@ -90,7 +92,7 @@ async function isAdmin(
 }
 
 export async function getUserPermissions(
-  env: Env,
+  env: AuthEnv,
   userId: string,
 ): Promise<string[]> {
   if (await isAdmin(env, userId)) {
@@ -219,7 +221,7 @@ export async function getUserPermissions(
 }
 
 export async function hasPermission(
-  env: Env,
+  env: AuthEnv,
   userId: string,
   permissionKey: string,
 ): Promise<boolean> {
@@ -314,7 +316,7 @@ export async function hasPermission(
 
 export async function requirePermission(
   request: Request,
-  env: Env,
+  env: AuthEnv,
   permissionKey: string,
 ): Promise<AuthContext | Response> {
   const auth = await requireAuth(request, env)

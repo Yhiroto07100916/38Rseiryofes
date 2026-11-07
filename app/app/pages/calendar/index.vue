@@ -3,9 +3,7 @@
     <div class="calendar-header">
       <div>
         <h1 class="text-h5 font-weight-bold">カレンダー</h1>
-        <p class="text-body-2 text-medium-emphasis mt-1">
-          38Rの予定をみんなで共有
-        </p>
+        
       </div>
 
       <v-btn

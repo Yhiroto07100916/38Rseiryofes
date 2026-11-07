@@ -3,11 +3,13 @@
   <v-container fluid class="pa-4 pa-sm-6 survey-page">
     <div class="d-flex align-center mb-6">
       <LayoutBackButton />
-      <div class="ml-2">
-        <h1 class="text-h5 font-weight-bold">アンケート・投票</h1>
-        <p class="text-body-2 text-medium-emphasis mt-1">
-          38Rのアンケートや投票を管理できます
-        </p>
+      <v-avatar color="primary" variant="tonal" rounded="lg">
+        <v-icon icon="mdi-vote" />
+      </v-avatar>
+
+      <div class="flex-grow-1 ml-2">
+        <h1 class="text-h5 font-weight-bold">投票</h1>
+        
       </div>
       <v-spacer />
       <v-btn
