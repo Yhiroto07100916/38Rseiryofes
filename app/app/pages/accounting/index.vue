@@ -1034,7 +1034,8 @@ import { useConfirmDialog } from '~/composables/useConfirmDialog'
 import { jstDateKey } from '~/utils/jst'
 
 definePageMeta({
-  middleware: ['auth'],
+    permissions: ['accounting.view'],
+middleware: ['auth'],
 })
 
 type PaymentMethod = 'budget' | 'advance'
