@@ -35,6 +35,71 @@ async function grant(userId: string, keys: string[]) {
 }
 
 describe("Wishlist API permissions", () => {
+  it("forces new submissions to purchase requested", async () => {
+    const user = await createUser("提出者");
+    await grant(user.userId, ["wishlist.view", "wishlist.create"]);
+
+    const response = await SELF.fetch("http://example.com/api/wishlist", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: user.cookie,
+      },
+      body: JSON.stringify({ title: "養生テープ", status: "purchased" }),
+    });
+
+    expect(response.status).toBe(201);
+    const created = await response.json() as { status: string };
+    expect(created.status).toBe("requested");
+  });
+
+  it("requires wishlist.review to change the purchase status", async () => {
+    const submitter = await createUser("提出者");
+    const reviewer = await createUser("担当者");
+    await grant(submitter.userId, ["wishlist.view", "wishlist.create"]);
+    await grant(reviewer.userId, ["wishlist.view", "wishlist.review"]);
+
+    const createResponse = await SELF.fetch("http://example.com/api/wishlist", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: submitter.cookie,
+      },
+      body: JSON.stringify({ title: "模造紙" }),
+    });
+
+    expect(createResponse.status).toBe(201);
+    const created = await createResponse.json() as { id: string };
+
+    const deniedResponse = await SELF.fetch(
+      `http://example.com/api/wishlist/${created.id}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: submitter.cookie,
+        },
+        body: JSON.stringify({ status: "planned" }),
+      },
+    );
+    expect(deniedResponse.status).toBe(403);
+
+    const reviewResponse = await SELF.fetch(
+      `http://example.com/api/wishlist/${created.id}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: reviewer.cookie,
+        },
+        body: JSON.stringify({ status: "planned" }),
+      },
+    );
+    expect(reviewResponse.status).toBe(200);
+    const updated = await reviewResponse.json() as { status: string };
+    expect(updated.status).toBe("planned");
+  });
+
   it("requires wishlist.view to list items", async () => {
     const user = await createUser("閲覧権限なし");
 
