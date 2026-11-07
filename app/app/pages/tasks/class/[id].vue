@@ -274,19 +274,19 @@
                 担当者
               </span>
 
-              <span>
-                {{
-                  task.assignments.users.length > 0
-                    ? task.assignments.users
-                        .map((user) =>
-                          user.nickname
-                            ? `${user.nickname} (${user.name})`
-                            : user.name,
-                        )
-                        .join('、')
-                    : 'なし'
-                }}
-              </span>
+              <div class="d-flex align-center flex-wrap ga-2">
+                <template v-if="task.assignments.users.length > 0">
+                  <div
+                    v-for="user in task.assignments.users"
+                    :key="user.id"
+                    class="d-inline-flex align-center ga-1"
+                  >
+                    <UserAvatar :user="user" :size="28" />
+                    <span>{{ user.nickname || user.name }}</span>
+                  </div>
+                </template>
+                <span v-else>なし</span>
+              </div>
             </div>
 
             <div class="detail-item">
@@ -431,6 +431,16 @@
             class="comment-item"
           >
             <div class="d-flex align-center">
+              <UserAvatar
+                :user="{
+                  id: comment.user_id,
+                  name: comment.user_name,
+                  nickname: comment.user_nickname,
+                  avatar_key: comment.avatar_key,
+                }"
+                :size="32"
+                class="mr-2"
+              />
               <span class="font-weight-bold">
                 {{
                   comment.user_nickname ||
