@@ -34,10 +34,6 @@
               </div>
             </div>
 
-            <div class="mb-5">
-              <AvatarSettings />
-            </div>
-
             <div class="profile-row">
               <span class="profile-label">名前</span>
               <span>{{ auth.user?.name || '---' }}</span>
@@ -458,6 +454,12 @@
           </v-card-title>
 
           <v-card-text class="px-5 pb-5">
+            <div class="mb-4">
+              <AvatarSettings />
+            </div>
+
+            <v-divider class="mb-2" />
+
             <v-list class="pa-0">
               <v-list-item
                 prepend-icon="mdi-account-edit-outline"
