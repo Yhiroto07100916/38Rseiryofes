@@ -226,12 +226,11 @@ export async function handleWishlist(
   const existing = await getWishlistItem(env, itemId)
   if (!existing) return json({ error: "Wishlist item not found" }, 404)
 
-  const action = method === "PATCH" ? "edit" : "delete"
-  if (!(await canManageItem(env, auth.user.id, existing, action))) {
-    return json({ error: "Forbidden", permission: `wishlist.${action}_own` }, 403)
-  }
-
   if (method === "DELETE") {
+    if (!(await canManageItem(env, auth.user.id, existing, "delete"))) {
+      return json({ error: "Forbidden", permission: "wishlist.delete_own" }, 403)
+    }
+
     await env.DB.prepare("DELETE FROM wishlist_items WHERE id = ?")
       .bind(itemId)
       .run()
@@ -243,6 +242,26 @@ export async function handleWishlist(
     body = await request.json()
   } catch {
     return json({ error: "Invalid JSON" }, 400)
+  }
+
+  const contentFields = [
+    "title",
+    "description",
+    "product_url",
+    "quantity",
+    "estimated_cost",
+    "priority",
+    "memo",
+  ]
+  const hasContentChanges = contentFields.some((field) =>
+    Object.prototype.hasOwnProperty.call(body, field),
+  )
+
+  if (
+    hasContentChanges &&
+    !(await canManageItem(env, auth.user.id, existing, "edit"))
+  ) {
+    return json({ error: "Forbidden", permission: "wishlist.edit_own" }, 403)
   }
 
   const title = body.title === undefined
