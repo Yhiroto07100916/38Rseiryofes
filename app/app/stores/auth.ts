@@ -29,6 +29,7 @@ export const useAuthStore = defineStore('auth', () => {
   const accountRoles = ref<AuthRole[]>([])
   const initialized = ref(false)
   let fetchMePromise: Promise<AuthUser | null> | null = null
+  let authRevision = 0
 
   const isLoggedIn = computed(() => user.value !== null)
 
@@ -39,33 +40,51 @@ export const useAuthStore = defineStore('auth', () => {
       return fetchMePromise
     }
 
-    fetchMePromise = (async () => {
+    const revision = authRevision
+    const request = (async () => {
       try {
         const response = await apiFetch<LoginResponse>('/api/auth/me')
+
+        if (revision !== authRevision) {
+          return user.value
+        }
+
         user.value = response.user
         permissions.value = response.permissions ?? []
         roles.value = response.roles ?? []
         accountRoles.value = response.account_roles ?? []
         return user.value
       } catch {
-        user.value = null
-        permissions.value = []
-        roles.value = []
-        accountRoles.value = []
+        if (revision === authRevision) {
+          user.value = null
+          permissions.value = []
+          roles.value = []
+          accountRoles.value = []
+        }
+
         return null
       } finally {
-        initialized.value = true
-        fetchMePromise = null
+        if (revision === authRevision) {
+          initialized.value = true
+
+          if (fetchMePromise === request) {
+            fetchMePromise = null
+          }
+        }
       }
     })()
 
-    return fetchMePromise
+    fetchMePromise = request
+    return request
   }
 
   const login = async (
     studentNumber: string,
     password: string,
   ) => {
+    authRevision += 1
+    fetchMePromise = null
+
     const response = await apiFetch<LoginResponse>('/api/auth/login', {
       method: 'POST',
       body: {
@@ -92,6 +111,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const logout = async () => {
+    authRevision += 1
+    fetchMePromise = null
+
     try {
       await apiFetch('/api/auth/logout', {
         method: 'POST',
