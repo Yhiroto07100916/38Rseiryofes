@@ -767,15 +767,6 @@ interface User {
   updated_at: string
 }
 
-interface UserRolesResponse {
-  roles: Array<{
-    id: string
-    name: string
-    description: string | null
-    created_at: string
-  }>
-}
-
 interface RoleMember extends User {
   assigned: boolean
   saving: boolean
@@ -800,16 +791,6 @@ interface AccountRoleResponse {
     created_at: string
     updated_at: string
     member_count: number
-  }>
-}
-
-interface UserAccountRolesResponse {
-  account_roles: Array<{
-    id: string
-    name: string
-    description: string | null
-    created_at: string
-    updated_at: string
   }>
 }
 
