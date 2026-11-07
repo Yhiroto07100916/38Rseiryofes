@@ -684,9 +684,6 @@ const deleteUser = async (user: User) => {
   }
 }
 
-const getInitial = (name: string) => {
-  return name.trim().charAt(0) || '?'
-}
 
 onMounted(async () => {
   await Promise.all([
