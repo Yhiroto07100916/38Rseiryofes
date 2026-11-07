@@ -195,6 +195,10 @@
               {{ formatEventRange(event) }}
             </div>
 
+            <div class="text-caption text-medium-emphasis mt-1">
+              作成者：{{ event.created_by_nickname || event.created_by_name || '不明' }}
+            </div>
+
             <div
               v-if="event.location"
               class="text-body-2 text-medium-emphasis mt-1"
