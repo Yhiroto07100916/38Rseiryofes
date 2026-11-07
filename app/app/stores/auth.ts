@@ -117,6 +117,8 @@ export const useAuthStore = defineStore('auth', () => {
         method: 'POST',
       })
     } finally {
+      authRevision += 1
+      fetchMePromise = null
       user.value = null
       permissions.value = []
       roles.value = []
