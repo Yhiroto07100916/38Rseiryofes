@@ -113,6 +113,35 @@ describe("Tool rental API", () => {
     expect(responses.filter((response) => response.status === 409)).toHaveLength(1);
   });
 
+  it("does not reduce inventory below the quantity currently checked out", async () => {
+    const manager = await createUser("在庫管理担当");
+    await grant(manager.userId, [
+      "tool_rental.view",
+      "tool_rental.manage",
+      "tool_rental.checkout",
+    ]);
+    const toolId = await createTool(manager.userId, "在庫変更テスト工具", 3);
+
+    const checkout = await SELF.fetch("http://example.com/api/tool-rental/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: manager.cookie },
+      body: JSON.stringify({ tool_id: toolId, borrower_name: "借用者", quantity: 2 }),
+    });
+    expect(checkout.status).toBe(201);
+
+    const update = await SELF.fetch(`http://example.com/api/tool-rental/tools/${toolId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: manager.cookie },
+      body: JSON.stringify({ total_quantity: 1 }),
+    });
+
+    expect(update.status).toBe(409);
+    const tool = await env.DB.prepare(
+      "SELECT total_quantity FROM tool_rental_tools WHERE id = ?",
+    ).bind(toolId).first<{ total_quantity: number }>();
+    expect(tool?.total_quantity).toBe(3);
+  });
+
   it("keeps loan history when a tool is archived", async () => {
     const manager = await createUser("管理担当");
     await grant(manager.userId, [
