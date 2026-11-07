@@ -6,6 +6,7 @@ export interface SessionUser {
   student_number: string
   name: string
   nickname: string | null
+  avatar_key: string | null
 }
 
 function parseCookies(request: Request): Record<string, string> {
@@ -146,7 +147,8 @@ export async function getSessionUser(
         id,
         student_number,
         name,
-        nickname
+        nickname,
+        avatar_key
       FROM users
       WHERE id = ?
     `)
