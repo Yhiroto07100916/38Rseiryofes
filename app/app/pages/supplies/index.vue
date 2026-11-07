@@ -428,6 +428,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 
 definePageMeta({
+  permissions: ['equipment.view'],
   middleware: 'auth',
 })
 
