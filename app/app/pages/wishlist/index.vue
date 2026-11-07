@@ -134,6 +134,23 @@ async function saveItem() {
   }
 }
 
+async function setStatus(
+  item: WishlistItem,
+  status: WishlistItem['status'],
+) {
+  saving.value = true
+  errorMessage.value = ''
+  try {
+    await api.updateWishlistItem(item.id, { status })
+    await loadItems()
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = '状態を変更できませんでした。購入判断の権限を確認してください。'
+  } finally {
+    saving.value = false
+  }
+}
+
 async function removeItem(item: WishlistItem) {
   if (!window.confirm(`「${item.title}」を削除しますか？`)) return
 
@@ -231,7 +248,7 @@ onMounted(loadItems)
               登録者：{{ item.created_by_nickname || item.created_by_name || '不明' }}
             </v-card-subtitle>
             <template #append>
-              <v-menu v-if="item.can_edit || item.can_delete">
+              <v-menu v-if="item.can_edit || item.can_delete || canReview">
                 <template #activator="{ props: menuProps }">
                   <v-btn
                     v-bind="menuProps"
@@ -247,6 +264,13 @@ onMounted(loadItems)
                     prepend-icon="mdi-pencil"
                     title="編集"
                     @click="openEditDialog(item)"
+                  />
+                  <v-list-item
+                    v-if="canReview && item.status !== 'purchased'"
+                    prepend-icon="mdi-check-circle-outline"
+                    :title="item.status === 'requested' ? '購入予定に変更' : '購入済みに変更'"
+                    :disabled="saving"
+                    @click="setStatus(item, item.status === 'requested' ? 'planned' : 'purchased')"
                   />
                   <v-list-item
                     v-if="item.can_delete"
