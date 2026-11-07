@@ -65,7 +65,7 @@ async function createAdminSession() {
 
   const adminRole = await env.DB
     .prepare("SELECT id FROM account_roles WHERE name = 'admin'")
-    .first<{ id: string }
+    .first<{ id: string }>()
 
   if (!adminRole) {
     throw new Error("Seeded admin account role was not found")
