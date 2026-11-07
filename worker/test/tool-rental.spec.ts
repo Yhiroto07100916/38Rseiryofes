@@ -113,10 +113,22 @@ describe("Tool rental API", () => {
     expect(responses.filter((response) => response.status === 409)).toHaveLength(1);
   });
 
-  it("keeps historical records when a tool is archived", async () => {
+  it("keeps loan history when a tool is archived", async () => {
     const manager = await createUser("管理担当");
-    await grant(manager.userId, ["tool_rental.view", "tool_rental.manage"]);
+    await grant(manager.userId, [
+      "tool_rental.view",
+      "tool_rental.manage",
+      "tool_rental.checkout",
+      "tool_rental.history",
+    ]);
     const toolId = await createTool(manager.userId, "古い工具", 1);
+
+    const checkout = await SELF.fetch("http://example.com/api/tool-rental/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: manager.cookie },
+      body: JSON.stringify({ tool_id: toolId, borrower_name: "借用者", quantity: 1 }),
+    });
+    expect(checkout.status).toBe(201);
 
     const response = await SELF.fetch(`http://example.com/api/tool-rental/tools/${toolId}`, {
       method: "PATCH",
@@ -127,5 +139,12 @@ describe("Tool rental API", () => {
     expect(response.status).toBe(200);
     const tool = await response.json() as { is_active: number };
     expect(tool.is_active).toBe(0);
+
+    const historyResponse = await SELF.fetch("http://example.com/api/tool-rental/history", {
+      headers: { Cookie: manager.cookie },
+    });
+    expect(historyResponse.status).toBe(200);
+    const history = await historyResponse.json() as { loans: Array<{ tool_id: string }> };
+    expect(history.loans.some((loan) => loan.tool_id === toolId)).toBe(true);
   });
 });
