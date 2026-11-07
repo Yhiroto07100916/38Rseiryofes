@@ -6,6 +6,7 @@ export interface AccountRole {
   description: string | null
   created_at: string
   updated_at: string
+  member_count?: number
 }
 
 interface CreateAccountRoleBody {
@@ -55,13 +56,22 @@ export async function handleAccountRoles(
       const result = await env.DB
         .prepare(`
           SELECT
-            id,
-            name,
-            description,
-            created_at,
-            updated_at
-          FROM account_roles
-          ORDER BY name ASC
+            ar.id,
+            ar.name,
+            ar.description,
+            ar.created_at,
+            ar.updated_at,
+            COUNT(DISTINCT uar.user_id) AS member_count
+          FROM account_roles ar
+          LEFT JOIN user_account_roles uar
+            ON uar.account_role_id = ar.id
+          GROUP BY
+            ar.id,
+            ar.name,
+            ar.description,
+            ar.created_at,
+            ar.updated_at
+          ORDER BY ar.name ASC
         `)
         .all<AccountRole>()
 
