@@ -386,7 +386,7 @@ onMounted(loadItems)
             </v-col>
             <v-col cols="6">
               <v-select
-                v-if="canReview"
+                v-if="canReview && editingId"
                 v-model="form.status"
                 :items="statusItems"
                 label="状態"
