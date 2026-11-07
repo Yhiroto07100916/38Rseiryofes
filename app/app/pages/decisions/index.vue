@@ -2,11 +2,12 @@
   <v-container fluid class="pa-4 pa-sm-6">
     <div class="d-flex align-center mb-6">
       <LayoutBackButton />
-      <div>
-        <h1 class="text-h5 font-weight-bold">意思決定記録</h1>
-        <p class="text-body-2 text-medium-emphasis mt-1">
-          38Rで決定した内容や、その理由・経緯を記録します
-        </p>
+      <v-avatar color="primary" variant="tonal" rounded="lg">
+        <v-icon icon="mdi-clipboard-text" />
+      </v-avatar>
+      <div class="flex-grow-1">
+        <h1 class="text-h5 font-weight-bold">決定事項</h1>
+        
       </div>
       <v-spacer />
       <v-btn

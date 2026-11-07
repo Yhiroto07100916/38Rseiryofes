@@ -4,9 +4,7 @@
       <h1 class="text-h5 font-weight-bold">
         マイページ
       </h1>
-      <p class="text-body-2 text-medium-emphasis mt-1">
-        あなたの星陵祭準備をまとめて確認できます
-      </p>
+      
     </div>
 
     <v-row>

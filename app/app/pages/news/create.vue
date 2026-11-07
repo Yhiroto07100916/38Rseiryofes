@@ -8,12 +8,10 @@
 
       <div class="ml-2">
         <h1 class="text-h5 font-weight-bold">
-          お知らせを作成
+          NEWSを作成
         </h1>
 
-        <p class="text-body-2 text-medium-emphasis mt-1">
-          新しいお知らせを作成します
-        </p>
+        
       </div>
     </div>
 
