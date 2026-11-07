@@ -225,7 +225,7 @@ export async function handleToolRental(
       ? existing.is_active
       : body.is_active === false || body.is_active === 0 ? 0 : 1
 
-    await env.DB.prepare(`
+    const updated = await env.DB.prepare(`
       UPDATE tool_rental_tools
       SET name = ?, category = ?, description = ?, total_quantity = ?,
           is_active = ?, external_tool_id = ?, updated_at = CURRENT_TIMESTAMP
