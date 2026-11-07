@@ -53,7 +53,7 @@
         </v-alert>
 
         <v-row class="mb-2">
-          <v-col cols="12" sm="4">
+          <v-col cols="12" :sm="canReturn ? 4 : 12">
             <v-card rounded="xl" variant="tonal">
               <v-card-text>
                 <div class="text-caption text-medium-emphasis">登録工具</div>
@@ -61,7 +61,7 @@
               </v-card-text>
             </v-card>
           </v-col>
-          <v-col cols="12" sm="4">
+          <v-col v-if="canReturn" cols="12" sm="4">
             <v-card rounded="xl" variant="tonal">
               <v-card-text>
                 <div class="text-caption text-medium-emphasis">貸出中の記録</div>
@@ -69,7 +69,7 @@
               </v-card-text>
             </v-card>
           </v-col>
-          <v-col cols="12" sm="4">
+          <v-col v-if="canReturn" cols="12" sm="4">
             <v-card rounded="xl" variant="tonal">
               <v-card-text>
                 <div class="text-caption text-medium-emphasis">貸出中の数量</div>
