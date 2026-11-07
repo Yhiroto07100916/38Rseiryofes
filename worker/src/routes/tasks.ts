@@ -242,7 +242,8 @@ export async function handleTasks(
           id,
           student_number,
           name,
-          nickname
+          nickname,
+          avatar_key
         FROM users
         ORDER BY student_number
       `)
@@ -251,6 +252,7 @@ export async function handleTasks(
         student_number: string
         name: string
         nickname: string | null
+        avatar_key: string | null
       }>()
 
     return Response.json({
