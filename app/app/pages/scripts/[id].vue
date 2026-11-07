@@ -790,9 +790,10 @@
   const snackbar = useSnackbar()
 
 definePageMeta({
-    middleware: ['auth'],
-    layout: false,
-  })
+  permissions: ['script.view'],
+  middleware: ['auth'],
+  layout: false,
+})
   
   type BlockType = 'dialogue' | 'direction' | 'sound' | 'lighting'
   

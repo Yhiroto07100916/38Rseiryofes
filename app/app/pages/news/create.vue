@@ -246,6 +246,7 @@ import { jstDateKey, jstDateTimeLocalToIso } from '~/utils/jst'
 import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({
+  permissions: ['news.create'],
   middleware: 'auth',
 })
 

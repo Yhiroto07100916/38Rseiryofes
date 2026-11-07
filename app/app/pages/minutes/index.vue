@@ -195,7 +195,10 @@ import { formatJstDateTimeLocal, jstDateTimeLocalToIso } from '~/utils/jst'
 import { useApi } from '~/composables/useApi'
 import { useAuthStore } from '~/stores/auth'
 
-definePageMeta({ middleware: 'auth' })
+definePageMeta({
+  permissions: ['minutes.view'],
+  middleware: 'auth',
+})
 
 interface Minute {
   id: string

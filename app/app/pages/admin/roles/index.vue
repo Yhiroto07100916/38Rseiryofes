@@ -754,6 +754,7 @@ interface RoleResponse {
     name: string
     description: string | null
     created_at: string
+    member_count: number
   }>
 }
 
@@ -764,15 +765,6 @@ interface User {
   nickname: string | null
   created_at: string
   updated_at: string
-}
-
-interface UserRolesResponse {
-  roles: Array<{
-    id: string
-    name: string
-    description: string | null
-    created_at: string
-  }>
 }
 
 interface RoleMember extends User {
@@ -798,16 +790,7 @@ interface AccountRoleResponse {
     description: string | null
     created_at: string
     updated_at: string
-  }>
-}
-
-interface UserAccountRolesResponse {
-  account_roles: Array<{
-    id: string
-    name: string
-    description: string | null
-    created_at: string
-    updated_at: string
+    member_count: number
   }>
 }
 
@@ -927,34 +910,11 @@ const loadAccountRoles = async () => {
 
   try {
     const response = await apiFetch<AccountRoleResponse>('/api/account-roles')
-    const usersResponse = await apiFetch<{ users: User[] }>('/api/users')
 
-    const loadedRoles: AccountRole[] = []
-
-    for (const accountRole of response.account_roles) {
-      let memberCount = 0
-
-      for (const user of usersResponse.users) {
-        const userRoles = await apiFetch<UserAccountRolesResponse>(
-          `/api/users/${user.id}/account-roles`,
-        )
-
-        if (
-          userRoles.account_roles.some(
-            userRole => userRole.id === accountRole.id,
-          )
-        ) {
-          memberCount++
-        }
-      }
-
-      loadedRoles.push({
-        ...accountRole,
-        memberCount,
-      })
-    }
-
-    accountRoles.value = loadedRoles
+    accountRoles.value = response.account_roles.map(accountRole => ({
+      ...accountRole,
+      memberCount: accountRole.member_count,
+    }))
   } catch (error) {
     console.error(error)
     errorMessage.value = 'アカウント権限の取得に失敗しました。'
@@ -1063,25 +1023,15 @@ const loadAccountRoleMembers = async (role: AccountRole) => {
   accountRoleMembersError.value = ''
 
   try {
-    const usersResponse = await apiFetch<{ users: User[] }>('/api/users')
+    const response = await apiFetch<{
+      users: Array<User & { assigned: number }>
+    }>(`/api/account-roles/${role.id}/members`)
 
-    const loadedMembers: AccountRoleMember[] = []
-
-    for (const user of usersResponse.users) {
-      const userRoles = await apiFetch<UserAccountRolesResponse>(
-        `/api/users/${user.id}/account-roles`,
-      )
-
-      loadedMembers.push({
-        ...user,
-        assigned: userRoles.account_roles.some(
-          accountRole => accountRole.id === role.id,
-        ),
-        saving: false,
-      })
-    }
-
-    accountRoleMembers.value = loadedMembers
+    accountRoleMembers.value = response.users.map(user => ({
+      ...user,
+      assigned: user.assigned === 1,
+      saving: false,
+    }))
     updateAccountRoleMemberCount(role.id)
   } catch (error) {
     console.error(error)
@@ -1155,30 +1105,10 @@ const loadRoles = async () => {
   try {
     const response = await apiFetch<RoleResponse>('/api/roles')
 
-    const loadedRoles: Role[] = []
-
-    for (const role of response.roles) {
-      const usersResponse = await apiFetch<{ users: User[] }>('/api/users')
-
-      let memberCount = 0
-
-      for (const user of usersResponse.users) {
-        const userRoles = await apiFetch<UserRolesResponse>(
-          `/api/users/${user.id}/roles`,
-        )
-
-        if (userRoles.roles.some(userRole => userRole.id === role.id)) {
-          memberCount++
-        }
-      }
-
-      loadedRoles.push({
-        ...role,
-        memberCount,
-      })
-    }
-
-    roles.value = loadedRoles
+    roles.value = response.roles.map(role => ({
+      ...role,
+      memberCount: role.member_count,
+    }))
   } catch (error) {
     console.error(error)
     errorMessage.value = 'ロールの取得に失敗しました。'
@@ -1292,25 +1222,15 @@ const loadMembers = async (role: Role) => {
   membersError.value = ''
 
   try {
-    const usersResponse = await apiFetch<{ users: User[] }>('/api/users')
+    const response = await apiFetch<{
+      users: Array<User & { assigned: number }>
+    }>(`/api/roles/${role.id}/members`)
 
-    const loadedMembers: RoleMember[] = []
-
-    for (const user of usersResponse.users) {
-      const userRoles = await apiFetch<UserRolesResponse>(
-        `/api/users/${user.id}/roles`,
-      )
-
-      loadedMembers.push({
-        ...user,
-        assigned: userRoles.roles.some(
-          userRole => userRole.id === role.id,
-        ),
-        saving: false,
-      })
-    }
-
-    members.value = loadedMembers
+    members.value = response.users.map(user => ({
+      ...user,
+      assigned: user.assigned === 1,
+      saving: false,
+    }))
     updateRoleMemberCount(role.id)
   } catch (error) {
     console.error(error)
@@ -1367,7 +1287,10 @@ const toggleMember = async (member: RoleMember) => {
   }
 }
 
-await loadRoles()
+await Promise.all([
+  loadAccountRoles(),
+  loadRoles(),
+])
 </script>
 
 <style scoped>

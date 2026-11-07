@@ -5,6 +5,7 @@ export interface Role {
   name: string
   description: string | null
   created_at: string
+  member_count?: number
 }
 
 interface CreateRoleBody {
@@ -38,16 +39,72 @@ export async function handleRoles(
   }
 
   if (request.method === "GET") {
+    if (pathParts.length === 2 && pathParts[1] === "members") {
+      const role = await env.DB
+        .prepare("SELECT id FROM roles WHERE id = ?")
+        .bind(pathParts[0])
+        .first<{ id: string }>()
+
+      if (!role) {
+        return Response.json(
+          { error: "Role not found" },
+          { status: 404 },
+        )
+      }
+
+      const result = await env.DB
+        .prepare(`
+          SELECT
+            u.id,
+            u.student_number,
+            u.name,
+            u.nickname,
+            u.created_at,
+            u.updated_at,
+            CASE
+              WHEN ur.user_id IS NULL THEN 0
+              ELSE 1
+            END AS assigned
+          FROM users u
+          LEFT JOIN user_roles ur
+            ON ur.user_id = u.id
+            AND ur.role_id = ?
+          ORDER BY u.student_number
+        `)
+        .bind(pathParts[0])
+        .all<{
+          id: string
+          student_number: string
+          name: string
+          nickname: string | null
+          created_at: string
+          updated_at: string
+          assigned: number
+        }>()
+
+      return Response.json({
+        users: result.results,
+      })
+    }
+
     if (pathParts.length === 0) {
       const result = await env.DB
         .prepare(`
           SELECT
-            id,
-            name,
-            description,
-            created_at
-          FROM roles
-          ORDER BY name
+            r.id,
+            r.name,
+            r.description,
+            r.created_at,
+            COUNT(DISTINCT ur.user_id) AS member_count
+          FROM roles r
+          LEFT JOIN user_roles ur
+            ON ur.role_id = r.id
+          GROUP BY
+            r.id,
+            r.name,
+            r.description,
+            r.created_at
+          ORDER BY r.name
         `)
         .all<Role>()
 

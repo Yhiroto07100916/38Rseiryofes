@@ -1034,6 +1034,7 @@ import { useConfirmDialog } from '~/composables/useConfirmDialog'
 import { jstDateKey } from '~/utils/jst'
 
 definePageMeta({
+  permissions: ['accounting.view'],
   middleware: ['auth'],
 })
 
