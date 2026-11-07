@@ -260,6 +260,7 @@ export async function handleCalendar(
           u.student_number,
           u.name,
           u.nickname,
+          u.avatar_key,
           a.status
         FROM users AS u
         LEFT JOIN calendar_event_attendance AS a
@@ -280,6 +281,7 @@ export async function handleCalendar(
         student_number: string
         name: string
         nickname: string | null
+        avatar_key: string | null
         status: "undecided" | null
       }>()
 
