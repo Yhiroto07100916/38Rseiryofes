@@ -168,7 +168,6 @@ const items: NavigationItem[] = [
 
 const handleLogout = async () => {
   await auth.logout()
-  isAdmin.value = false
   isOpen.value = false
   await navigateTo('/login')
 }
