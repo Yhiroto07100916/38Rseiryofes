@@ -144,31 +144,17 @@ const isOpen = defineModel<boolean>({
 const route = useRoute()
 const auth = useAuthStore()
 
-const isAdmin = ref(false)
-const isclassrepresentative = ref(false)
+const isAdmin = computed(() =>
+  auth.accountRoles.some((role) => role.name === 'admin'),
+)
 
-const fetchAccountRole = async () => {
-  if (!auth.user) {
-    isAdmin.value = false
-    return
-  }
-
-  try {
-    const response = await useApi().apiFetch<{
-      account_roles: Array<{
-        id: string
-        name: string
-        description: string | null
-      }>
-    }>(`/api/users/${auth.user.id}/account-roles`)
-
-    isAdmin.value = response.account_roles.some(
-      (role) => role.name === 'admin',
-    )
-  } catch {
-    isAdmin.value = false
-  }
-}
+const isclassrepresentative = computed(() =>
+  auth.accountRoles.some(
+    (role) =>
+      role.name === 'class_representative' ||
+      role.name === 'admin',
+  ),
+)
 
 const items: NavigationItem[] = [
 { icon: "mdi-bullhorn", title: "NEWS", to: "/news" },
@@ -179,19 +165,6 @@ const items: NavigationItem[] = [
 { icon: "mdi-file-document", title: "書類", to: "/files" },
 { title: "牛乳パック外部受け取り", icon: "mdi-recycle", to: "/milk-collection" },
 ]
-
-watch(
-  () => auth.user?.id,
-  async (userId) => {
-    if (!userId) {
-      isAdmin.value = false
-      return
-    }
-
-    await fetchAccountRole()
-  },
-  { immediate: true },
-)
 
 const handleLogout = async () => {
   await auth.logout()
