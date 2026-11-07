@@ -972,6 +972,7 @@ const changeNickname = async () => {
         student_number: string
         name: string
         nickname: string | null
+        avatar_key: string | null
       }
     }>('/api/auth/profile', {
       method: 'PATCH',
