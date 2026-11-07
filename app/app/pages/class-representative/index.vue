@@ -14,9 +14,7 @@
           クラ代画面
         </h1>
 
-        <p class="page-description">
-          38Rの星陵祭準備に関するクラス運営を管理できます。
-        </p>
+        
       </div>
     </div>
 
@@ -138,25 +136,25 @@ const implementedFeatures = [
     to: '/tasks/class-representative',
   },
   {
-    title: 'スケジュール',
+    title: 'カレンダー',
     description: '星陵祭準備の予定を確認',
     icon: 'mdi-calendar-month-outline',
     to: '/calendar',
   },
   {
-    title: 'お知らせ',
+    title: 'NEWS',
     description: '38Rに関するお知らせを確認',
     icon: 'mdi-bullhorn-outline',
     to: '/news',
   },
   {
-    title: '備品・小道具',
+    title: '備品',
     description: '必要な備品や小道具を管理',
     icon: 'mdi-package-variant-closed',
     to: '/supplies',
   },
   {
-    title: '資料管理',
+    title: '書類',
     description: '星陵祭準備に必要な資料を共有・管理',
     icon: 'mdi-file-document-multiple-outline',
     to: '/files',
@@ -168,13 +166,13 @@ const implementedFeatures = [
     to: '/accounting',
   },
   {
-    title: 'アンケート・投票',
+    title: '投票',
     description: 'クラス内のアンケートや投票を管理',
     icon: 'mdi-vote-outline',
     to: '/surveys',
   },
   {
-    title: '意思決定記録',
+    title: '決定事項',
     description: 'クラスで決定した内容や経緯を記録',
     icon: 'mdi-notebook-check-outline',
     to: '/decisions',

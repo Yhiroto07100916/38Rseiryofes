@@ -1,3 +1,4 @@
+import { isFileLinkConflict } from "../lib/file-link-errors"
 import { hasPermission, requireAuth } from "../lib/authz"
 
 export interface Task {
@@ -762,6 +763,17 @@ export async function handleTasks(
 
       await env.DB.batch(statements)
     } catch (error) {
+      if (isFileLinkConflict(error)) {
+        return Response.json(
+          {
+            error: "このファイルは別の領域ですでに使用されています",
+            message: "このファイルは別の領域ですでに使用されています",
+            code: "FILE_LINK_CONFLICT",
+          },
+          { status: 409 },
+        )
+      }
+
       console.error("Failed to create task:", error)
 
       return Response.json(
@@ -1261,6 +1273,17 @@ export async function handleTasks(
 
       await env.DB.batch(statements)
     } catch (error) {
+      if (isFileLinkConflict(error)) {
+        return Response.json(
+          {
+            error: "このファイルは別の領域ですでに使用されています",
+            message: "このファイルは別の領域ですでに使用されています",
+            code: "FILE_LINK_CONFLICT",
+          },
+          { status: 409 },
+        )
+      }
+
       console.error("Failed to update task:", error)
 
       return Response.json(

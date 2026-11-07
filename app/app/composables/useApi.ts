@@ -31,6 +31,8 @@ export interface CalendarEvent {
   category_id: string | null
   category_name: string | null
   category_color: string | null
+  created_by_name: string | null
+  created_by_nickname: string | null
   created_by: string
   created_at: string
   updated_at: string

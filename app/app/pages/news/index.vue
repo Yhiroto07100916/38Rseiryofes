@@ -5,15 +5,12 @@
   >
     <div class="d-flex align-center mb-6">
       <LayoutBackButton />
+      <v-avatar color="primary" variant="tonal" rounded="lg">
+        <v-icon icon="mdi-bullhorn" />
+      </v-avatar>
 
-      <div>
-        <h1 class="text-h5 font-weight-bold">
-          お知らせ
-        </h1>
-
-        <p class="text-body-2 text-medium-emphasis mt-1">
-          星陵祭準備に関するお知らせを確認できます
-        </p>
+      <div class="flex-grow-1">
+        <h1 class="text-h5 font-weight-bold">NEWS</h1>
       </div>
 
       <v-spacer />

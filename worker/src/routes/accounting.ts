@@ -1,3 +1,4 @@
+import { isFileLinkConflict } from "../lib/file-link-errors"
 import { hasPermission, requireAuth } from "../lib/authz"
 
 type Env = {
@@ -2089,6 +2090,16 @@ export async function handleAccounting(
     return json({ message: "Not Found" }, 404)
   } catch (error) {
     const message = errorMessage(error)
+
+    if (isFileLinkConflict(error)) {
+      return json(
+        {
+          message: "このファイルは別の領域ですでに使用されています",
+          code: "FILE_LINK_CONFLICT",
+        },
+        409,
+      )
+    }
 
     if (
       message.toLowerCase().includes("unauthorized") ||

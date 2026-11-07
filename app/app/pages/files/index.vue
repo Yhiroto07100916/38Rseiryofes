@@ -2,19 +2,17 @@
   <v-container class="py-6" style="max-width: 1200px">
     <div class="d-flex align-center mb-6 ga-3">
       <LayoutBackButton />
+      <v-avatar color="primary" variant="tonal" rounded="lg">
+        <v-icon icon="mdi-file-document" />
+      </v-avatar>
 
       <div class="flex-grow-1" style="min-width: 0">
-        <h1
-          class="text-h5 font-weight-bold text-no-wrap"
-        >
-          ファイル管理
+        <h1 class="text-h5 font-weight-bold text-no-wrap">
+          書類
         </h1>
-        <p class="text-body-2 text-medium-emphasis mt-1 mb-0">
-          星陵祭準備に必要な資料を共有・管理できます。
-        </p>
       </div>
 
-      <div class="d-flex align-center flex-wrap ga-2">
+      <div class="d-flex align-center flex-wrap ga-2 justify-end">
         <v-btn
           v-if="canManageFiles"
           to="/files/categories"

@@ -11,9 +11,7 @@
           タスクを作成
         </h1>
 
-        <p class="text-body-2 text-medium-emphasis mt-1">
-          新しいタスクを作成します
-        </p>
+        
       </div>
     </div>
 

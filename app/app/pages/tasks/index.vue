@@ -10,9 +10,7 @@
           タスク管理
         </h1>
 
-        <p class="text-body-2 text-medium-emphasis mt-1">
-          星陵祭準備に関するタスクを管理します
-        </p>
+        
       </div>
     </div>
 

@@ -11,9 +11,7 @@
           タスク詳細
         </h1>
 
-        <p class="text-body-2 text-medium-emphasis mt-1">
-          クラス全体に関するタスク
-        </p>
+        
       </div>
 
       <v-spacer />

@@ -5,9 +5,7 @@
     <div class="d-flex align-center justify-space-between flex-wrap ga-3 mb-5">
       <div>
         <h1 class="text-h4 font-weight-bold">会計</h1>
-        <p class="text-body-2 text-medium-emphasis mt-1">
-          38Rの予算・購入・立替を管理します
-        </p>
+        
       </div>
 
       <v-btn

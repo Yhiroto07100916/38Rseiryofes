@@ -1,3 +1,4 @@
+import { isFileLinkConflict } from "./lib/file-link-errors"
 import { handleUsers } from "./routes/users"
 import { handleAdminSetPassword, handleAuth } from "./routes/auth"
 import { handleRoles, handleUserRole, handleUserRoles } from "./routes/roles"
@@ -18,6 +19,7 @@ import { handleDecisions } from "./routes/decisions"
 import { handleMinutes } from "./routes/minutes"
 import { handleMilkCollection } from "./routes/milk-collection"
 import { handleAvatarImage, handleAvatarMutation, processQueuedAvatarDeletions } from "./routes/avatars"
+import { handleSubmissions } from "./routes/submissions"
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -639,6 +641,34 @@ export default {
 
 
     if (
+      url.pathname === "/api/submissions" ||
+      url.pathname.startsWith("/api/submissions/")
+    ) {
+      const path = url.pathname.slice("/api/submissions".length)
+      const pathParts = path.split("/").filter(Boolean)
+      try {
+        return withCors(request, await handleSubmissions(request, env, pathParts))
+      } catch (error) {
+        if (isFileLinkConflict(error)) {
+          return withCors(
+            request,
+            Response.json(
+              {
+                error: "このファイルは別の領域ですでに使用されています",
+                message: "このファイルは別の領域ですでに使用されています",
+                code: "FILE_LINK_CONFLICT",
+              },
+              { status: 409 },
+            ),
+          )
+        }
+
+        console.error("Submissions API error:", error)
+        return withCors(request, Response.json({ error: "Internal Server Error" }, { status: 500 }))
+      }
+    }
+
+    if (
       url.pathname === "/api/milk-collection" ||
       url.pathname.startsWith("/api/milk-collection/")
     ) {
@@ -686,6 +716,20 @@ export default {
           await handleDecisions(request, env, pathParts),
         )
       } catch (error) {
+        if (isFileLinkConflict(error)) {
+          return withCors(
+            request,
+            Response.json(
+              {
+                error: "このファイルは別の領域ですでに使用されています",
+                message: "このファイルは別の領域ですでに使用されています",
+                code: "FILE_LINK_CONFLICT",
+              },
+              { status: 409 },
+            ),
+          )
+        }
+
         console.error("Decisions API error:", error)
         return withCors(
           request,
