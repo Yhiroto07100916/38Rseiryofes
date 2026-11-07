@@ -1,6 +1,8 @@
 import { SELF } from "cloudflare:test";
 import {
   createExpiredSessionCookie,
+  createLoginSessionHeaders,
+  createLogoutSessionHeaders,
   createSessionCookie,
   getSessionCookieDomain,
 } from "../src/lib/session";
@@ -63,4 +65,37 @@ describe("Session cookie domain", () => {
       ),
     ).toBeUndefined();
   });
+
+  it("sends legacy-cookie cleanup and the new session cookie as separate headers", () => {
+    const headers = createLoginSessionHeaders(
+      "session-token",
+      true,
+      ".38r-seiryofes.com",
+    );
+    const cookies = headers.getAll("Set-Cookie");
+
+    expect(cookies).toHaveLength(2);
+    expect(cookies[0]).toContain("Max-Age=0");
+    expect(cookies[0]).not.toContain("Domain=");
+    expect(cookies[1]).toContain("session_id=session-token");
+    expect(cookies[1]).toContain("Domain=.38r-seiryofes.com");
+    expect(cookies[1]).toContain("HttpOnly");
+    expect(cookies[1]).toContain("Secure");
+    expect(cookies[1]).toContain("SameSite=Lax");
+  });
+
+  it("expires both legacy and shared-domain cookies on logout", () => {
+    const headers = createLogoutSessionHeaders(
+      true,
+      ".38r-seiryofes.com",
+    );
+    const cookies = headers.getAll("Set-Cookie");
+
+    expect(cookies).toHaveLength(2);
+    expect(cookies[0]).toContain("Max-Age=0");
+    expect(cookies[0]).not.toContain("Domain=");
+    expect(cookies[1]).toContain("Max-Age=0");
+    expect(cookies[1]).toContain("Domain=.38r-seiryofes.com");
+  });
+
 });
