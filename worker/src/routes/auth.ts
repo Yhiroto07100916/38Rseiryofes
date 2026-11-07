@@ -145,6 +145,48 @@ async function handleLogin(
     user.id,
   )
 
+  const roles = await env.DB
+    .prepare(`
+      SELECT
+        r.id,
+        r.name,
+        r.description,
+        r.created_at
+      FROM roles r
+      INNER JOIN user_roles ur
+        ON ur.role_id = r.id
+      WHERE ur.user_id = ?
+      ORDER BY r.name
+    `)
+    .bind(user.id)
+    .all<{
+      id: string
+      name: string
+      description: string | null
+      created_at: string
+    }>()
+
+  const accountRoles = await env.DB
+    .prepare(`
+      SELECT
+        ar.id,
+        ar.name,
+        ar.description,
+        ar.created_at
+      FROM account_roles ar
+      INNER JOIN user_account_roles uar
+        ON uar.account_role_id = ar.id
+      WHERE uar.user_id = ?
+      ORDER BY ar.name
+    `)
+    .bind(user.id)
+    .all<{
+      id: string
+      name: string
+      description: string | null
+      created_at: string
+    }>()
+
   const secure = new URL(request.url).protocol === "https:"
 
   return Response.json(
@@ -157,6 +199,8 @@ async function handleLogin(
         avatar_key: user.avatar_key,
       },
       permissions,
+      roles: roles.results,
+      account_roles: accountRoles.results,
     },
     {
       headers: {
