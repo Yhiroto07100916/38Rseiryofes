@@ -4,7 +4,7 @@
       <UserAvatar :user="auth.user" :src="previewUrl || undefined" :size="76" />
       <div class="flex-grow-1">
         <div class="font-weight-bold mb-1">プロフィール画像</div>
-        <div class="text-body-2 text-medium-emphasis mb-3">JPEG・PNG・WebP形式、2MB以下</div>
+        <div class="text-body-2 text-medium-emphasis mb-3">JPEG・PNG・WebP形式、4MB以下</div>
         <div class="d-flex flex-wrap ga-2">
           <v-btn size="small" variant="outlined" prepend-icon="mdi-image-edit-outline" :disabled="uploading" @click="fileInput?.click()">画像を選択</v-btn>
           <v-btn v-if="selectedFile" size="small" color="primary" :loading="uploading" @click="uploadAvatar">保存する</v-btn>
@@ -46,8 +46,8 @@ const selectAvatar = (event: Event) => {
     input.value = ''
     return
   }
-  if (file.size === 0 || file.size > 2 * 1024 * 1024) {
-    snackbar.error('画像は2MB以下にしてください。')
+  if (file.size === 0 || file.size > 4 * 1024 * 1024) {
+    snackbar.error('画像は4MB以下にしてください。')
     input.value = ''
     return
   }

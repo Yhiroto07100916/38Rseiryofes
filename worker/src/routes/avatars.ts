@@ -4,7 +4,7 @@ type AvatarEnv = Env & {
   FILES_BUCKET: R2Bucket
 }
 
-const MAX_AVATAR_SIZE = 2 * 1024 * 1024
+const MAX_AVATAR_SIZE = 4 * 1024 * 1024
 const MAX_MULTIPART_OVERHEAD = 64 * 1024
 
 function json(data: unknown, status = 200): Response {
@@ -130,7 +130,7 @@ export async function handleAvatarMutation(
       Number.isFinite(contentLength) &&
       contentLength > MAX_AVATAR_SIZE + MAX_MULTIPART_OVERHEAD
     ) {
-      return json({ error: "画像は2MB以下にしてください" }, 413)
+      return json({ error: "画像は4MB以下にしてください" }, 413)
     }
 
     let form: FormData
@@ -148,7 +148,7 @@ export async function handleAvatarMutation(
     }
 
     if (file.size === 0 || file.size > MAX_AVATAR_SIZE) {
-      return json({ error: "画像は2MB以下にしてください" }, 413)
+      return json({ error: "画像は4MB以下にしてください" }, 413)
     }
 
     const buffer = await file.arrayBuffer()
