@@ -10,6 +10,7 @@ import {
   deleteOtherSessions,
   deleteSession,
   getSessionId,
+  getSessionCookieDomain,
   getSessionUser,
 } from "../lib/session"
 
@@ -209,6 +210,7 @@ async function handleLogin(
         "Set-Cookie": createSessionCookie(
           sessionId,
           secure,
+          getSessionCookieDomain(request),
         ),
       },
     },
@@ -229,6 +231,7 @@ async function handleLogout(
       headers: {
         "Set-Cookie": createExpiredSessionCookie(
           secure,
+          getSessionCookieDomain(request),
         ),
       },
     },
