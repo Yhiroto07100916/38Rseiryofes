@@ -13,25 +13,11 @@ export default defineNuxtRouteMiddleware(async () => {
     return navigateTo('/login')
   }
 
-  const { apiFetch } = useApi()
+  const isAdmin = auth.accountRoles.some(
+    (role) => role.name === 'admin',
+  )
 
-  try {
-    const response = await apiFetch<{
-      account_roles: Array<{
-        id: string
-        name: string
-        description: string | null
-      }>
-    }>(`/api/users/${auth.user.id}/account-roles`)
-
-    const isAdmin = response.account_roles.some(
-      (role) => role.name === 'admin',
-    )
-
-    if (!isAdmin) {
-      return navigateTo('/')
-    }
-  } catch {
+  if (!isAdmin) {
     return navigateTo('/')
   }
 })
