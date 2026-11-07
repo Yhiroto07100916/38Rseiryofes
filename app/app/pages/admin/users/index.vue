@@ -335,7 +335,7 @@ interface User {
   student_number: string
   name: string
   nickname: string | null
-  avatar_key: string | null
+  avatar_key?: string | null
   created_at: string
   updated_at: string
 }
