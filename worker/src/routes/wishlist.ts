@@ -18,7 +18,7 @@ interface WishlistItem {
 }
 
 const priorities = new Set(["low", "normal", "high", "urgent"])
-const statuses = new Set(["requested", "approved", "purchased", "rejected"])
+const statuses = new Set(["requested", "planned", "purchased"])
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -149,7 +149,26 @@ export async function handleWishlist(
         w.title COLLATE NOCASE ASC
     `).all<WishlistItem>()
 
-    return json({ items: result.results })
+    const canCreate = await hasPermission(env, auth.user.id, "wishlist.create")
+    const canReview = await hasPermission(env, auth.user.id, "wishlist.review")
+    const canEditAll = await hasPermission(env, auth.user.id, "wishlist.edit")
+    const canEditOwn = await hasPermission(env, auth.user.id, "wishlist.edit_own")
+    const canDeleteAll = await hasPermission(env, auth.user.id, "wishlist.delete")
+    const canDeleteOwn = await hasPermission(env, auth.user.id, "wishlist.delete_own")
+
+    const items = result.results.map((item) => ({
+      ...item,
+      can_edit: canEditAll || (canEditOwn && item.created_by === auth.user.id),
+      can_delete: canDeleteAll || (canDeleteOwn && item.created_by === auth.user.id),
+    }))
+
+    return json({
+      items,
+      capabilities: {
+        can_create: canCreate,
+        can_review: canReview,
+      },
+    })
   }
 
   if (method === "POST") {
@@ -164,7 +183,7 @@ export async function handleWishlist(
 
     const title = String(body.title ?? "").trim()
     const priority = String(body.priority ?? "normal")
-    const status = String(body.status ?? "requested")
+    const status = "requested"
     if (!title) return json({ error: "品名は必須です" }, 400)
     if (!priorities.has(priority)) return json({ error: "優先度が不正です" }, 400)
     if (!statuses.has(status)) return json({ error: "状態が不正です" }, 400)
@@ -239,6 +258,14 @@ export async function handleWishlist(
   if (!title) return json({ error: "品名は必須です" }, 400)
   if (!priorities.has(priority)) return json({ error: "優先度が不正です" }, 400)
   if (!statuses.has(status)) return json({ error: "状態が不正です" }, 400)
+
+  if (
+    body.status !== undefined &&
+    status !== existing.status &&
+    !(await hasPermission(env, auth.user.id, "wishlist.review"))
+  ) {
+    return json({ error: "Forbidden", permission: "wishlist.review" }, 403)
+  }
 
   let quantity: number
   let estimatedCost: number | null
