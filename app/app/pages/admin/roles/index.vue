@@ -740,10 +740,6 @@ definePageMeta({
   middleware: ['auth', 'admin'],
 })
 
-definePageMeta({
-  middleware: ['auth', 'admin'],
-})
-
 interface Role {
   id: string
   name: string
