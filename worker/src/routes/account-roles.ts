@@ -6,6 +6,7 @@ export interface AccountRole {
   description: string | null
   created_at: string
   updated_at: string
+  member_count?: number
 }
 
 interface CreateAccountRoleBody {
@@ -51,17 +52,74 @@ export async function handleAccountRoles(
   }
 
   if (request.method === "GET") {
+    if (pathParts.length === 2 && pathParts[1] === "members") {
+      const accountRole = await env.DB
+        .prepare("SELECT id FROM account_roles WHERE id = ?")
+        .bind(pathParts[0])
+        .first<{ id: string }>()
+
+      if (!accountRole) {
+        return Response.json(
+          { error: "Account role not found" },
+          { status: 404 },
+        )
+      }
+
+      const result = await env.DB
+        .prepare(`
+          SELECT
+            u.id,
+            u.student_number,
+            u.name,
+            u.nickname,
+            u.created_at,
+            u.updated_at,
+            CASE
+              WHEN uar.user_id IS NULL THEN 0
+              ELSE 1
+            END AS assigned
+          FROM users u
+          LEFT JOIN user_account_roles uar
+            ON uar.user_id = u.id
+            AND uar.account_role_id = ?
+          ORDER BY u.student_number
+        `)
+        .bind(pathParts[0])
+        .all<{
+          id: string
+          student_number: string
+          name: string
+          nickname: string | null
+          created_at: string
+          updated_at: string
+          assigned: number
+        }>()
+
+      return Response.json({
+        users: result.results,
+      })
+    }
+
     if (pathParts.length === 0) {
       const result = await env.DB
         .prepare(`
           SELECT
-            id,
-            name,
-            description,
-            created_at,
-            updated_at
-          FROM account_roles
-          ORDER BY name ASC
+            ar.id,
+            ar.name,
+            ar.description,
+            ar.created_at,
+            ar.updated_at,
+            COUNT(DISTINCT uar.user_id) AS member_count
+          FROM account_roles ar
+          LEFT JOIN user_account_roles uar
+            ON uar.account_role_id = ar.id
+          GROUP BY
+            ar.id,
+            ar.name,
+            ar.description,
+            ar.created_at,
+            ar.updated_at
+          ORDER BY ar.name ASC
         `)
         .all<AccountRole>()
 

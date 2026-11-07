@@ -578,6 +578,7 @@ import {
 import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({
+  permissions: ['tasks.view'],
   middleware: 'auth',
 })
 

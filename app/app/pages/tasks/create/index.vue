@@ -183,6 +183,7 @@ import {
 } from '~/composables/useApi'
 
 definePageMeta({
+  permissions: ['tasks.create'],
   middleware: 'auth',
 })
 

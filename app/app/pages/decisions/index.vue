@@ -382,6 +382,7 @@ import { useSnackbar } from '~/composables/useSnackbar'
 import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({
+  permissions: ['decisions.view'],
   middleware: 'auth',
 })
 

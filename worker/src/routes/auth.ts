@@ -65,6 +65,55 @@ export async function handleAuth(
   )
 }
 
+interface AuthRole {
+  id: string
+  name: string
+  description: string | null
+  created_at: string
+}
+
+async function getAuthData(env: Env, userId: string) {
+  const [permissions, roles, accountRoles] = await Promise.all([
+    getUserPermissions(env, userId),
+    env.DB
+      .prepare(`
+        SELECT
+          r.id,
+          r.name,
+          r.description,
+          r.created_at
+        FROM roles r
+        INNER JOIN user_roles ur
+          ON ur.role_id = r.id
+        WHERE ur.user_id = ?
+        ORDER BY r.name
+      `)
+      .bind(userId)
+      .all<AuthRole>(),
+    env.DB
+      .prepare(`
+        SELECT
+          ar.id,
+          ar.name,
+          ar.description,
+          ar.created_at
+        FROM account_roles ar
+        INNER JOIN user_account_roles uar
+          ON uar.account_role_id = ar.id
+        WHERE uar.user_id = ?
+        ORDER BY ar.name
+      `)
+      .bind(userId)
+      .all<AuthRole>(),
+  ])
+
+  return {
+    permissions,
+    roles: roles.results,
+    account_roles: accountRoles.results,
+  }
+}
+
 async function handleLogin(
   request: Request,
   env: Env,
@@ -140,10 +189,7 @@ async function handleLogin(
     user.id,
   )
 
-  const permissions = await getUserPermissions(
-    env,
-    user.id,
-  )
+  const access = await getAuthData(env, user.id)
 
   const secure = new URL(request.url).protocol === "https:"
 
@@ -156,7 +202,7 @@ async function handleLogin(
         nickname: user.nickname,
         avatar_key: user.avatar_key,
       },
-      permissions,
+      ...access,
     },
     {
       headers: {
@@ -205,58 +251,11 @@ async function handleMe(
     )
   }
 
-  const permissions = await getUserPermissions(
-    env,
-    user.id,
-  )
-
-  const roles = await env.DB
-    .prepare(`
-      SELECT
-        r.id,
-        r.name,
-        r.description,
-        r.created_at
-      FROM roles r
-      INNER JOIN user_roles ur
-        ON ur.role_id = r.id
-      WHERE ur.user_id = ?
-      ORDER BY r.name
-    `)
-    .bind(user.id)
-    .all<{
-      id: string
-      name: string
-      description: string | null
-      created_at: string
-    }>()
-
-  const accountRoles = await env.DB
-    .prepare(`
-      SELECT
-        ar.id,
-        ar.name,
-        ar.description,
-        ar.created_at
-      FROM account_roles ar
-      INNER JOIN user_account_roles uar
-        ON uar.account_role_id = ar.id
-      WHERE uar.user_id = ?
-      ORDER BY ar.name
-    `)
-    .bind(user.id)
-    .all<{
-      id: string
-      name: string
-      description: string | null
-      created_at: string
-    }>()
+  const access = await getAuthData(env, user.id)
 
   return Response.json({
     user,
-    permissions,
-    roles: roles.results,
-    account_roles: accountRoles.results,
+    ...access,
   })
 }
 

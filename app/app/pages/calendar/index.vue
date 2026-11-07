@@ -386,6 +386,7 @@ import {
 } from '~/utils/jst'
 
 definePageMeta({
+  permissions: ['schedule.view'],
   middleware: 'auth',
 })
 

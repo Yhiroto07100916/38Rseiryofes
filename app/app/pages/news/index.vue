@@ -159,6 +159,7 @@
 
 <script setup lang="ts">
 definePageMeta({
+  permissions: ['news.view'],
   middleware: 'auth',
 })
 
