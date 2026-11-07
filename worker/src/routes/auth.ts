@@ -109,6 +109,7 @@ async function handleLogin(
         student_number,
         name,
         nickname,
+        avatar_key,
         password_hash
       FROM users
       WHERE student_number = ?
@@ -119,6 +120,7 @@ async function handleLogin(
       student_number: string
       name: string
       nickname: string | null
+      avatar_key: string | null
       password_hash: string | null
     }>()
 
@@ -152,6 +154,7 @@ async function handleLogin(
         student_number: user.student_number,
         name: user.name,
         nickname: user.nickname,
+        avatar_key: user.avatar_key,
       },
       permissions,
     },
@@ -324,7 +327,8 @@ async function handleUpdateProfile(
         id,
         student_number,
         name,
-        nickname
+        nickname,
+        avatar_key
       FROM users
       WHERE id = ?
     `)
