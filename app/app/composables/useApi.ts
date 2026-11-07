@@ -13,7 +13,9 @@ export interface WishlistItem {
   quantity: number
   estimated_cost: number | null
   priority: 'low' | 'normal' | 'high' | 'urgent'
-  status: 'requested' | 'approved' | 'purchased' | 'rejected'
+  status: 'requested' | 'planned' | 'purchased'
+  can_edit: boolean
+  can_delete: boolean
   memo: string | null
   created_by: string
   created_by_name: string | null
@@ -507,7 +509,10 @@ export const useApi = () => {
   }
 
   const getWishlistItems = () =>
-    apiFetch<{ items: WishlistItem[] }>('/api/wishlist')
+    apiFetch<{
+      items: WishlistItem[]
+      capabilities: { can_create: boolean; can_review: boolean }
+    }>('/api/wishlist')
 
   const createWishlistItem = (data: {
     title: string
@@ -516,7 +521,6 @@ export const useApi = () => {
     quantity?: number
     estimated_cost?: number | null
     priority?: WishlistItem['priority']
-    status?: WishlistItem['status']
     memo?: string | null
   }) =>
     apiFetch<WishlistItem>('/api/wishlist', {
