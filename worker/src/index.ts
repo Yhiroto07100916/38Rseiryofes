@@ -48,11 +48,22 @@ function getCorsHeaders(request: Request): Headers {
   return headers
 }
 
-function withCors(
+export function withCors(
   request: Request,
   response: Response,
 ): Response {
-  const headers = new Headers(response.headers)
+  const headers = new Headers()
+
+  response.headers.forEach((value, key) => {
+    if (key.toLowerCase() !== "set-cookie") {
+      headers.set(key, value)
+    }
+  })
+
+  for (const cookie of response.headers.getAll("Set-Cookie")) {
+    headers.append("Set-Cookie", cookie)
+  }
+
   const corsHeaders = getCorsHeaders(request)
 
   corsHeaders.forEach((value, key) => {
