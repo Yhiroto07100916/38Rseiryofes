@@ -160,6 +160,7 @@ const items: NavigationItem[] = [
 { icon: "mdi-bullhorn", title: "NEWS", to: "/news" },
 { icon: "mdi-clipboard-check-outline", title: "提出物管理", to: "/submissions", permission: "submissions.view" },
 { icon: "mdi-cart-outline", title: "ほしい物リスト", to: "/wishlist" },
+{ icon: "mdi-toolbox-outline", title: "工具貸出管理", to: "/tool-rental", permission: "tool_rental.view" },
 { title: "投票", icon: "mdi-vote-outline", to: "/surveys" },
 { title: "議事録", icon: "mdi-clipboard-text-multiple", to: "/minutes" },
 { title: "決定事項", icon: "mdi-notebook-check-outline", to: "/decisions" },
