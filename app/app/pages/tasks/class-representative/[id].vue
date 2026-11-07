@@ -158,7 +158,15 @@
                 closable-chips
                 class="mt-2"
                 :loading="usersLoading"
-              />
+              >
+                <template #item="{ props, item }">
+                  <v-list-item v-bind="props">
+                    <template #prepend>
+                      <UserAvatar :user="item.raw" :size="32" class="mr-2" />
+                    </template>
+                  </v-list-item>
+                </template>
+              </v-autocomplete>
 
               <v-autocomplete
                 v-model="editForm.assigneeRoleIds"
@@ -609,6 +617,7 @@ const users = ref<
     student_number: string
     name: string
     nickname: string | null
+    avatar_key: string | null
     displayName: string
   }[]
 >([])
@@ -866,6 +875,7 @@ const loadAssignmentOptions = async () => {
             student_number: string
             name: string
             nickname: string | null
+            avatar_key: string | null
           }[]
         }>('/api/tasks/assignment-users'),
         apiFetch<{
