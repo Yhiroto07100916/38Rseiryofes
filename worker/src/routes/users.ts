@@ -70,6 +70,7 @@ export async function handleUsers(
             student_number,
             name,
             nickname,
+            avatar_key,
             created_at,
             updated_at
           FROM users
