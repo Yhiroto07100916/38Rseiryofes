@@ -338,6 +338,7 @@ async function handleUpdateProfile(
       student_number: string
       name: string
       nickname: string | null
+      avatar_key: string | null
     }>()
 
   if (!user) {
