@@ -371,6 +371,15 @@
                   :key="cast.id"
                   class="cast-row"
                 >
+                  <UserAvatar
+                    :user="{
+                      id: cast.user_id,
+                      name: cast.user_name || cast.name || '',
+                      nickname: cast.user_nickname || cast.nickname || null,
+                      avatar_key: cast.avatar_key,
+                    }"
+                    :size="32"
+                  />
                   <span class="cast-name">
                     {{ cast.user_name || cast.name || cast.user_nickname || cast.nickname || '配役あり' }}
                   </span>
@@ -620,11 +629,7 @@
                 @click="addCast(member)"
               >
                 <template #prepend>
-                  <v-avatar size="34">
-                    <span class="text-caption">
-                      {{ member.student_number }}
-                    </span>
-                  </v-avatar>
+                  <UserAvatar :user="member" :size="34" />
                 </template>
 
                 <v-list-item-title>
@@ -803,6 +808,7 @@ definePageMeta({
     student_number?: string | null
     name?: string | null
     nickname?: string | null
+    avatar_key?: string | null
     user_name?: string | null
     user_nickname?: string | null
     cast_order: number
