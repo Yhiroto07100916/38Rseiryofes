@@ -66,6 +66,9 @@ const dialog = ref(false)
 const selectedLoan = ref<CurrentLoanItem | null>(null)
 const currentUserName = computed(() => auth.user?.nickname?.trim() || auth.user?.name?.trim() || '')
 const returner = reactive({ class_name: '38R', name: currentUserName.value })
+watch(currentUserName, value => {
+  if (!returner.name.trim() && value) returner.name = value
+})
 const snackbar = ref(false)
 const snackbarText = ref('')
 const snackbarColor = ref('success')
