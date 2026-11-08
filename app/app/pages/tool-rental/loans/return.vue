@@ -483,3 +483,24 @@ onMounted(() => {
   }
 }
 </style>
+
+<style scoped>
+.page-title {
+  margin: 4px 0 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.page-subtitle {
+  margin-top: 4px;
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  font-size: 0.875rem;
+}
+
+.table-empty {
+  padding: 28px 16px;
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  text-align: center;
+}
+</style>
