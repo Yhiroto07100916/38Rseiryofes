@@ -86,6 +86,25 @@ describe("Tool rental API", () => {
     expect(response.status).toBe(400);
   });
 
+  it("enforces separate list, return, and history permissions", async () => {
+    const viewer = await createUser("閲覧担当");
+    await grant(viewer.userId, ["tool_rental.view"]);
+
+    const listResponse = await SELF.fetch("http://example.com/api/tool-rental", {
+      headers: { Cookie: viewer.cookie },
+    });
+    const activeResponse = await SELF.fetch("http://example.com/api/tool-rental/active", {
+      headers: { Cookie: viewer.cookie },
+    });
+    const historyResponse = await SELF.fetch("http://example.com/api/tool-rental/history", {
+      headers: { Cookie: viewer.cookie },
+    });
+
+    expect(listResponse.status).toBe(200);
+    expect(activeResponse.status).toBe(403);
+    expect(historyResponse.status).toBe(403);
+  });
+
   it("rejects checkout without permission", async () => {
     const user = await createUser("閲覧者");
     const toolId = await createTool(user.userId, "レンチ", 2);
@@ -113,6 +132,21 @@ describe("Tool rental API", () => {
     const responses = await Promise.all([makeRequest(), makeRequest()]);
     expect(responses.filter((response) => response.status === 201)).toHaveLength(1);
     expect(responses.filter((response) => response.status === 409)).toHaveLength(1);
+  });
+
+  it("safely bounds malformed history pagination values", async () => {
+    const manager = await createUser("履歴担当");
+    await grant(manager.userId, ["tool_rental.history"]);
+
+    const response = await SELF.fetch(
+      "http://example.com/api/tool-rental/history?limit=1e309&offset=1e309",
+      { headers: { Cookie: manager.cookie } },
+    );
+
+    expect(response.status).toBe(200);
+    const result = await response.json() as { limit: number; offset: number };
+    expect(result.limit).toBe(100);
+    expect(result.offset).toBe(0);
   });
 
   it("records a return only once", async () => {
