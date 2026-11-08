@@ -78,6 +78,7 @@
 
 <script setup lang="ts">
 import { watch } from 'vue'
+import type { JSONContent } from '@tiptap/core'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import TaskList from '@tiptap/extension-task-list'
@@ -97,7 +98,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
-function parseContent(value: string) {
+function parseContent(value: string): JSONContent {
   if (!value) {
     return { type: 'doc', content: [{ type: 'paragraph' }] }
   }
@@ -111,10 +112,7 @@ function parseContent(value: string) {
       'type' in parsed &&
       parsed.type === 'doc'
     ) {
-      return parsed as {
-        type: 'doc'
-        content?: unknown[]
-      }
+      return parsed as JSONContent
     }
   } catch {
     // 既存データはプレーンテキストとして扱う。

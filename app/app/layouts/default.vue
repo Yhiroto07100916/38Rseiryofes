@@ -15,6 +15,8 @@
 
     <AppBottomNavigation />
 
+    <ToolRentalTimers />
+
 
   </v-app>
 </template>
@@ -24,6 +26,7 @@ import { ref } from 'vue'
 import AppMenuButton from '~/components/layout/AppMenuButton.vue'
 import AppNavigationDrawer from '~/components/layout/AppNavigationDrawer.vue'
 import AppBottomNavigation from '~/components/layout/AppBottomNavigation.vue'
+import ToolRentalTimers from '~/components/tool-rental/ToolRentalTimers.vue'
 
 
 const drawerOpen = ref(false)

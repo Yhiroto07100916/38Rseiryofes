@@ -163,6 +163,12 @@ export interface TaskAssignments {
   roles: TaskAssignmentRole[]
 }
 
+export interface TaskExternalLink {
+  id: string
+  title: string
+  url: string
+}
+
 export interface TaskLinkedFile {
   id: string
   original_name: string
@@ -195,6 +201,7 @@ export interface Task {
   assignments: TaskAssignments
   calendar_event?: TaskLinkedCalendarEvent | null
   files?: TaskLinkedFile[]
+  links?: TaskExternalLink[]
 }
 
 export interface TaskListResponse {

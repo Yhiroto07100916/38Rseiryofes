@@ -25,6 +25,7 @@ const categories = new Set([
   "prop",
   "material",
   "costume",
+  "brought_in",
   "other",
 ])
 
@@ -149,6 +150,21 @@ export async function handleEquipment(
   }
 
   const equipmentId = pathParts.length > 0 ? pathParts[0] : null
+
+  if (method === "GET" && equipmentId === "options") {
+    const result = await env.DB.prepare(`
+      SELECT id, name, nickname, avatar_key FROM users
+      ORDER BY student_number
+    `).all<{
+      id: string
+      name: string
+      nickname: string | null
+    }>()
+
+    return json({
+      users: result.results,
+    })
+  }
 
   if (method === "GET") {
     if (equipmentId) {

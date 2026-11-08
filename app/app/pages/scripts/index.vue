@@ -1,10 +1,11 @@
 <template>
   <v-container class="py-6" max-width="1100">
     <div class="d-flex align-center mb-6">
-      <LayoutBackButton />
+      <v-avatar color="primary" variant="tonal" rounded="lg">
+        <v-icon icon="mdi-script-text-outline" />
+      </v-avatar>
       <div class="ml-2">
         <h1 class="text-h5 font-weight-bold">台本管理</h1>
-        <p class="text-body-2 text-medium-emphasis">クラス劇の台本を管理します</p>
       </div>
       <v-spacer />
       <v-btn

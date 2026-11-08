@@ -1,18 +1,21 @@
 <template>
   <v-container class="calendar-page py-4">
-    <div class="calendar-header">
-      <div>
-        <h1 class="text-h5 font-weight-bold">カレンダー</h1>
-        
-      </div>
+    <div class="d-flex align-center ga-3 mb-6">
+      <v-avatar color="primary" variant="tonal" rounded="lg">
+        <v-icon icon="mdi-calendar-month" />
+      </v-avatar>
 
-      <v-btn
-        icon="mdi-plus"
-        color="primary"
-        size="large"
-        elevation="2"
-        @click="openCreateDialog(selectedDate)"
-      />
+      <div class="calendar-header d-flex align-center justify-space-between flex-grow-1">
+        <h1 class="text-h5 font-weight-bold">カレンダー</h1>
+
+        <v-btn
+          icon="mdi-plus"
+          color="primary"
+          size="large"
+          elevation="2"
+          @click="openCreateDialog(selectedDate)"
+        />
+      </div>
     </div>
 
     <v-card
