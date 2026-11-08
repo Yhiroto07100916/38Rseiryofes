@@ -31,6 +31,8 @@ export interface CurrentLoanItem {
   class_name: string
   borrower_name: string
   borrowed_at: string
+  time_limit_minutes: number | null
+  due_at: string | null
 }
 
 export interface LoanHistoryItem {
@@ -42,6 +44,8 @@ export interface LoanHistoryItem {
   class_name: string
   borrower_name: string
   borrowed_at: string
+  time_limit_minutes: number | null
+  due_at: string | null
   returned_at: string | null
   returned_by_class_name: string | null
   returned_by_name: string | null
