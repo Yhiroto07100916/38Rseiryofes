@@ -218,7 +218,7 @@
         <v-card-text>
           <v-alert v-if="formError" type="error" variant="tonal" class="mb-4">{{ formError }}</v-alert>
           <v-text-field v-model="toolForm.name" label="工具名" variant="outlined" />
-          <v-text-field v-model="toolForm.category" label="カテゴリ" variant="outlined" />
+          <v-select :items="tool_category" v-model="toolForm.category" label="カテゴリ" variant="outlined" />
           <v-textarea v-model="toolForm.description" label="説明・備考" variant="outlined" rows="2" />
           <v-text-field v-model.number="toolForm.total_quantity" label="総数" type="number" min="1" variant="outlined" />
           <v-switch v-if="editingTool" v-model="toolForm.is_active" label="貸出を有効にする" color="primary" hide-details />
@@ -321,6 +321,14 @@ const checkoutForm = reactive({
   quantity: 1,
   checkout_note: '',
 })
+
+const tool_category = [
+  '工具',
+  '電動工具',
+  '音響',
+  '照明',
+  'その他',
+]
 
 const canManage = computed(() => auth.hasPermission('tool_rental.manage'))
 const canCheckout = computed(() => auth.hasPermission('tool_rental.checkout'))
