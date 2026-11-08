@@ -129,7 +129,6 @@
               :disabled="!search?.trim()"
               @update:model-value="loadFiles"
             />
-            </div>
           </v-col>
         </v-row>
       </v-card-text>
@@ -724,11 +723,14 @@ const moveFolderOptions = computed(() => [
 
 const parentFolderOptions = computed(() => {
   const editing = editingFolder.value
+  const editingPath = editing
+    ? moveFolders.value.find(folder => folder.id === editing.id)?.path ?? editing.name
+    : ''
   const excluded = editing
     ? moveFolders.value
       .filter(folder =>
         folder.id === editing.id ||
-        (folder.path ?? '').startsWith((editing.path ?? editing.name) + ' / '),
+        (folder.path ?? '').startsWith(editingPath + ' / '),
       )
       .map(folder => folder.id)
     : []
@@ -877,6 +879,9 @@ const removeFolder = async (folder: FileFolder) => {
 const createFolder = async () => {
   const name = folderName.value.trim()
   if (!name || folderSaving.value) return
+  const wasEditing = Boolean(editingFolder.value)
+  const previousParentId = editingFolder.value?.parent_id ?? null
+  const nextParentId = parentFolderId.value === '__root__' ? null : parentFolderId.value
   folderSaving.value = true
   errorMessage.value = ''
   try {
@@ -885,7 +890,7 @@ const createFolder = async () => {
         method: 'PATCH',
         body: {
           name,
-          parent_id: parentFolderId.value === '__root__' ? null : parentFolderId.value,
+          parent_id: nextParentId,
           category: folderCategory.value,
           description: folderDescription.value.trim() || null,
         },
@@ -895,16 +900,20 @@ const createFolder = async () => {
         method: 'POST',
         body: {
           name,
-          parent_id: currentFolderId.value,
+          parent_id: nextParentId,
           category: folderCategory.value,
           description: folderDescription.value.trim() || null,
         },
       })
     }
     folderDialog.value = false
-    snackbarMessage.value = editingFolder.value ? 'フォルダを更新しました。' : 'フォルダを作成しました。'
+    if (wasEditing && previousParentId !== nextParentId) {
+      currentFolderId.value = null
+      folderPath.value = []
+    }
+    snackbarMessage.value = wasEditing ? 'フォルダを更新しました。' : 'フォルダを作成しました。'
     snackbar.value = true
-    await loadFolders()
+    await Promise.all([loadFolders(), loadFiles()])
   } catch (error) {
     console.error(error)
     errorMessage.value = 'フォルダを作成できませんでした。'
