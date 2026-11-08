@@ -63,6 +63,7 @@ CREATE TABLE loans (
   quantity INTEGER NOT NULL CHECK (quantity > 0),
   borrowed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   returned_at TEXT,
+  returned_by_id INTEGER,
   returned_quantity INTEGER NOT NULL DEFAULT 0 CHECK (returned_quantity >= 0),
   status TEXT NOT NULL DEFAULT 'borrowed'
     CHECK (status IN ('borrowed', 'returned')),
@@ -71,6 +72,7 @@ CREATE TABLE loans (
   due_at_notification_sent_at TEXT,
   return_notice_sent_at TEXT,
   tool_name_snapshot TEXT,
+  FOREIGN KEY (returned_by_id) REFERENCES borrowers(id) ON DELETE RESTRICT,
   FOREIGN KEY (borrower_id) REFERENCES borrowers(id) ON DELETE RESTRICT,
   FOREIGN KEY (tool_id) REFERENCES tools(id) ON DELETE RESTRICT
 );
@@ -88,11 +90,13 @@ CREATE TABLE loan_items (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   returned_at TEXT,
   returned_by_id INTEGER,
+  extended_to_loan_id INTEGER,
   overdue_minutes INTEGER NOT NULL DEFAULT 0,
   overdue_seconds INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (loan_id) REFERENCES loans(id) ON DELETE RESTRICT,
   FOREIGN KEY (tool_item_id) REFERENCES tool_items(id) ON DELETE RESTRICT,
-  FOREIGN KEY (returned_by_id) REFERENCES borrowers(id) ON DELETE RESTRICT
+  FOREIGN KEY (returned_by_id) REFERENCES borrowers(id) ON DELETE RESTRICT,
+  FOREIGN KEY (extended_to_loan_id) REFERENCES loans(id) ON DELETE RESTRICT
 );
 
 CREATE INDEX idx_loan_items_loan_returned
