@@ -175,7 +175,7 @@ describe("Tool rental API", () => {
     const response = await SELF.fetch(`http://example.com/api/tool-rental/tools/${toolId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Cookie: manager.cookie },
-      body: JSON.stringify({ is_active: false }),
+      body: JSON.stringify({ name: "名称変更後の工具", is_active: false }),
     });
 
     expect(response.status).toBe(200);
@@ -186,7 +186,10 @@ describe("Tool rental API", () => {
       headers: { Cookie: manager.cookie },
     });
     expect(historyResponse.status).toBe(200);
-    const history = await historyResponse.json() as { loans: Array<{ tool_id: string }> };
-    expect(history.loans.some((loan) => loan.tool_id === toolId)).toBe(true);
+    const history = await historyResponse.json() as {
+      loans: Array<{ tool_id: string; tool_name: string }>;
+    };
+    const archivedLoan = history.loans.find((loan) => loan.tool_id === toolId);
+    expect(archivedLoan?.tool_name).toBe("古い工具");
   });
 });
