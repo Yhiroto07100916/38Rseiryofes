@@ -70,6 +70,18 @@ const visibleTimers = computed(() =>
     .sort((a, b) => deadlineMs(a) - deadlineMs(b)),
 )
 
+watch(
+  () => [auth.initialized, auth.isLoggedIn, canViewTimers.value] as const,
+  ([initialized, loggedIn, canView]) => {
+    if (initialized && loggedIn && canView) {
+      void loadTimers()
+    } else {
+      loans.value = []
+    }
+  },
+  { immediate: true },
+)
+
 function deadlineMs(loan: CurrentLoanItem): number {
   const value = loan.due_at ?? ''
   const normalized = value.replace(' ', 'T')
@@ -102,8 +114,8 @@ function timerColor(loan: CurrentLoanItem): string {
 }
 
 async function loadTimers() {
-  if (!auth.initialized || !auth.isLoggedIn || !canViewTimers.value) {
-    loans.value = []
+  if (!auth.initialized || !auth.isLoggedIn || !canViewTimers.value || loading.value) {
+    if (!auth.isLoggedIn || !canViewTimers.value) loans.value = []
     return
   }
   loading.value = true
@@ -118,14 +130,13 @@ async function loadTimers() {
 
 onMounted(async () => {
   if (!auth.initialized) await auth.fetchMe()
-  await loadTimers()
   now.value = Date.now()
   clockInterval = setInterval(() => {
     now.value = Date.now()
   }, 1000)
   refreshInterval = setInterval(() => {
     void loadTimers()
-  }, 30000)
+  }, 15000)
 })
 
 onUnmounted(() => {
