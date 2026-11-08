@@ -149,6 +149,7 @@ const checkout = async () => {
       },
     })
     showMessage('貸出を記録しました。')
+    window.dispatchEvent(new Event('tool-rental:changed'))
     resetForm()
     await loadTools()
   } catch (error: any) {
