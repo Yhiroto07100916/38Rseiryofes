@@ -789,7 +789,7 @@ const loadEvents = async () => {
 
   try {
     const now = new Date()
-    const [year, month, day] = jstDateKey(now).split('-').map(Number)
+    const [year = now.getFullYear(), month = now.getMonth() + 1, day = now.getDate()] = jstDateKey(now).split('-').map(Number)
     const toDate = new Date(Date.UTC(year, month - 1, day + 14))
 
     const from = now.toISOString()
@@ -856,7 +856,7 @@ const loadAttendance = async () => {
 
   try {
     const now = new Date()
-    const [year, month, day] = jstDateKey(now).split('-').map(Number)
+    const [year = now.getFullYear(), month = now.getMonth() + 1, day = now.getDate()] = jstDateKey(now).split('-').map(Number)
     const toDate = new Date(Date.UTC(year, month - 1, day + 14))
 
     const from = now.toISOString()
