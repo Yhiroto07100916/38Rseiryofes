@@ -265,12 +265,6 @@ definePageMeta({ middleware: 'auth' })
 
 const auth = useAuthStore()
 const canExtend = computed(() => auth.hasPermission('tool_rental.checkout') || auth.hasPermission('tool_rental.manage'))
-const snackbar = useSnackbar()
-const showSnackbar = (
-  message: string,
-  type: 'success' | 'error' | 'warning' | 'info' = 'info',
-) => snackbar.show(message, type)
-
 interface LoanToolItem {
   loan_item_id: number
   loan_id: number
