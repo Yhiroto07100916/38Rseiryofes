@@ -1,117 +1,350 @@
 import { hasPermission, requireAuth } from "../lib/authz"
 
-interface ToolRow {
-  id: string
+interface Tool {
+  id: number
   name: string
-  category: string
+  category: string | null
   description: string | null
-  total_quantity: number
+  location: string | null
+  quantity: number
+  available_quantity: number
+  max_quantity_per_class: number | null
+  loan_duration_minutes: number | null
+  max_quantity_per_chief: number | null
+  loan_duration_minutes_per_chief: number | null
+  due_notice_enabled: number
+  universal_return_enabled: number
+  universal_return_enabled_for_chief: number
   is_active: number
-  external_tool_id: string | null
   created_at: string
   updated_at: string
-  checked_out_quantity?: number
-  available_quantity?: number
-}
-
-interface LoanRow {
-  id: string
-  tool_id: string
-  tool_name: string
-  borrower_name: string
-  borrower_note: string | null
-  quantity: number
-  status: "checked_out" | "returned"
-  checked_out_by: string
-  checked_out_by_name: string | null
-  checked_out_at: string
-  returned_by: string | null
-  returned_by_name: string | null
-  returned_at: string | null
-  checkout_note: string | null
-  return_note: string | null
 }
 
 function json(data: unknown, status = 200): Response {
-  return Response.json(data, { status })
+  return Response.json(data, {
+    status,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  })
 }
 
-function optionalText(value: unknown): string | null {
-  if (typeof value !== "string") return null
-  const text = value.trim()
-  return text || null
+const SESSION_TTL_SECONDS = 8 * 60 * 60
+
+
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000
+
+const formatJstDateTime = (date = new Date()): string => {
+  return new Date(date.getTime() + JST_OFFSET_MS)
+    .toISOString()
+    .slice(0, 19)
+    .replace('T', ' ')
 }
 
-function requiredText(value: unknown): string {
-  return typeof value === "string" ? value.trim() : ""
-}
+const getJstDateParts = (date = new Date()) => {
+  const jst = new Date(date.getTime() + JST_OFFSET_MS)
 
-function positiveInteger(value: unknown): number | null {
-  if (typeof value !== "number" && typeof value !== "string") return null
-  if (typeof value === "string" && !value.trim()) return null
-  const number = Number(value)
-  return Number.isSafeInteger(number) && number > 0 ? number : null
-}
-
-async function readJsonObject(
-  request: Request,
-  allowEmpty = false,
-): Promise<Record<string, unknown> | null> {
-  try {
-    const value: unknown = await request.json()
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      return null
-    }
-    return value as Record<string, unknown>
-  } catch {
-    return allowEmpty ? {} : null
+  return {
+    date: jst.toISOString().slice(0, 10),
+    time: jst.toISOString().slice(11, 16),
   }
 }
 
-async function allowed(env: Env, userId: string, permission: string) {
-  return hasPermission(env, userId, permission)
+async function getNextUniversalReturnDueAt(
+  db: D1Database,
+  borrowedAt: Date,
+  isChief: boolean,
+): Promise<string | null> {
+  const tableName = isChief
+    ? 'universal_return_times_chief'
+    : 'universal_return_times'
+
+  const result = await db
+    .prepare(`
+      SELECT return_time
+      FROM ${tableName}
+      ORDER BY return_time ASC
+    `)
+    .all<{
+      return_time: string
+    }>()
+
+  if (result.results.length === 0) {
+    return null
+  }
+
+  const { date } = getJstDateParts(borrowedAt)
+
+  // 貸出時刻以降で、その日に最初に来る全体返却時刻を探す
+  for (const returnTime of result.results) {
+    const returnAt = new Date(
+      `${date}T${returnTime.return_time}:00+09:00`,
+    )
+
+    if (returnAt.getTime() >= borrowedAt.getTime()) {
+      return `${date} ${returnTime.return_time}:00`
+    }
+  }
+
+  // 当日に残っていなければ、翌日の最初の全体返却時刻
+  const nextDate = new Date(
+    `${date}T00:00:00+09:00`,
+  )
+  nextDate.setTime(
+    nextDate.getTime() + JST_DAY_MS,
+  )
+
+  const { date: nextJstDate } =
+    getJstDateParts(nextDate)
+
+  return `${nextJstDate} ${result.results[0].return_time}:00`
 }
 
-async function getTool(env: Env, id: string): Promise<ToolRow | null> {
-  return env.DB.prepare(`
-    SELECT
-      t.id, t.name, t.category, t.description, t.total_quantity,
-      t.is_active, t.external_tool_id, t.created_at, t.updated_at,
-      COALESCE(SUM(CASE WHEN l.status = 'checked_out' THEN l.quantity ELSE 0 END), 0)
-        AS checked_out_quantity,
-      t.total_quantity - COALESCE(SUM(CASE WHEN l.status = 'checked_out' THEN l.quantity ELSE 0 END), 0)
-        AS available_quantity
-    FROM tool_rental_tools t
-    LEFT JOIN tool_rental_loans l ON l.tool_id = t.id
-    WHERE t.id = ?
-    GROUP BY t.id
-  `).bind(id).first<ToolRow>()
+
+function getToolPayload(body: any) {
+  const name = typeof body.name === 'string' ? body.name.trim() : ''
+
+  if (!name) {
+    throw new Error('工具・機材名を入力してください')
+  }
+
+  const rawItems = Array.isArray(body.tool_items)
+    ? body.tool_items
+    : []
+
+  if (rawItems.length === 0) {
+    throw new Error('工具・機材個体を1つ以上登録してください')
+  }
+
+  const toolItems = rawItems.map((item: any) => {
+    const id =
+      item?.id === undefined ||
+      item?.id === null ||
+      item?.id === ''
+        ? null
+        : Number(item.id)
+
+    const managementNumber =
+      typeof item?.management_number === 'string'
+        ? item.management_number.trim()
+        : ''
+
+    if (
+      id !== null &&
+      (!Number.isInteger(id) || id <= 0)
+    ) {
+      throw new Error('工具・機材個体IDが正しくありません')
+    }
+
+    if (!managementNumber) {
+      throw new Error('管理番号を入力してください')
+    }
+
+    return {
+      id,
+      management_number: managementNumber,
+    }
+  })
+
+  const managementNumbers = toolItems.map(
+    (item: { management_number: string }) =>
+      item.management_number,
+  )
+
+  if (
+    new Set(managementNumbers).size !==
+    managementNumbers.length
+  ) {
+    throw new Error('同じ管理番号を重複して登録することはできません')
+  }
+
+  const maxQuantityPerClass =
+    body.max_quantity_per_class === null ||
+    body.max_quantity_per_class === undefined ||
+    body.max_quantity_per_class === ''
+      ? null
+      : Number(body.max_quantity_per_class)
+
+  if (
+    maxQuantityPerClass !== null &&
+    (!Number.isInteger(maxQuantityPerClass) ||
+      maxQuantityPerClass <= 0)
+  ) {
+    throw new Error(
+      'クラスごとの最大貸出数は1以上の整数で指定してください',
+    )
+  }
+
+    const loanDurationMinutes =
+    body.loan_duration_minutes === null ||
+    body.loan_duration_minutes === undefined ||
+    body.loan_duration_minutes === ''
+      ? null
+      : Number(body.loan_duration_minutes)
+
+  if (
+    loanDurationMinutes !== null &&
+    (!Number.isInteger(loanDurationMinutes) ||
+      loanDurationMinutes <= 0)
+  ) {
+    throw new Error(
+      '貸出時間は1分以上の整数で指定してください',
+    )
+  }
+
+  const maxQuantityPerChief =
+    body.max_quantity_per_chief === null ||
+    body.max_quantity_per_chief === undefined ||
+    body.max_quantity_per_chief === ''
+      ? null
+      : Number(body.max_quantity_per_chief)
+
+  if (
+    maxQuantityPerChief !== null &&
+    (!Number.isInteger(maxQuantityPerChief) ||
+      maxQuantityPerChief <= 0)
+  ) {
+    throw new Error(
+      'チーフの最大貸出数は1以上の整数で指定してください',
+    )
+  }
+
+  const loanDurationMinutesPerChief =
+    body.loan_duration_minutes_per_chief === null ||
+    body.loan_duration_minutes_per_chief === undefined ||
+    body.loan_duration_minutes_per_chief === ''
+      ? null
+      : Number(body.loan_duration_minutes_per_chief)
+
+  if (
+    loanDurationMinutesPerChief !== null &&
+    (!Number.isInteger(loanDurationMinutesPerChief) ||
+      loanDurationMinutesPerChief <= 0)
+  ) {
+    throw new Error(
+      'チーフの貸出時間は1分以上の整数で指定してください',
+    )
+  }
+
+  const dueNoticeEnabled =
+    body.due_notice_enabled === undefined
+      ? true
+      : Boolean(body.due_notice_enabled)
+
+  const universalReturnEnabled =
+    body.universal_return_enabled === undefined
+      ? true
+      : Boolean(body.universal_return_enabled)
+
+  const universalReturnEnabledForChief =
+    body.universal_return_enabled_for_chief === undefined
+      ? true
+      : Boolean(body.universal_return_enabled_for_chief)
+
+  return {
+    name,
+    category: body.category ?? null,
+    description: body.description ?? null,
+    location: body.location ?? null,
+    tool_items: toolItems,
+    max_quantity_per_class: maxQuantityPerClass,
+    loan_duration_minutes: loanDurationMinutes,
+    max_quantity_per_chief: maxQuantityPerChief,
+    loan_duration_minutes_per_chief:
+      loanDurationMinutesPerChief,
+    due_notice_enabled: dueNoticeEnabled ? 1 : 0,
+    universal_return_enabled:
+      universalReturnEnabled ? 1 : 0,
+    universal_return_enabled_for_chief:
+      universalReturnEnabledForChief ? 1 : 0,
+  }
 }
 
-async function getLoan(env: Env, id: string): Promise<LoanRow | null> {
-  return env.DB.prepare(`
-    SELECT
-      l.id, l.tool_id, COALESCE(NULLIF(l.tool_name_snapshot, ''), t.name) AS tool_name, l.borrower_name,
-      l.borrower_note, l.quantity, l.status, l.checked_out_by,
-      checkout_user.name AS checked_out_by_name, l.checked_out_at,
-      l.returned_by, return_user.name AS returned_by_name,
-      l.returned_at, l.checkout_note, l.return_note
-    FROM tool_rental_loans l
-    INNER JOIN tool_rental_tools t ON t.id = l.tool_id
-    LEFT JOIN users checkout_user ON checkout_user.id = l.checked_out_by
-    LEFT JOIN users return_user ON return_user.id = l.returned_by
-    WHERE l.id = ?
-  `).bind(id).first<LoanRow>()
+async function getTool(
+  db: D1Database,
+  toolId: number,
+): Promise<Tool | null> {
+  return await db
+    .prepare(`
+      SELECT
+        tools.id,
+        tools.name,
+        tools.category,
+        tools.description,
+        tools.location,
+        tools.max_quantity_per_class,
+        tools.loan_duration_minutes,
+        tools.max_quantity_per_chief,
+        tools.loan_duration_minutes_per_chief,
+        tools.due_notice_enabled,
+        tools.universal_return_enabled,
+        tools.universal_return_enabled_for_chief,
+        tools.is_active,
+        COUNT(tool_items.id) AS quantity,
+        COALESCE(
+          SUM(
+            CASE
+              WHEN tool_items.status = 'available' THEN 1
+              ELSE 0
+            END
+          ),
+          0
+        ) AS available_quantity,
+        tools.created_at,
+        tools.updated_at
+      FROM tools
+      LEFT JOIN tool_items
+        ON tool_items.tool_id = tools.id
+        AND tool_items.management_number NOT LIKE 'DELETED-%'
+      WHERE tools.id = ?
+        AND tools.is_active = 1
+      GROUP BY
+        tools.id,
+        tools.name,
+        tools.category,
+        tools.description,
+        tools.location,
+        tools.max_quantity_per_class,
+        tools.loan_duration_minutes,
+        tools.max_quantity_per_chief,
+        tools.loan_duration_minutes_per_chief,
+        tools.due_notice_enabled,
+        tools.universal_return_enabled,
+        tools.universal_return_enabled_for_chief,
+        tools.is_active,
+        tools.created_at,
+        tools.updated_at
+    `)
+    .bind(toolId)
+    .first<Tool>()
 }
 
-async function requirePermission(
-  env: Env,
-  userId: string,
-  permission: string,
-): Promise<Response | null> {
-  return await allowed(env, userId, permission)
+
+
+function requireAdmin(user: { role: string }): Response | null {
+  return user.role === "admin"
     ? null
-    : json({ error: "Forbidden", permission }, 403)
+    : json({ detail: "管理者権限が必要です" }, 403)
+}
+
+function getToolRentalPermission(path: string, method: string): string | null {
+  if (path === "/tools") return method === "GET" ? "tool_rental.view" : "tool_rental.manage"
+  if (path === "/tools/order") return "tool_rental.manage"
+  if (/^\\/tools\\/\\d+(?:\\/items)?$/.test(path)) return method === "GET" ? "tool_rental.view" : "tool_rental.manage"
+  if (path === "/loans") return method === "POST" ? "tool_rental.checkout" : null
+  if (path === "/loans/current") return "tool_rental.view"
+  if (path === "/loans/history") return method === "GET" ? "tool_rental.history" : "tool_rental.manage"
+  if (path === "/loans/history/delete" || /^\\/loans\\/history\\/\\d+$/.test(path)) return "tool_rental.manage"
+  if (path === "/loans/return") return "tool_rental.return"
+  if (/^\\/loans\\/\\d+\\/extend\\/\\d+$/.test(path)) return "tool_rental.checkout"
+  if (path === "/reservations") return method === "GET" ? "tool_rental.view" : "tool_rental.checkout"
+  if (path === "/reservations/next") return "tool_rental.view"
+  if (/^\\/reservations\\/\\d+$/.test(path)) return "tool_rental.view"
+  if (/^\\/reservations\\/\\d+\\/(?:cancel|complete)$/.test(path)) return "tool_rental.checkout"
+  if (path === "/settings/return-time" || path === "/settings/return-time-chief") return method === "GET" ? "tool_rental.view" : "tool_rental.manage"
+  return null
 }
 
 export async function handleToolRental(
@@ -119,237 +352,3794 @@ export async function handleToolRental(
   env: Env,
   pathParts: string[],
 ): Promise<Response> {
+  if (request.method === "OPTIONS") return new Response(null, { status: 204 })
+
   const auth = await requireAuth(request, env)
   if (auth instanceof Response) return auth
 
+  const url = new URL(request.url)
+  url.pathname = pathParts.length > 0 ? `/${pathParts.join("/")}` : "/tools"
   const method = request.method.toUpperCase()
-  const [resource, resourceId, action] = pathParts
+  const permission = getToolRentalPermission(url.pathname, method)
 
-  if (method === "GET" && !resource) {
-    const denied = await requirePermission(env, auth.user.id, "tool_rental.view")
-    if (denied) return denied
-
-    const result = await env.DB.prepare(`
-      SELECT
-        t.id, t.name, t.category, t.description, t.total_quantity,
-        t.is_active, t.external_tool_id, t.created_at, t.updated_at,
-        COALESCE(SUM(CASE WHEN l.status = 'checked_out' THEN l.quantity ELSE 0 END), 0)
-          AS checked_out_quantity,
-        t.total_quantity - COALESCE(SUM(CASE WHEN l.status = 'checked_out' THEN l.quantity ELSE 0 END), 0)
-          AS available_quantity
-      FROM tool_rental_tools t
-      LEFT JOIN tool_rental_loans l ON l.tool_id = t.id
-      GROUP BY t.id
-      ORDER BY t.is_active DESC, t.category COLLATE NOCASE, t.name COLLATE NOCASE
-    `).all<ToolRow>()
-
-    return json({ tools: result.results })
+  if (permission && !(await hasPermission(env, auth.user.id, permission))) {
+    return json({ detail: "この操作を行う権限がありません", permission }, 403)
   }
 
-  if (method === "GET" && resource === "active" && !resourceId) {
-    const denied = await requirePermission(env, auth.user.id, "tool_rental.return")
-    if (denied) return denied
+  const canManage = await hasPermission(env, auth.user.id, "tool_rental.manage")
+  const authenticated = { role: canManage ? "admin" : "staff" }
 
-    const result = await env.DB.prepare(`
-      SELECT
-        l.id, l.tool_id, COALESCE(NULLIF(l.tool_name_snapshot, ''), t.name) AS tool_name, l.borrower_name,
-        l.borrower_note, l.quantity, l.status, l.checked_out_by,
-        checkout_user.name AS checked_out_by_name, l.checked_out_at,
-        l.returned_by, return_user.name AS returned_by_name,
-        l.returned_at, l.checkout_note, l.return_note
-      FROM tool_rental_loans l
-      INNER JOIN tool_rental_tools t ON t.id = l.tool_id
-      LEFT JOIN users checkout_user ON checkout_user.id = l.checked_out_by
-      LEFT JOIN users return_user ON return_user.id = l.returned_by
-      WHERE l.status = 'checked_out'
-      ORDER BY l.checked_out_at ASC
-    `).all<LoanRow>()
+  try {
+      if (
+        url.pathname === '/reservations' &&
+        request.method === 'GET'
+      ) {
+        const status =
+          url.searchParams.get('status')?.trim() ||
+          'waiting'
 
-    return json({ loans: result.results })
+        const toolIdParam =
+          url.searchParams.get('tool_id')?.trim()
+
+        if (
+          !['waiting', 'completed', 'cancelled'].includes(
+            status,
+          )
+        ) {
+          return json(
+            {
+              detail: '予約状態が正しくありません',
+            },
+            400,
+          )
+        }
+
+        let query = `
+          SELECT
+            reservations.id,
+            reservations.tool_id,
+            reservations.class_name,
+            reservations.name,
+            reservations.quantity,
+            reservations.status,
+            reservations.created_at,
+            reservations.updated_at,
+            tools.name AS tool_name,
+            tools.available_quantity,
+            (
+              SELECT COUNT(*)
+              FROM reservations AS previous_reservations
+              WHERE previous_reservations.tool_id = reservations.tool_id
+                AND previous_reservations.status = 'waiting'
+                AND (
+                  previous_reservations.created_at < reservations.created_at
+                  OR (
+                    previous_reservations.created_at = reservations.created_at
+                    AND previous_reservations.id < reservations.id
+                  )
+                )
+            ) + 1 AS queue_position
+          FROM reservations
+          INNER JOIN tools
+            ON tools.id = reservations.tool_id
+          WHERE reservations.status = ?
+        `
+
+        const bindings: (string | number)[] = [status]
+
+        if (toolIdParam) {
+          const toolId = Number(toolIdParam)
+
+          if (!Number.isInteger(toolId) || toolId <= 0) {
+            return json(
+              {
+                detail: '工具・機材IDが正しくありません',
+              },
+              400,
+            )
+          }
+
+          query += ' AND reservations.tool_id = ?'
+          bindings.push(toolId)
+        }
+
+        query += `
+          ORDER BY
+            reservations.tool_id ASC,
+            reservations.created_at ASC,
+            reservations.id ASC
+        `
+
+        const result = await env.DB
+          .prepare(query)
+          .bind(...bindings)
+          .all<{
+            id: number
+            tool_id: number
+            class_name: string
+            name: string
+            quantity: number
+            status: string
+            created_at: string
+            updated_at: string
+            tool_name: string
+            queue_position: number
+          }>()
+
+        return json(result.results)
+      }
+
+      const reservationIdMatch =
+        url.pathname.match(/^\/reservations\/(\d+)$/)
+
+      if (
+        reservationIdMatch &&
+        request.method === 'GET'
+      ) {
+        const reservationId = Number(
+          reservationIdMatch[1],
+        )
+
+        if (
+          !Number.isInteger(reservationId) ||
+          reservationId <= 0
+        ) {
+          return json(
+            {
+              detail: '予約IDが正しくありません',
+            },
+            400,
+          )
+        }
+
+        const reservation = await env.DB
+          .prepare(`
+            SELECT
+              reservations.id,
+              reservations.tool_id,
+              reservations.class_name,
+              reservations.name,
+              reservations.quantity,
+              reservations.status,
+              reservations.created_at,
+              reservations.updated_at,
+              tools.name AS tool_name
+            FROM reservations
+            INNER JOIN tools
+              ON tools.id = reservations.tool_id
+            WHERE reservations.id = ?
+          `)
+          .bind(reservationId)
+          .first<{
+            id: number
+            tool_id: number
+            class_name: string
+            name: string
+            quantity: number
+            status: string
+            created_at: string
+            updated_at: string
+            tool_name: string
+          }>()
+
+        if (!reservation) {
+          return json(
+            {
+              detail: '予約が見つかりません',
+            },
+            404,
+          )
+        }
+
+        return json(reservation)
+      }
+
+      if (
+        url.pathname === '/reservations' &&
+        request.method === 'POST'
+      ) {
+        const body = await request.json()
+
+        const className =
+          typeof body?.class_name === 'string'
+            ? body.class_name.trim()
+            : ''
+
+        const name =
+          typeof body?.name === 'string'
+            ? body.name.trim()
+            : ''
+
+        const toolId = Number(body?.tool_id)
+        const quantity = Number(body?.quantity)
+
+        if (!className) {
+          return json(
+            {
+              detail: 'クラスを入力してください',
+            },
+            400,
+          )
+        }
+
+        if (!name) {
+          return json(
+            {
+              detail: '氏名を入力してください',
+            },
+            400,
+          )
+        }
+
+        if (
+          !Number.isInteger(toolId) ||
+          toolId <= 0
+        ) {
+          return json(
+            {
+              detail: '工具・機材を指定してください',
+            },
+            400,
+          )
+        }
+
+        if (
+          !Number.isInteger(quantity) ||
+          quantity <= 0
+        ) {
+          return json(
+            {
+              detail: '予約数量は1個以上で指定してください',
+            },
+            400,
+          )
+        }
+
+        const tool = await env.DB
+          .prepare(`
+            SELECT
+              id,
+              name,
+              quantity,
+              available_quantity,
+              max_quantity_per_class,
+              max_quantity_per_chief
+            FROM tools
+            WHERE id = ?
+          `)
+          .bind(toolId)
+          .first<{
+            id: number
+            name: string
+            quantity: number
+            available_quantity: number
+            max_quantity_per_class: number | null
+            max_quantity_per_chief: number | null
+          }>()
+
+        if (!tool) {
+          return json(
+            {
+              detail: '工具・機材が見つかりません',
+            },
+            404,
+          )
+        }
+
+        if (tool.available_quantity > 0) {
+          return json(
+            {
+              detail:
+                'この工具・機材は現在貸出可能です。予約ではなく通常の貸出を行ってください。',
+            },
+            400,
+          )
+        }
+
+        if (quantity > tool.quantity) {
+          return json(
+            {
+              detail:
+                `予約数量は総在庫数（${tool.quantity}個）以下にしてください`,
+            },
+            400,
+          )
+        }
+
+        const isChief = className === 'チーフ'
+
+        const maxQuantity = isChief
+          ? tool.max_quantity_per_chief
+          : tool.max_quantity_per_class
+
+        if (
+          maxQuantity !== null &&
+          quantity > maxQuantity
+        ) {
+          return json(
+            {
+              detail: isChief
+                ? `チーフの最大貸出数は${maxQuantity}個です`
+                : `1クラスあたりの最大貸出数は${maxQuantity}個です`,
+            },
+            400,
+          )
+        }
+
+        const duplicateReservation = await env.DB
+          .prepare(`
+            SELECT id
+            FROM reservations
+            WHERE tool_id = ?
+              AND class_name = ?
+              AND name = ?
+              AND status = 'waiting'
+            LIMIT 1
+          `)
+          .bind(toolId, className, name)
+          .first<{
+            id: number
+          }>()
+
+        if (duplicateReservation) {
+          return json(
+            {
+              detail:
+                '同じクラス・氏名ですでに予約されています',
+            },
+            400,
+          )
+        }
+
+        const result = await env.DB
+          .prepare(`
+            INSERT INTO reservations (
+              tool_id,
+              class_name,
+              name,
+              quantity,
+              status,
+              created_at,
+              updated_at
+            )
+            VALUES (?, ?, ?, ?, 'waiting', datetime('now', '+9 hours'), datetime('now', '+9 hours'))
+          `)
+          .bind(
+            toolId,
+            className,
+            name,
+            quantity,
+          )
+          .run()
+
+        const reservationId =
+          Number(result.meta.last_row_id)
+
+        const reservation = await env.DB
+          .prepare(`
+            SELECT
+              reservations.id,
+              reservations.tool_id,
+              reservations.class_name,
+              reservations.name,
+              reservations.quantity,
+              reservations.status,
+              reservations.created_at,
+              reservations.updated_at,
+              tools.name AS tool_name
+            FROM reservations
+            INNER JOIN tools
+              ON tools.id = reservations.tool_id
+            WHERE reservations.id = ?
+          `)
+          .bind(reservationId)
+          .first()
+
+        return json(reservation, 201)
+      }
+
+      const reservationCancelMatch =
+        url.pathname.match(
+          /^\/reservations\/(\d+)\/cancel$/,
+        )
+
+      if (
+        reservationCancelMatch &&
+        request.method === 'POST'
+      ) {
+        const reservationId = Number(
+          reservationCancelMatch[1],
+        )
+
+        if (
+          !Number.isInteger(reservationId) ||
+          reservationId <= 0
+        ) {
+          return json(
+            {
+              detail: '予約IDが正しくありません',
+            },
+            400,
+          )
+        }
+
+        const result = await env.DB
+          .prepare(`
+            UPDATE reservations
+            SET
+              status = 'cancelled',
+              updated_at = datetime('now', '+9 hours')
+            WHERE id = ?
+              AND status = 'waiting'
+          `)
+          .bind(reservationId)
+          .run()
+
+        if (result.meta.changes === 0) {
+          return json(
+            {
+              detail:
+                '予約が見つからないか、すでに処理されています',
+            },
+            404,
+          )
+        }
+
+        return json({
+          success: true,
+        })
+      }
+
+      const reservationCompleteMatch =
+        url.pathname.match(
+          /^\/reservations\/(\d+)\/complete$/,
+        )
+
+      if (
+        reservationCompleteMatch &&
+        request.method === 'POST'
+      ) {
+        const reservationId = Number(
+          reservationCompleteMatch[1],
+        )
+
+        if (
+          !Number.isInteger(reservationId) ||
+          reservationId <= 0
+        ) {
+          return json(
+            {
+              detail: '予約IDが正しくありません',
+            },
+            400,
+          )
+        }
+
+        const result = await env.DB
+          .prepare(`
+            UPDATE reservations
+            SET
+              status = 'completed',
+              updated_at = datetime('now', '+9 hours')
+            WHERE id = ?
+              AND status = 'waiting'
+          `)
+          .bind(reservationId)
+          .run()
+
+        if (result.meta.changes === 0) {
+          return json(
+            {
+              detail:
+                '予約が見つからないか、すでに処理されています',
+            },
+            404,
+          )
+        }
+
+        return json({
+          success: true,
+        })
+      }
+
+      if (
+        url.pathname === '/reservations/next' &&
+        request.method === 'GET'
+      ) {
+        const toolId = Number(
+          url.searchParams.get('tool_id'),
+        )
+
+        if (
+          !Number.isInteger(toolId) ||
+          toolId <= 0
+        ) {
+          return json(
+            {
+              detail: '工具・機材IDが正しくありません',
+            },
+            400,
+          )
+        }
+
+        const tool = await env.DB
+          .prepare(`
+            SELECT
+              id,
+              available_quantity
+            FROM tools
+            WHERE id = ?
+          `)
+          .bind(toolId)
+          .first<{
+            id: number
+            available_quantity: number
+          }>()
+
+        if (!tool) {
+          return json(
+            {
+              detail: '工具・機材が見つかりません',
+            },
+            404,
+          )
+        }
+
+        const reservation = await env.DB
+          .prepare(`
+            SELECT
+              reservations.id,
+              reservations.tool_id,
+              reservations.class_name,
+              reservations.name,
+              reservations.quantity,
+              reservations.status,
+              reservations.created_at,
+              reservations.updated_at,
+              tools.name AS tool_name
+            FROM reservations
+            INNER JOIN tools
+              ON tools.id = reservations.tool_id
+            WHERE reservations.tool_id = ?
+              AND reservations.status = 'waiting'
+            ORDER BY
+              reservations.created_at ASC,
+              reservations.id ASC
+            LIMIT 1
+          `)
+          .bind(toolId)
+          .first()
+
+        return json({
+          reservation: reservation ?? null,
+          available_quantity: tool.available_quantity,
+        })
+      }
+
+      if (url.pathname === '/tools' && request.method === 'GET') {
+        const result = await env.DB
+          .prepare(`
+            SELECT
+              tools.id,
+              tools.name,
+              tools.category,
+              tools.description,
+              tools.location,
+              tools.max_quantity_per_class,
+              tools.loan_duration_minutes,
+              tools.max_quantity_per_chief,
+              tools.loan_duration_minutes_per_chief,
+              tools.due_notice_enabled,
+              tools.universal_return_enabled,
+              tools.universal_return_enabled_for_chief,
+              tools.display_order,
+              tools.is_active,
+              COUNT(tool_items.id) AS quantity,
+              COALESCE(
+                SUM(
+                  CASE
+                    WHEN tool_items.status = 'available' THEN 1
+                    ELSE 0
+                  END
+                ),
+                0
+              ) AS available_quantity,
+              tools.created_at,
+              tools.updated_at
+            FROM tools
+            LEFT JOIN tool_items
+              ON tool_items.tool_id = tools.id
+              AND tool_items.management_number NOT LIKE 'DELETED-%'
+            WHERE tools.is_active = 1
+            GROUP BY
+              tools.id,
+              tools.name,
+              tools.category,
+              tools.description,
+              tools.location,
+              tools.max_quantity_per_class,
+              tools.loan_duration_minutes,
+              tools.max_quantity_per_chief,
+              tools.loan_duration_minutes_per_chief,
+              tools.due_notice_enabled,
+              tools.universal_return_enabled,
+              tools.universal_return_enabled_for_chief,
+              tools.display_order,
+              tools.is_active,
+              tools.created_at,
+              tools.updated_at
+            ORDER BY tools.display_order ASC, tools.id ASC
+          `)
+          .all<Tool>()
+
+        return json(result.results)
+      }
+
+      if (url.pathname === '/tools' && request.method === 'POST') {
+        const adminError = requireAdmin(authenticated)
+        if (adminError) {
+          return adminError
+        }
+
+        const body = await request.json()
+        const payload = getToolPayload(body)
+
+        const result = await env.DB
+          .prepare(`
+            INSERT INTO tools (
+              name,
+              category,
+              description,
+              location,
+              quantity,
+              available_quantity,
+              max_quantity_per_class,
+              loan_duration_minutes,
+              max_quantity_per_chief,
+              loan_duration_minutes_per_chief,
+              due_notice_enabled,
+              universal_return_enabled,
+              universal_return_enabled_for_chief,
+              is_active,
+              created_at,
+              updated_at
+            )
+            VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now', '+9 hours'), datetime('now', '+9 hours'))
+          `)
+          .bind(
+            payload.name,
+            payload.category,
+            payload.description,
+            payload.location,
+            payload.max_quantity_per_class,
+            payload.loan_duration_minutes,
+            payload.max_quantity_per_chief,
+            payload.loan_duration_minutes_per_chief,
+            payload.due_notice_enabled,
+            payload.universal_return_enabled,
+            payload.universal_return_enabled_for_chief,
+          )
+          .run()
+
+        const toolId = Number(result.meta.last_row_id)
+
+        if (!toolId) {
+          return json(
+            {
+              detail: '工具・機材の登録に失敗しました',
+            },
+            500,
+          )
+        }
+
+        await env.DB
+          .prepare(`
+            UPDATE tools
+            SET display_order = (
+              SELECT COALESCE(MAX(display_order), -1) + 1
+              FROM tools
+              WHERE id != ?
+            )
+            WHERE id = ?
+          `)
+          .bind(toolId, toolId)
+          .run()
+
+        try {
+          const statements = payload.tool_items.map(
+            (item: {
+              id: number | null
+              management_number: string
+            }) =>
+              env.DB
+                .prepare(`
+                  INSERT INTO tool_items (
+                    tool_id,
+                    management_number,
+                    status,
+                    created_at,
+                    updated_at
+                  )
+                  VALUES (?, ?, 'available', datetime('now', '+9 hours'), datetime('now', '+9 hours'))
+                `)
+                .bind(
+                  toolId,
+                  item.management_number,
+                ),
+          )
+
+          await env.DB.batch(statements)
+
+          const tool = await getTool(env.DB, toolId)
+
+          return json(tool, 201)
+        } catch (error) {
+          await env.DB.batch([
+            env.DB
+              .prepare(
+                'DELETE FROM tool_items WHERE tool_id = ?',
+              )
+              .bind(toolId),
+            env.DB
+              .prepare('DELETE FROM tools WHERE id = ?')
+              .bind(toolId),
+          ])
+
+          throw error
+        }
+      }
+
+      const toolItemsMatch = url.pathname.match(/^\/tools\/(\d+)\/items$/)
+
+      if (toolItemsMatch && request.method === 'GET') {
+        const toolId = Number(toolItemsMatch[1])
+
+        if (!Number.isInteger(toolId) || toolId <= 0) {
+          return json(
+            {
+              detail: '工具・機材IDが正しくありません',
+            },
+            400,
+          )
+        }
+
+        const tool = await getTool(env.DB, toolId)
+
+        if (!tool) {
+          return json(
+            {
+              detail: '工具・機材が見つかりません',
+            },
+            404,
+          )
+        }
+
+        const result = await env.DB
+          .prepare(`
+            SELECT
+              tool_items.id,
+              tool_items.tool_id,
+              tool_items.management_number,
+              tool_items.status,
+              tool_items.created_at,
+              tool_items.updated_at,
+              EXISTS (
+                SELECT 1
+                FROM loan_items
+                WHERE loan_items.tool_item_id = tool_items.id
+              ) AS has_history
+            FROM tool_items
+            WHERE tool_items.tool_id = ?
+              AND tool_items.management_number NOT LIKE 'DELETED-%'
+            ORDER BY tool_items.management_number ASC
+          `)
+          .bind(toolId)
+          .all<{
+            id: number
+            tool_id: number
+            management_number: string
+            status: string
+            created_at: string
+            updated_at: string
+            has_history: number
+          }>()
+
+        return json(
+          result.results.map(item => ({
+            ...item,
+            has_history: Boolean(item.has_history),
+          })),
+        )
+      }
+
+      if (url.pathname === '/loans' && request.method === 'POST') {
+        const body = await request.json()
+
+        const className =
+          typeof body.class_name === 'string'
+            ? body.class_name.trim()
+            : ''
+
+        const borrowerName =
+          typeof body.name === 'string'
+            ? body.name.trim()
+            : ''
+
+        const toolId = Number(body.tool_id)
+
+        const rawToolItemIds = Array.isArray(body.tool_item_ids)
+          ? body.tool_item_ids
+          : []
+
+        const toolItemIds = rawToolItemIds.map(Number)
+
+        const rawReservationId =
+          body.reservation_id
+
+        const reservationId =
+          rawReservationId === undefined ||
+          rawReservationId === null ||
+          rawReservationId === ''
+            ? null
+            : Number(rawReservationId)
+
+        if (
+          reservationId !== null &&
+          (!Number.isInteger(reservationId) ||
+            reservationId <= 0)
+        ) {
+          return json(
+            {
+              detail: '予約IDが正しくありません',
+            },
+            400,
+          )
+        }
+
+        if (!className) {
+          return json(
+            {
+              detail: 'クラスを入力してください',
+            },
+            400,
+          )
+        }
+
+        if (!borrowerName) {
+          return json(
+            {
+              detail: '氏名を入力してください',
+            },
+            400,
+          )
+        }
+
+        if (!Number.isInteger(toolId) || toolId <= 0) {
+          return json(
+            {
+              detail: '工具・機材IDを指定してください',
+            },
+            400,
+          )
+        }
+
+        if (
+          toolItemIds.length === 0 ||
+          toolItemIds.some(
+            (id: number) => !Number.isInteger(id) || id <= 0,
+          )
+        ) {
+          return json(
+            {
+              detail: '貸し出す工具・機材個体を1つ以上選択してください',
+            },
+            400,
+          )
+        }
+
+        const uniqueToolItemIds = [...new Set(toolItemIds)]
+
+        if (uniqueToolItemIds.length !== toolItemIds.length) {
+          return json(
+            {
+              detail: '同じ工具・機材個体を重複して選択することはできません',
+            },
+            400,
+          )
+        }
+
+        const quantity = uniqueToolItemIds.length
+
+        const tool = await getTool(env.DB, toolId)
+
+        if (!tool) {
+          return json(
+            {
+              detail: '工具・機材が見つかりません',
+            },
+            404,
+          )
+        }
+
+        const firstReservation = await env.DB
+          .prepare(`
+            SELECT
+              reservations.id,
+              reservations.class_name,
+              reservations.name,
+              reservations.quantity
+            FROM reservations
+            WHERE reservations.tool_id = ?
+              AND reservations.status = 'waiting'
+            ORDER BY
+              reservations.created_at ASC,
+              reservations.id ASC
+            LIMIT 1
+          `)
+          .bind(toolId)
+          .first<{
+            id: number
+            class_name: string
+            name: string
+            quantity: number
+          }>()
+
+        if (firstReservation) {
+          if (reservationId === null) {
+            return json(
+              {
+                detail:
+                  `この工具・機材には予約があります。` +
+                  `${firstReservation.class_name} ${firstReservation.name} ` +
+                  `さんの予約を先に処理してください`,
+              },
+              400,
+            )
+          }
+
+          if (reservationId !== firstReservation.id) {
+            return json(
+              {
+                detail:
+                  '指定された予約は現在の先頭予約ではありません',
+              },
+              400,
+            )
+          }
+
+          if (
+            firstReservation.class_name !== className ||
+            firstReservation.name !== borrowerName
+          ) {
+            return json(
+              {
+                detail:
+                  '予約のクラス・氏名と貸出先が一致していません',
+              },
+              400,
+            )
+          }
+
+          if (quantity !== firstReservation.quantity) {
+            return json(
+              {
+                detail:
+                  `予約数量は${firstReservation.quantity}個です。` +
+                  `予約数量と同じ個数を貸し出してください`,
+              },
+              400,
+            )
+          }
+        } else if (reservationId !== null) {
+          return json(
+            {
+              detail: '指定された予約は待機中ではありません',
+            },
+            400,
+          )
+        }
+
+        const isChief = className === 'チーフ'
+
+        const maxQuantity = isChief
+          ? tool.max_quantity_per_chief
+          : tool.max_quantity_per_class
+
+        if (maxQuantity !== null) {
+          const classLoanResult = await env.DB
+            .prepare(`
+              SELECT
+                COUNT(*) AS quantity
+              FROM loan_items
+              INNER JOIN loans
+                ON loans.id = loan_items.loan_id
+              INNER JOIN borrowers
+                ON borrowers.id = loans.borrower_id
+              WHERE loans.tool_id = ?
+                AND borrowers.class_name = ?
+                AND loans.status = 'borrowed'
+                AND loan_items.returned_at IS NULL
+            `)
+            .bind(toolId, className)
+            .first<{
+              quantity: number
+            }>()
+
+          const currentClassQuantity =
+            Number(classLoanResult?.quantity ?? 0)
+
+          if (
+            currentClassQuantity + quantity >
+            maxQuantity
+          ) {
+            const targetName = isChief
+              ? 'チーフ'
+              : '1クラスあたり'
+
+            return json(
+              {
+                detail:
+                  `この工具・機材は${targetName}${maxQuantity}個までです。` +
+                  `現在${currentClassQuantity}個貸出中のため、` +
+                  `今回${quantity}個を貸し出すことはできません`,
+              },
+              400,
+            )
+          }
+        }
+
+        if (tool.available_quantity < quantity) {
+          return json(
+            {
+              detail: `在庫が不足しています。現在貸出可能なのは${tool.available_quantity}個です`,
+            },
+            400,
+          )
+        }
+
+        const placeholders = uniqueToolItemIds
+          .map(() => '?')
+          .join(', ')
+
+        const toolItemsResult = await env.DB
+          .prepare(`
+            SELECT
+              id,
+              tool_id,
+              management_number,
+              status
+            FROM tool_items
+            WHERE id IN (${placeholders})
+              AND tool_id = ?
+          `)
+          .bind(...uniqueToolItemIds, toolId)
+          .all<{
+            id: number
+            tool_id: number
+            management_number: string
+            status: string
+          }>()
+
+        const toolItems = toolItemsResult.results
+
+        if (toolItems.length !== uniqueToolItemIds.length) {
+          return json(
+            {
+              detail: '指定された工具・機材個体の一部が見つかりません',
+            },
+            404,
+          )
+        }
+
+        const unavailableItem = toolItems.find(
+          item => item.status !== 'available',
+        )
+
+        if (unavailableItem) {
+          return json(
+            {
+              detail: `工具・機材個体 ${unavailableItem.management_number} は現在貸出できません`,
+            },
+            400,
+          )
+        }
+
+        let borrower = await env.DB
+          .prepare(`
+            SELECT
+              id,
+              class_name,
+              name
+            FROM borrowers
+            WHERE class_name = ?
+              AND name = ?
+            LIMIT 1
+          `)
+          .bind(className, borrowerName)
+          .first<{
+            id: number
+            class_name: string
+            name: string
+          }>()
+
+        if (!borrower) {
+          const borrowerResult = await env.DB
+            .prepare(`
+              INSERT INTO borrowers (
+                class_name,
+                name,
+                created_at,
+                updated_at
+              )
+              VALUES (?, ?, datetime('now', '+9 hours'), datetime('now', '+9 hours'))
+            `)
+            .bind(className, borrowerName)
+            .run()
+
+          const borrowerId = Number(borrowerResult.meta.last_row_id)
+
+          if (!borrowerId) {
+            return json(
+              {
+                detail: '借用者の登録に失敗しました',
+              },
+              500,
+            )
+          }
+
+          borrower = {
+            id: borrowerId,
+            class_name: className,
+            name: borrowerName,
+          }
+        }
+
+        const loanDurationMinutes = isChief
+          ? tool.loan_duration_minutes_per_chief
+          : tool.loan_duration_minutes
+
+        const universalReturnEnabled =
+          isChief
+            ? tool.universal_return_enabled_for_chief
+            : tool.universal_return_enabled
+
+        let dueAt: string | null = null
+
+        if (universalReturnEnabled === 1) {
+          dueAt = await getNextUniversalReturnDueAt(
+            env.DB,
+            new Date(),
+            isChief,
+          )
+        } else if (loanDurationMinutes !== null) {
+          dueAt = formatJstDateTime(
+            new Date(
+              Date.now() +
+                loanDurationMinutes * 60 * 1000,
+            ),
+          )
+        }
+
+        if (dueAt !== null && universalReturnEnabled !== 1) {
+          const globalReturnDueAt = await getNextUniversalReturnDueAt(
+            env.DB,
+            new Date(),
+            isChief,
+          )
+
+          if (
+            globalReturnDueAt !== null &&
+            parseJstDateTime(globalReturnDueAt) <
+              parseJstDateTime(dueAt)
+          ) {
+            dueAt = globalReturnDueAt
+          }
+        }
+
+        const loanResult = await env.DB
+          .prepare(`
+            INSERT INTO loans (
+              borrower_id,
+              tool_id,
+              quantity,
+              borrowed_at,
+              returned_quantity,
+              status,
+              due_at
+            )
+            VALUES (?, ?, ?, datetime('now', '+9 hours'), 0, 'borrowed', ?)
+          `)
+          .bind(
+            borrower.id,
+            toolId,
+            quantity,
+            dueAt,
+          )
+          .run()
+
+        const loanId = Number(loanResult.meta.last_row_id)
+
+        if (!loanId) {
+          return json(
+            {
+              detail: '貸出記録の登録に失敗しました',
+            },
+            500,
+          )
+        }
+
+        const statements: D1PreparedStatement[] = []
+
+        statements.push(
+          env.DB
+            .prepare(`
+              UPDATE tools
+              SET
+                available_quantity = available_quantity - ?,
+                updated_at = datetime('now', '+9 hours')
+              WHERE id = ?
+                AND available_quantity >= ?
+            `)
+            .bind(quantity, toolId, quantity),
+        )
+
+        for (const toolItemId of uniqueToolItemIds) {
+          statements.push(
+            env.DB
+              .prepare(`
+                UPDATE tool_items
+                SET
+                  status = 'borrowed',
+                  updated_at = datetime('now', '+9 hours')
+                WHERE id = ?
+                  AND tool_id = ?
+                  AND status = 'available'
+              `)
+              .bind(toolItemId, toolId),
+          )
+
+          statements.push(
+            env.DB
+              .prepare(`
+                INSERT INTO loan_items (
+                  loan_id,
+                  tool_item_id,
+                  created_at
+                )
+                VALUES (?, ?, datetime('now', '+9 hours'))
+              `)
+              .bind(loanId, toolItemId),
+          )
+        }
+
+        if (reservationId !== null) {
+          statements.push(
+            env.DB
+              .prepare(`
+                UPDATE reservations
+                SET
+                  status = 'completed',
+                  updated_at = datetime('now', '+9 hours')
+                WHERE id = ?
+                  AND status = 'waiting'
+              `)
+              .bind(reservationId),
+          )
+        }
+
+        await env.DB.batch(statements)
+
+        const latestLoan = await env.DB
+          .prepare(`
+            SELECT
+              loans.id,
+              loans.borrower_id,
+              loans.tool_id,
+              loans.quantity,
+              loans.returned_quantity,
+              loans.borrowed_at,
+              loans.due_at,
+              loans.returned_at,
+              loans.returned_by_id,
+              loans.status,
+              borrowers.class_name,
+              borrowers.name AS borrower_name,
+              tools.name AS tool_name
+            FROM loans
+            INNER JOIN borrowers
+              ON borrowers.id = loans.borrower_id
+            INNER JOIN tools
+              ON tools.id = loans.tool_id
+            WHERE loans.id = ?
+          `)
+          .bind(loanId)
+          .first()
+
+        const loanToolItems = await env.DB
+          .prepare(`
+            SELECT
+              tool_items.id,
+              tool_items.tool_id,
+              tool_items.management_number,
+              tool_items.status,
+              loan_items.id AS loan_item_id,
+              loan_items.returned_at
+            FROM loan_items
+            INNER JOIN tool_items
+              ON tool_items.id = loan_items.tool_item_id
+            WHERE loan_items.loan_id = ?
+            ORDER BY tool_items.management_number ASC
+          `)
+          .bind(loanId)
+          .all()
+
+        return json(
+          {
+            ...latestLoan,
+            tool_items: loanToolItems.results,
+          },
+          201,
+        )
+      }
+
+if (url.pathname === '/loans/current' && request.method === 'GET') {
+  const className = url.searchParams.get('class_name')?.trim()
+  const toolId = url.searchParams.get('tool_id')?.trim()
+
+  let query = [
+    'SELECT',
+    '  loans.id,',
+    '  loans.borrower_id,',
+    '  loans.tool_id,',
+    '  loans.quantity,',
+    '  loans.returned_quantity,',
+    '  loans.borrowed_at,',
+    '  loans.due_at,',
+    '  loans.returned_at,',
+    '  loans.returned_by_id,',
+    '  loans.status,',
+    '  borrowers.class_name,',
+    '  borrowers.name AS borrower_name,',
+    '  tools.name AS tool_name,',
+    '  tools.universal_return_enabled,',
+    '  tools.loan_duration_minutes,',
+    '  tools.loan_duration_minutes_per_chief',
+    'FROM loans',
+    'INNER JOIN borrowers ON borrowers.id = loans.borrower_id',
+    'INNER JOIN tools ON tools.id = loans.tool_id',
+    "WHERE loans.status = 'borrowed'",
+  ].join(' ')
+
+  const bindings: string[] = []
+
+  if (className) {
+    query += ' AND borrowers.class_name = ?'
+    bindings.push(className)
   }
 
-  if (method === "GET" && resource === "history" && !resourceId) {
-    const denied = await requirePermission(env, auth.user.id, "tool_rental.history")
-    if (denied) return denied
-
-    const url = new URL(request.url)
-    const requestedLimit = Number(url.searchParams.get("limit"))
-    const requestedOffset = Number(url.searchParams.get("offset"))
-    const limit = Number.isSafeInteger(requestedLimit)
-      ? Math.min(200, Math.max(1, requestedLimit))
-      : 100
-    const offset = Number.isSafeInteger(requestedOffset) && requestedOffset >= 0
-      ? Math.min(1_000_000, requestedOffset)
-      : 0
-    const result = await env.DB.prepare(`
-      SELECT
-        l.id, l.tool_id, COALESCE(NULLIF(l.tool_name_snapshot, ''), t.name) AS tool_name, l.borrower_name,
-        l.borrower_note, l.quantity, l.status, l.checked_out_by,
-        checkout_user.name AS checked_out_by_name, l.checked_out_at,
-        l.returned_by, return_user.name AS returned_by_name,
-        l.returned_at, l.checkout_note, l.return_note
-      FROM tool_rental_loans l
-      INNER JOIN tool_rental_tools t ON t.id = l.tool_id
-      LEFT JOIN users checkout_user ON checkout_user.id = l.checked_out_by
-      LEFT JOIN users return_user ON return_user.id = l.returned_by
-      ORDER BY l.checked_out_at DESC
-      LIMIT ? OFFSET ?
-    `).bind(limit, offset).all<LoanRow>()
-
-    return json({ loans: result.results, limit, offset })
+  if (toolId) {
+    query += ' AND loans.tool_id = ?'
+    bindings.push(toolId)
   }
 
-  if (method === "POST" && resource === "tools" && !resourceId) {
-    const denied = await requirePermission(env, auth.user.id, "tool_rental.manage")
-    if (denied) return denied
+  query += ' ORDER BY loans.borrowed_at DESC'
 
-    const body = await readJsonObject(request)
-    if (!body) return json({ error: "JSONオブジェクトを指定してください" }, 400)
+  const result = await env.DB
+    .prepare(query)
+    .bind(...bindings)
+    .all<{
+      id: number
+      borrower_id: number
+      tool_id: number
+      quantity: number
+      returned_quantity: number
+      borrowed_at: string
+      due_at: string | null
+      returned_at: string | null
+      returned_by_id: number | null
+      status: string
+      class_name: string
+      borrower_name: string
+      tool_name: string
+      universal_return_enabled: number
+    }>()
 
-    const name = requiredText(body.name)
-    const category = requiredText(body.category)
-    const quantity = positiveInteger(body.total_quantity)
-    if (!name) return json({ error: "工具名は必須です" }, 400)
-    if (!category) return json({ error: "カテゴリは必須です" }, 400)
-    if (!quantity) return json({ error: "数量は1以上の整数で指定してください" }, 400)
+  const loans = result.results
 
-    const id = crypto.randomUUID()
-    await env.DB.prepare(`
-      INSERT INTO tool_rental_tools (
-        id, name, category, description, total_quantity, external_tool_id, created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      id, name, category, optionalText(body.description), quantity,
-      optionalText(body.external_tool_id), auth.user.id,
-    ).run()
+  const loansWithItems = await Promise.all(
+    loans.map(async loan => {
+      const itemsResult = await env.DB
+        .prepare(`
+          SELECT
+            loan_items.id AS loan_item_id,
+            loan_items.loan_id,
+            loan_items.tool_item_id,
+            loan_items.returned_at,
+            tool_items.management_number,
+            tool_items.status
+          FROM loan_items
+          INNER JOIN tool_items
+            ON tool_items.id = loan_items.tool_item_id
+          WHERE loan_items.loan_id = ?
+            AND loan_items.returned_at IS NULL
+          ORDER BY tool_items.management_number ASC
+        `)
+        .bind(loan.id)
+        .all<{
+          loan_item_id: number
+          loan_id: number
+          tool_item_id: number
+          returned_at: string | null
+          management_number: string
+          status: string
+        }>()
 
-    return json(await getTool(env, id), 201)
-  }
+      return {
+        ...loan,
+        tool_items: itemsResult.results,
+      }
+    }),
+  )
 
-  if (method === "PATCH" && resource === "tools" && resourceId) {
-    const denied = await requirePermission(env, auth.user.id, "tool_rental.manage")
-    if (denied) return denied
+  return json(loansWithItems)
+}
 
-    const body = await readJsonObject(request)
-    if (!body) return json({ error: "JSONオブジェクトを指定してください" }, 400)
+if (
+        url.pathname === '/loans/history' &&
+        request.method === 'DELETE'
+      ) {
+        const adminError = requireAdmin(authenticated)
 
-    const existing = await getTool(env, resourceId)
-    if (!existing) return json({ error: "Tool not found" }, 404)
+        if (adminError) {
+          return adminError
+        }
 
-    const name = body.name === undefined ? existing.name : String(body.name).trim()
-    const category = body.category === undefined ? existing.category : String(body.category).trim()
-    const quantity = body.total_quantity === undefined
-      ? existing.total_quantity
-      : positiveInteger(body.total_quantity)
+        const countResult = await env.DB
+          .prepare(`
+            SELECT COUNT(*) AS count
+            FROM loans
+            WHERE status = 'returned'
+          `)
+          .first<{
+            count: number
+          }>()
 
-    if (!name || !category) return json({ error: "工具名とカテゴリは必須です" }, 400)
-    if (!quantity) return json({ error: "数量は1以上の整数で指定してください" }, 400)
-    if (quantity < (existing.checked_out_quantity ?? 0)) {
-      return json({ error: "貸出中の数量を下回る在庫数には変更できません" }, 409)
-    }
+        const deletedCount =
+          Number(countResult?.count ?? 0)
 
-    if (
-      body.is_active !== undefined &&
-      ![true, false, 0, 1].includes(body.is_active as boolean | number)
-    ) {
-      return json({ error: "貸出状態の指定が不正です" }, 400)
-    }
+        if (deletedCount === 0) {
+          return json({
+            detail:
+              '削除対象の返却済み貸出履歴はありません',
+            deleted_count: 0,
+          })
+        }
 
-    const isActive = body.is_active === undefined
-      ? existing.is_active
-      : body.is_active === false || body.is_active === 0 ? 0 : 1
+        await env.DB.batch([
+          env.DB
+            .prepare(`
+              DELETE FROM loan_return_notices
+              WHERE loan_id IN (
+                SELECT id
+                FROM loans
+                WHERE status = 'returned'
+              )
+            `),
+          env.DB
+            .prepare(`
+              DELETE FROM loan_items
+              WHERE loan_id IN (
+                SELECT id
+                FROM loans
+                WHERE status = 'returned'
+              )
+            `),
+          env.DB
+            .prepare(`
+              DELETE FROM loans
+              WHERE status = 'returned'
+            `),
+          env.DB
+            .prepare(`
+              DELETE FROM borrowers
+              WHERE NOT EXISTS (
+                SELECT 1
+                FROM loans
+                WHERE loans.borrower_id = borrowers.id
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM loans
+                WHERE loans.returned_by_id = borrowers.id
+              )
+            `),
+        ])
 
-    const updated = await env.DB.prepare(`
-      UPDATE tool_rental_tools
-      SET name = ?, category = ?, description = ?, total_quantity = ?,
-          is_active = ?, external_tool_id = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-        AND ? >= COALESCE((
-          SELECT SUM(quantity)
-          FROM tool_rental_loans
-          WHERE tool_id = ? AND status = 'checked_out'
-        ), 0)
-    `).bind(
-      name, category,
-      body.description === undefined ? existing.description : optionalText(body.description),
-      quantity, isActive,
-      body.external_tool_id === undefined ? existing.external_tool_id : optionalText(body.external_tool_id),
-      resourceId, quantity, resourceId,
-    ).run()
+        const remainingLoans = await env.DB
+          .prepare(`
+            SELECT COUNT(*) AS count
+            FROM loans
+          `)
+          .first<{
+            count: number
+          }>()
 
-    if (updated.meta.changes !== 1) {
-      return json({ error: "貸出中の数量を下回る在庫数には変更できません" }, 409)
-    }
+        if (Number(remainingLoans?.count ?? 0) === 0) {
+          await env.DB.batch([
+            env.DB.prepare(`
+              DELETE FROM sqlite_sequence
+              WHERE name = 'loans'
+            `),
+            env.DB.prepare(`
+              DELETE FROM sqlite_sequence
+              WHERE name = 'loan_items'
+            `),
+          ])
+        }
 
-    return json(await getTool(env, resourceId))
-  }
+        return json({
+          detail:
+            `${deletedCount}件の返却済み貸出履歴を削除しました`,
+          deleted_count: deletedCount,
+        })
+      }
 
-  if (method === "POST" && resource === "checkout" && !resourceId) {
-    const denied = await requirePermission(env, auth.user.id, "tool_rental.checkout")
-    if (denied) return denied
 
-    const body = await readJsonObject(request)
-    if (!body) return json({ error: "JSONオブジェクトを指定してください" }, 400)
+      if (
+        url.pathname === '/loans/history/delete' &&
+        request.method === 'POST'
+      ) {
+        const adminError = requireAdmin(authenticated)
 
-    const toolId = requiredText(body.tool_id)
-    const borrowerName = requiredText(body.borrower_name)
-    const quantity = positiveInteger(body.quantity)
-    if (!toolId || !borrowerName || !quantity) {
-      return json({ error: "工具・借用者名・1以上の数量を指定してください" }, 400)
-    }
+        if (adminError) {
+          return adminError
+        }
 
-    const id = crypto.randomUUID()
-    const inserted = await env.DB.prepare(`
-      INSERT INTO tool_rental_loans (
-        id, tool_id, tool_name_snapshot, borrower_name, borrower_note, quantity,
-        checked_out_by, checkout_note
+        const body = await request.json()
+
+        if (
+          !body ||
+          !Array.isArray(body.loan_item_ids) ||
+          body.loan_item_ids.length === 0
+        ) {
+          return json(
+            {
+              detail:
+                '削除する貸出履歴を選択してください',
+            },
+            400,
+          )
+        }
+
+        const loanItemIds = body.loan_item_ids.map(
+          (id: unknown) => Number(id),
+        )
+
+        if (
+          loanItemIds.some(
+            (id: number) =>
+              !Number.isInteger(id) || id <= 0,
+          )
+        ) {
+          return json(
+            {
+              detail:
+                '貸出IDが正しくありません',
+            },
+            400,
+          )
+        }
+
+        if (
+          new Set(loanItemIds).size !==
+          loanItemIds.length
+        ) {
+          return json(
+            {
+              detail:
+                '同じ貸出IDが重複しています',
+            },
+            400,
+          )
+        }
+
+        const placeholders =
+          loanItemIds.map(() => '?').join(', ')
+
+        const itemsResult = await env.DB
+          .prepare(`
+            SELECT
+              id,
+              loan_id,
+              returned_at
+            FROM loan_items
+            WHERE id IN (${placeholders})
+          `)
+          .bind(...loanItemIds)
+          .all<{
+            id: number
+            loan_id: number
+            returned_at: string | null
+          }>()
+
+        if (
+          itemsResult.results.length !==
+          loanItemIds.length
+        ) {
+          return json(
+            {
+              detail:
+                '存在しない貸出履歴が含まれています',
+            },
+            400,
+          )
+        }
+
+        const unreturnedItems =
+          itemsResult.results.filter(
+            item => !item.returned_at,
+          )
+
+        if (unreturnedItems.length > 0) {
+          return json(
+            {
+              detail:
+                '貸出中の履歴は削除できません',
+            },
+            400,
+          )
+        }
+
+        const loanDeleteCounts =
+          new Map<number, number>()
+
+        for (const item of itemsResult.results) {
+          loanDeleteCounts.set(
+            item.loan_id,
+            (loanDeleteCounts.get(item.loan_id) ?? 0) +
+              1,
+          )
+        }
+
+        const statements = []
+
+        statements.push(
+          env.DB
+            .prepare(`
+              DELETE FROM loan_items
+              WHERE id IN (${placeholders})
+            `)
+            .bind(...loanItemIds),
+        )
+
+        for (
+          const [
+            loanId,
+            deleteCount,
+          ] of loanDeleteCounts
+        ) {
+          statements.push(
+            env.DB
+              .prepare(`
+                UPDATE loans
+                SET
+                  quantity = quantity - ?,
+                  returned_quantity =
+                    returned_quantity - ?
+                WHERE id = ?
+              `)
+              .bind(
+                deleteCount,
+                deleteCount,
+                loanId,
+              ),
+          )
+
+          statements.push(
+            env.DB
+              .prepare(`
+                DELETE FROM loan_return_notices
+                WHERE loan_id = ?
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM loan_items
+                    WHERE loan_items.loan_id = ?
+                  )
+              `)
+              .bind(loanId, loanId),
+          )
+
+          statements.push(
+            env.DB
+              .prepare(`
+                DELETE FROM loans
+                WHERE id = ?
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM loan_items
+                    WHERE loan_items.loan_id = ?
+                  )
+              `)
+              .bind(loanId, loanId),
+          )
+        }
+
+        statements.push(
+          env.DB
+            .prepare(`
+              DELETE FROM borrowers
+              WHERE NOT EXISTS (
+                SELECT 1
+                FROM loans
+                WHERE loans.borrower_id = borrowers.id
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM loans
+                WHERE loans.returned_by_id = borrowers.id
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM loan_items
+                WHERE loan_items.returned_by_id = borrowers.id
+              )
+            `),
+        )
+
+        await env.DB.batch(statements)
+
+        return json({
+          detail:
+            `${loanItemIds.length}件の貸出履歴を削除しました`,
+          deleted_count: loanItemIds.length,
+          deleted_loan_item_ids: loanItemIds,
+        })
+      }
+
+      const historyDeleteMatch =
+        url.pathname.match(/^\/loans\/history\/(\d+)$/)
+
+      if (
+        historyDeleteMatch &&
+        request.method === 'DELETE'
+      ) {
+        const adminError = requireAdmin(authenticated)
+
+        if (adminError) {
+          return adminError
+        }
+
+        const loanItemId = Number(
+          historyDeleteMatch[1],
+        )
+
+        if (
+          !Number.isInteger(loanItemId) ||
+          loanItemId <= 0
+        ) {
+          return json(
+            {
+              detail:
+                '貸出IDが正しくありません',
+            },
+            400,
+          )
+        }
+
+        const loanItem = await env.DB
+          .prepare(`
+            SELECT
+              loan_items.id,
+              loan_items.loan_id,
+              loan_items.returned_at,
+              loans.quantity,
+              loans.returned_quantity
+            FROM loan_items
+            INNER JOIN loans
+              ON loans.id = loan_items.loan_id
+            WHERE loan_items.id = ?
+          `)
+          .bind(loanItemId)
+          .first<{
+            id: number
+            loan_id: number
+            returned_at: string | null
+            quantity: number
+            returned_quantity: number
+          }>()
+
+        if (!loanItem) {
+          return json(
+            {
+              detail:
+                '指定された貸出履歴が見つかりません',
+            },
+            404,
+          )
+        }
+
+        if (!loanItem.returned_at) {
+          return json(
+            {
+              detail:
+                '貸出中の履歴は削除できません',
+            },
+            400,
+          )
+        }
+
+        const remainingItems = await env.DB
+          .prepare(`
+            SELECT COUNT(*) AS count
+            FROM loan_items
+            WHERE loan_id = ?
+              AND id != ?
+          `)
+          .bind(
+            loanItem.loan_id,
+            loanItemId,
+          )
+          .first<{
+            count: number
+          }>()
+
+        const remainingCount =
+          Number(remainingItems?.count ?? 0)
+
+        if (remainingCount === 0) {
+          await env.DB.batch([
+            env.DB
+              .prepare(`
+                DELETE FROM loan_return_notices
+                WHERE loan_id = ?
+              `)
+              .bind(loanItem.loan_id),
+
+            env.DB
+              .prepare(`
+                DELETE FROM loan_items
+                WHERE id = ?
+              `)
+              .bind(loanItemId),
+
+            env.DB
+              .prepare(`
+                DELETE FROM loans
+                WHERE id = ?
+              `)
+              .bind(loanItem.loan_id),
+          ])
+        } else {
+          await env.DB.batch([
+            env.DB
+              .prepare(`
+                DELETE FROM loan_items
+                WHERE id = ?
+              `)
+              .bind(loanItemId),
+
+            env.DB
+              .prepare(`
+                UPDATE loans
+                SET
+                  quantity = MAX(quantity - 1, 0),
+                  returned_quantity =
+                    MAX(returned_quantity - 1, 0)
+                WHERE id = ?
+              `)
+              .bind(loanItem.loan_id),
+          ])
+        }
+
+        await env.DB.batch([
+          env.DB
+            .prepare(`
+              DELETE FROM borrowers
+              WHERE NOT EXISTS (
+                SELECT 1
+                FROM loans
+                WHERE loans.borrower_id = borrowers.id
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM loans
+                WHERE loans.returned_by_id = borrowers.id
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM loan_items
+                WHERE loan_items.returned_by_id = borrowers.id
+              )
+            `),
+        ])
+
+        return json({
+          detail:
+            `貸出ID ${loanItemId} の履歴を削除しました`,
+          deleted_loan_item_id: loanItemId,
+        })
+      }
+
+const loanHistoryEditMatch = url.pathname.match(/^\/loans\/history\/(\d+)$/)
+
+      if (loanHistoryEditMatch && request.method === 'PATCH') {
+        const adminError = requireAdmin(authenticated)
+        if (adminError) return adminError
+
+        const loanItemId = Number(loanHistoryEditMatch[1])
+        if (!Number.isInteger(loanItemId) || loanItemId <= 0) {
+          return json({ detail: '貸出履歴IDが正しくありません' }, 400)
+        }
+
+        let body: any
+        try {
+          body = await request.json()
+        } catch {
+          return json({ detail: 'リクエストが正しくありません' }, 400)
+        }
+
+        const className = typeof body.class_name === 'string' ? body.class_name.trim() : ''
+        const borrowerName = typeof body.borrower_name === 'string' ? body.borrower_name.trim() : ''
+        const dueAt = body.due_at === null || body.due_at === '' ? null : body.due_at
+
+        if (!className || !borrowerName) {
+          return json({ detail: 'クラスと氏名を入力してください' }, 400)
+        }
+        if (dueAt !== null && (
+          typeof dueAt !== 'string' ||
+          !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dueAt) ||
+          Number.isNaN(new Date(`${dueAt}:00+09:00`).getTime())
+        )) {
+          return json({ detail: '返却期限の形式が正しくありません' }, 400)
+        }
+
+        const loanItem = await env.DB
+          .prepare(`
+            SELECT loan_items.loan_id
+            FROM loan_items
+            WHERE loan_items.id = ?
+          `)
+          .bind(loanItemId)
+          .first<{ loan_id: number }>()
+
+        if (!loanItem) return json({ detail: '貸出履歴が見つかりません' }, 404)
+
+        let borrower = await env.DB
+          .prepare('SELECT id FROM borrowers WHERE class_name = ? AND name = ? LIMIT 1')
+          .bind(className, borrowerName)
+          .first<{ id: number }>()
+
+        if (!borrower) {
+          const inserted = await env.DB
+            .prepare(`
+              INSERT INTO borrowers (class_name, name, created_at, updated_at)
+              VALUES (?, ?, datetime('now', '+9 hours'), datetime('now', '+9 hours'))
+            `)
+            .bind(className, borrowerName)
+            .run()
+          const borrowerId = Number(inserted.meta.last_row_id)
+          if (!borrowerId) return json({ detail: '借用者情報を更新できませんでした' }, 500)
+          borrower = { id: borrowerId }
+        }
+
+        await env.DB
+          .prepare(`
+            UPDATE loans
+            SET borrower_id = ?, due_at = ?
+            WHERE id = ?
+          `)
+          .bind(borrower.id, dueAt ? dueAt.replace('T', ' ') + ':00' : null, loanItem.loan_id)
+          .run()
+
+        return json({ detail: '貸出履歴を更新しました' })
+      }
+
+      if (url.pathname === '/loans/history' && request.method === 'GET') {
+          const className = url.searchParams.get('class_name')?.trim()
+          const status = url.searchParams.get('status')?.trim()
+
+          let query = `
+            SELECT
+              loan_items.id AS loan_item_id,
+              loan_items.loan_id,
+              loan_items.tool_item_id,
+              loan_items.returned_at AS item_returned_at,
+              CASE
+                WHEN loan_items.extended_to_loan_id IS NOT NULL THEN 1
+                ELSE 0
+              END AS is_extended,
+
+              loans.borrower_id,
+              loans.tool_id,
+              loans.borrowed_at,
+              loans.due_at,
+              loan_items.overdue_seconds,
+              loan_items.returned_by_id,
+
+              borrowers.class_name,
+              borrowers.name AS borrower_name,
+
+              returned_borrowers.class_name AS returned_by_class_name,
+              returned_borrowers.name AS returned_by_name,
+
+              tools.name AS tool_name,
+              CASE
+                WHEN tool_items.management_number LIKE 'DELETED-%'
+                THEN substr(
+                  tool_items.management_number,
+                  length('DELETED-' || tool_items.id || '-') + 1
+                )
+                ELSE tool_items.management_number
+              END AS management_number
+
+            FROM loan_items
+
+            INNER JOIN loans
+              ON loans.id = loan_items.loan_id
+
+            INNER JOIN borrowers
+              ON borrowers.id = loans.borrower_id
+
+            INNER JOIN tools
+              ON tools.id = loans.tool_id
+
+            INNER JOIN tool_items
+              ON tool_items.id = loan_items.tool_item_id
+
+            LEFT JOIN borrowers AS returned_borrowers
+              ON returned_borrowers.id = loan_items.returned_by_id
+          `
+
+          const conditions: string[] = []
+          const bindings: string[] = []
+
+          if (className) {
+            conditions.push('borrowers.class_name = ?')
+            bindings.push(className)
+          }
+
+          if (status === 'borrowed') {
+            conditions.push('loan_items.returned_at IS NULL')
+          } else if (status === 'returned') {
+            conditions.push('loan_items.returned_at IS NOT NULL')
+          }
+
+          if (conditions.length > 0) {
+            query += ` WHERE ${conditions.join(' AND ')}`
+          }
+
+          query += `
+            ORDER BY
+              loans.borrowed_at DESC,
+              loan_items.id DESC
+          `
+
+          const result = await env.DB
+            .prepare(query)
+            .bind(...bindings)
+            .all()
+
+          const history = result.results.map((item: any) => ({
+            ...item,
+            returned_at: item.item_returned_at,
+            status:
+              item.item_returned_at !== null
+                ? 'returned'
+                : 'borrowed',
+            quantity: 1,
+          }))
+
+          return json(history)
+        }
+
+        // 貸出延長
+        // 管理者権限は不要。認証済みユーザーが実行可能。
+        const loanExtendMatch =
+          url.pathname.match(
+            /^\/loans\/(\d+)\/extend\/(\d+)$/,
+          )
+
+        if (
+          loanExtendMatch &&
+          request.method === 'POST'
+        ) {
+          const loanId = Number(loanExtendMatch[1])
+          const toolItemId = Number(loanExtendMatch[2])
+
+          if (
+            !Number.isInteger(loanId) ||
+            loanId <= 0 ||
+            !Number.isInteger(toolItemId) ||
+            toolItemId <= 0
+          ) {
+            return json(
+              {
+                detail: '貸出IDが正しくありません',
+              },
+              400,
+            )
+          }
+
+          let body: any
+
+          try {
+            body = await request.json()
+          } catch {
+            return json(
+              {
+                detail: 'リクエストが正しくありません',
+              },
+              400,
+            )
+          }
+
+          const borrowerName =
+            typeof body.name === 'string'
+              ? body.name.trim()
+              : ''
+
+          if (!borrowerName) {
+            return json(
+              {
+                detail: '延長する方の氏名を入力してください',
+              },
+              400,
+            )
+          }
+
+          const loanResult = await env.DB
+            .prepare(`
+              SELECT
+                loans.id,
+                loans.borrower_id,
+                loans.tool_id,
+                loans.quantity,
+                loans.borrowed_at,
+                loans.due_at,
+                loans.returned_quantity,
+                loans.status,
+                borrowers.class_name,
+                borrowers.name AS borrower_name,
+                tools.name AS tool_name,
+                tools.loan_duration_minutes,
+                tools.loan_duration_minutes_per_chief
+              FROM loans
+              INNER JOIN borrowers
+                ON borrowers.id = loans.borrower_id
+              INNER JOIN tools
+                ON tools.id = loans.tool_id
+              WHERE loans.id = ?
+                AND loans.status = 'borrowed'
+              LIMIT 1
+            `)
+            .bind(loanId)
+            .first<{
+              id: number
+              borrower_id: number
+              tool_id: number
+              quantity: number
+              borrowed_at: string
+              due_at: string | null
+              returned_quantity: number
+              status: string
+              class_name: string
+              borrower_name: string
+              tool_name: string
+              loan_duration_minutes: number | null
+              loan_duration_minutes_per_chief: number | null
+            }>()
+
+          if (!loanResult) {
+            return json(
+              {
+                detail: '現在貸出中の貸出情報が見つかりません',
+              },
+              404,
+            )
+          }
+
+          const isChief = loanResult.class_name === 'チーフ'
+
+          const waitingReservation = await env.DB
+            .prepare(`
+              SELECT class_name, name
+              FROM reservations
+              WHERE tool_id = ?
+                AND status = 'waiting'
+              ORDER BY created_at ASC, id ASC
+              LIMIT 1
+            `)
+            .bind(loanResult.tool_id)
+            .first<{
+              class_name: string
+              name: string
+            }>()
+
+          if (waitingReservation) {
+            return json(
+              {
+                detail:
+                  `この工具・機材には予約があります。${waitingReservation.class_name} ${waitingReservation.name}さんの予約を先に処理してください`,
+              },
+              400,
+            )
+          }
+
+          const loanDurationMinutes = isChief
+            ? loanResult.loan_duration_minutes_per_chief
+            : loanResult.loan_duration_minutes
+
+          if (loanDurationMinutes === null) {
+            return json(
+              {
+                detail:
+                  'この工具・機材には個別の貸出時間制限が設定されていないため、延長できません',
+              },
+              400,
+            )
+          }
+
+          const loanItemsResult = await env.DB
+            .prepare(`
+              SELECT
+                loan_items.id AS loan_item_id,
+                loan_items.tool_item_id,
+                loan_items.returned_at,
+                tool_items.management_number,
+                tool_items.status AS tool_item_status
+              FROM loan_items
+              INNER JOIN tool_items
+                ON tool_items.id = loan_items.tool_item_id
+              WHERE loan_items.loan_id = ?
+                AND loan_items.tool_item_id = ?
+                AND loan_items.returned_at IS NULL
+              ORDER BY tool_items.management_number ASC
+            `)
+            .bind(loanId, toolItemId)
+            .all<{
+              loan_item_id: number
+              tool_item_id: number
+              returned_at: string | null
+              management_number: string
+              tool_item_status: string
+            }>()
+
+          const loanItems = loanItemsResult.results
+
+          if (loanItems.length === 0) {
+            return json(
+              {
+                detail: '延長できる貸出個体がありません',
+              },
+              400,
+            )
+          }
+
+          const unavailableItem = loanItems.find(
+            item => item.tool_item_status !== 'borrowed',
+          )
+
+          if (unavailableItem) {
+            return json(
+              {
+                detail:
+                  `${unavailableItem.management_number} は現在の貸出状態ではありません`,
+              },
+              400,
+            )
+          }
+
+          let borrower = await env.DB
+            .prepare(`
+              SELECT
+                id,
+                class_name,
+                name
+              FROM borrowers
+              WHERE class_name = ?
+                AND name = ?
+              LIMIT 1
+            `)
+            .bind(
+              loanResult.class_name,
+              borrowerName,
+            )
+            .first<{
+              id: number
+              class_name: string
+              name: string
+            }>()
+
+          if (!borrower) {
+            const borrowerResult = await env.DB
+              .prepare(`
+                INSERT INTO borrowers (
+                  class_name,
+                  name,
+                  created_at,
+                  updated_at
+                )
+                VALUES (
+                  ?,
+                  ?,
+                  datetime('now', '+9 hours'),
+                  datetime('now', '+9 hours')
+                )
+              `)
+              .bind(
+                loanResult.class_name,
+                borrowerName,
+              )
+              .run()
+
+            const borrowerId =
+              Number(borrowerResult.meta.last_row_id)
+
+            if (!borrowerId) {
+              return json(
+                {
+                  detail:
+                    '延長する借用者の登録に失敗しました',
+                },
+                500,
+              )
+            }
+
+            borrower = {
+              id: borrowerId,
+              class_name: loanResult.class_name,
+              name: borrowerName,
+            }
+          }
+
+          let dueAt = formatJstDateTime(
+            new Date(
+              Date.now() +
+                loanDurationMinutes * 60 * 1000,
+            ),
+          )
+
+          const globalReturnDueAt = await getNextUniversalReturnDueAt(
+            env.DB,
+            new Date(),
+            isChief,
+          )
+
+          if (
+            globalReturnDueAt !== null &&
+            parseJstDateTime(globalReturnDueAt) <
+              parseJstDateTime(dueAt)
+          ) {
+            dueAt = globalReturnDueAt
+          }
+
+          const newLoanResult = await env.DB
+            .prepare(`
+              INSERT INTO loans (
+                borrower_id,
+                tool_id,
+                quantity,
+                borrowed_at,
+                returned_quantity,
+                status,
+                due_at
+              )
+              VALUES (
+                ?,
+                ?,
+                ?,
+                datetime('now', '+9 hours'),
+                0,
+                'borrowed',
+                ?
+              )
+            `)
+            .bind(
+              borrower.id,
+              loanResult.tool_id,
+              loanItems.length,
+              dueAt,
+            )
+            .run()
+
+          const newLoanId =
+            Number(newLoanResult.meta.last_row_id)
+
+          if (!newLoanId) {
+            return json(
+              {
+                detail:
+                  '延長後の貸出記録の登録に失敗しました',
+              },
+              500,
+            )
+          }
+
+          const statements: D1PreparedStatement[] = []
+
+          for (const item of loanItems) {
+            statements.push(
+              env.DB
+                .prepare(`
+                  UPDATE loan_items
+                  SET
+                    returned_at =
+                      datetime('now', '+9 hours'),
+                    extended_to_loan_id = ?,
+                    returned_by_id = ?,
+                    overdue_seconds =
+                      CASE
+                        WHEN ? IS NOT NULL
+                          AND datetime('now', '+9 hours')
+                            > datetime(?)
+                        THEN
+                          unixepoch(
+                            datetime('now', '+9 hours')
+                          )
+                          - unixepoch(?)
+                        ELSE 0
+                      END
+                  WHERE id = ?
+                    AND returned_at IS NULL
+                `)
+                .bind(
+                  newLoanId,
+                  borrower.id,
+                  loanResult.due_at,
+                  loanResult.due_at,
+                  loanResult.due_at,
+                  item.loan_item_id,
+                ),
+            )
+
+            statements.push(
+              env.DB
+                .prepare(`
+                  UPDATE tool_items
+                  SET
+                    status = 'borrowed',
+                    updated_at =
+                      datetime('now', '+9 hours')
+                  WHERE id = ?
+                    AND status = 'borrowed'
+                `)
+                .bind(item.tool_item_id),
+            )
+
+            statements.push(
+              env.DB
+                .prepare(`
+                  INSERT INTO loan_items (
+                    loan_id,
+                    tool_item_id,
+                    created_at
+                  )
+                  VALUES (
+                    ?,
+                    ?,
+                    datetime('now', '+9 hours')
+                  )
+                `)
+                .bind(
+                  newLoanId,
+                  item.tool_item_id,
+                ),
+            )
+          }
+
+          statements.push(
+            env.DB
+              .prepare(`
+                UPDATE loans
+                SET
+                  returned_quantity = returned_quantity + 1,
+                  status = CASE
+                    WHEN returned_quantity + 1 >= quantity
+                    THEN 'returned'
+                    ELSE 'borrowed'
+                  END,
+                  returned_at = CASE
+                    WHEN returned_quantity + 1 >= quantity
+                    THEN datetime('now', '+9 hours')
+                    ELSE NULL
+                  END
+                WHERE id = ?
+                  AND status = 'borrowed'
+                  AND returned_quantity < quantity
+              `)
+              .bind(loanId),
+          )
+
+          await env.DB.batch(statements)
+
+          return json(
+            {
+              detail: '貸出を延長しました',
+              previous_loan_id: loanId,
+              loan_id: newLoanId,
+              class_name: loanResult.class_name,
+              borrower_name: borrower.name,
+              tool_name: loanResult.tool_name,
+              due_at: dueAt,
+              management_numbers:
+                loanItems.map(
+                  item => item.management_number,
+                ),
+            },
+          )
+        }
+
+        if (url.pathname === '/loans/return' && request.method === 'POST') {
+          const body = await request.json()
+
+          const rawLoanItemIds = Array.isArray(body.loan_item_ids)
+            ? body.loan_item_ids
+            : body.loan_item_id !== undefined
+              ? [body.loan_item_id]
+              : []
+
+          const loanItemIds = rawLoanItemIds.map(Number)
+
+          if (
+            loanItemIds.length === 0 ||
+            loanItemIds.some(
+              (id: number) => !Number.isInteger(id) || id <= 0,
+            )
+          ) {
+            return json(
+              {
+                detail: '返却する個体を指定してください',
+              },
+              400,
+            )
+          }
+
+          const uniqueLoanItemIds = [...new Set(loanItemIds)]
+
+          if (uniqueLoanItemIds.length !== loanItemIds.length) {
+            return json(
+              {
+                detail: '同じ個体が重複して選択されています',
+              },
+              400,
+            )
+          }
+
+          const returnerClassName =
+            typeof body.class_name === 'string'
+              ? body.class_name.trim()
+              : ''
+
+          const returnerName =
+            typeof body.name === 'string'
+              ? body.name.trim()
+              : ''
+
+          if (!returnerClassName) {
+            return json(
+              {
+                detail: '返却者のクラスを入力してください',
+              },
+              400,
+            )
+          }
+
+          if (!returnerName) {
+            return json(
+              {
+                detail: '返却者の氏名を入力してください',
+              },
+              400,
+            )
+          }
+
+          const placeholders = uniqueLoanItemIds
+            .map(() => '?')
+            .join(', ')
+
+          const loanItemsResult = await env.DB
+            .prepare(`
+              SELECT
+                loan_items.id AS loan_item_id,
+                loan_items.loan_id,
+                loan_items.tool_item_id,
+                loan_items.returned_at,
+                loans.borrower_id,
+                loans.tool_id,
+                loans.quantity,
+                loans.returned_quantity,
+                loans.due_at,
+                loans.status AS loan_status,
+                borrowers.class_name,
+                borrowers.name AS borrower_name,
+                tools.name AS tool_name,
+                tool_items.management_number,
+                tool_items.status AS tool_item_status
+              FROM loan_items
+              INNER JOIN loans
+                ON loans.id = loan_items.loan_id
+              INNER JOIN borrowers
+                ON borrowers.id = loans.borrower_id
+              INNER JOIN tools
+                ON tools.id = loans.tool_id
+              INNER JOIN tool_items
+                ON tool_items.id = loan_items.tool_item_id
+              WHERE loan_items.id IN (${placeholders})
+            `)
+            .bind(...uniqueLoanItemIds)
+            .all<{
+              loan_item_id: number
+              loan_id: number
+              tool_item_id: number
+              returned_at: string | null
+              borrower_id: number
+              tool_id: number
+              quantity: number
+              returned_quantity: number
+              due_at: string | null
+              loan_status: string
+              class_name: string
+              borrower_name: string
+              tool_name: string
+              management_number: string
+              tool_item_status: string
+            }>()
+
+          const loanItems = loanItemsResult.results
+
+          if (loanItems.length !== uniqueLoanItemIds.length) {
+            return json(
+              {
+                detail: '指定された返却対象の一部が見つかりません',
+              },
+              404,
+            )
+          }
+
+          const alreadyReturned = loanItems.find(
+            item =>
+              item.returned_at !== null ||
+              item.tool_item_status !== 'borrowed' ||
+              item.loan_status !== 'borrowed',
+          )
+
+          if (alreadyReturned) {
+            return json(
+              {
+                detail: `${alreadyReturned.management_number} はすでに返却されています`,
+              },
+              400,
+            )
+          }
+
+          const existingReturner = await env.DB
+            .prepare(`
+              SELECT id
+              FROM borrowers
+              WHERE class_name = ?
+                AND name = ?
+              LIMIT 1
+            `)
+            .bind(returnerClassName, returnerName)
+            .first<{ id: number }>()
+
+          let returnerId = existingReturner?.id ?? null
+
+          if (returnerId === null) {
+            const inserted = await env.DB
+              .prepare(`
+                INSERT INTO borrowers (
+                  class_name,
+                  name,
+                  created_at,
+                  updated_at
+                )
+                VALUES (?, ?, datetime('now', '+9 hours'), datetime('now', '+9 hours'))
+              `)
+              .bind(returnerClassName, returnerName)
+              .run()
+
+            returnerId = Number(inserted.meta.last_row_id)
+
+            if (!returnerId) {
+              return json(
+                {
+                  detail: '返却者の登録に失敗しました',
+                },
+                500,
+              )
+            }
+          }
+
+          const returnStatements: D1PreparedStatement[] = []
+
+          for (const item of loanItems) {
+            returnStatements.push(
+              env.DB
+                .prepare(`
+                  UPDATE loan_items
+                  SET
+                    returned_at = datetime('now', '+9 hours'),
+                    returned_by_id = ?,
+                    overdue_seconds = CASE
+                      WHEN ? IS NOT NULL
+                        AND datetime('now', '+9 hours') > datetime(?)
+                      THEN unixepoch(datetime('now', '+9 hours'))
+                        - unixepoch(?)
+                      ELSE 0
+                    END
+                  WHERE id = ?
+                    AND returned_at IS NULL
+                `)
+                .bind(
+                  returnerId,
+                  item.due_at,
+                  item.due_at,
+                  item.due_at,
+                  item.loan_item_id,
+                ),
+            )
+
+            returnStatements.push(
+              env.DB
+                .prepare(`
+                  UPDATE tool_items
+                  SET
+                    status = 'available',
+                    updated_at = datetime('now', '+9 hours')
+                  WHERE id = ?
+                    AND status = 'borrowed'
+                `)
+                .bind(item.tool_item_id),
+            )
+
+            returnStatements.push(
+              env.DB
+                .prepare(`
+                  UPDATE tools
+                  SET
+                    available_quantity = available_quantity + 1,
+                    updated_at = datetime('now', '+9 hours')
+                  WHERE id = ?
+                `)
+                .bind(item.tool_id),
+            )
+
+            returnStatements.push(
+              env.DB
+                .prepare(`
+                  UPDATE loans
+                  SET
+                    returned_quantity = returned_quantity + 1
+                  WHERE id = ?
+                    AND status = 'borrowed'
+                `)
+                .bind(item.loan_id),
+            )
+          }
+
+          await env.DB.batch(returnStatements)
+
+          const uniqueLoanIds = [
+            ...new Set(loanItems.map(item => item.loan_id)),
+          ]
+
+          for (const loanId of uniqueLoanIds) {
+            await env.DB
+              .prepare(`
+                UPDATE loans
+                SET
+                  status = 'returned',
+                  returned_at = datetime('now', '+9 hours')
+                WHERE id = ?
+                  AND status = 'borrowed'
+                  AND returned_quantity >= quantity
+              `)
+              .bind(loanId)
+              .run()
+          }
+
+          const returnedItemsResult = await env.DB
+            .prepare(`
+              SELECT
+                loan_items.id AS loan_item_id,
+                loan_items.loan_id,
+                loan_items.tool_item_id,
+                loan_items.returned_at,
+                loans.borrower_id,
+                loans.tool_id,
+                loans.quantity,
+                loans.returned_quantity,
+                loans.borrowed_at,
+                loans.returned_at AS loan_returned_at,
+                loan_items.returned_by_id,
+                loans.status,
+                borrowers.class_name,
+                borrowers.name AS borrower_name,
+                returned_borrowers.class_name AS returned_by_class_name,
+                returned_borrowers.name AS returned_by_name,
+                tools.name AS tool_name,
+                CASE
+                  WHEN tool_items.management_number LIKE 'DELETED-%'
+                  THEN substr(
+                    tool_items.management_number,
+                    length('DELETED-' || tool_items.id || '-') + 1
+                  )
+                  ELSE tool_items.management_number
+                END AS management_number
+              FROM loan_items
+              INNER JOIN loans
+                ON loans.id = loan_items.loan_id
+              INNER JOIN borrowers
+                ON borrowers.id = loans.borrower_id
+              INNER JOIN tools
+                ON tools.id = loans.tool_id
+              INNER JOIN tool_items
+                ON tool_items.id = loan_items.tool_item_id
+              LEFT JOIN borrowers AS returned_borrowers
+                ON returned_borrowers.id = loan_items.returned_by_id
+              WHERE loan_items.id IN (${placeholders})
+              ORDER BY loan_items.id
+            `)
+            .bind(...uniqueLoanItemIds)
+            .all()
+
+          return json({
+            count: returnedItemsResult.results.length,
+            items: returnedItemsResult.results,
+          })
+        }
+
+      if (
+        url.pathname === '/settings/return-time' &&
+        request.method === 'GET'
+      ) {
+        const result = await env.DB
+          .prepare(`
+            SELECT
+              id,
+              return_time
+            FROM universal_return_times
+            ORDER BY return_time ASC
+          `)
+          .all<{
+            id: number
+            return_time: string
+          }>()
+
+        return json({
+          universal_return_times: result.results,
+        })
+      }
+
+      if (
+        url.pathname === '/settings/return-time' &&
+        request.method === 'PATCH'
+      ) {
+        const body = await request.json()
+
+        if (!Array.isArray(body.universal_return_times)) {
+          return json(
+            {
+              detail: '返却時刻は配列で指定してください',
+            },
+            400,
+          )
+        }
+
+        const values = body.universal_return_times.map(
+          (value: unknown) =>
+            typeof value === 'string'
+              ? value.trim()
+              : '',
+        )
+
+        if (values.length > 1) {
+          return json(
+            {
+              detail: '全体返却時刻は1つだけ設定できます',
+            },
+            400,
+          )
+        }
+
+        if (
+          values.some(
+            (value: string) =>
+              !/^([01]\d|2[0-3]):[0-5]\d$/.test(value),
+          )
+        ) {
+          return json(
+            {
+              detail: '返却時刻はHH:mm形式で指定してください',
+            },
+            400,
+          )
+        }
+
+        const uniqueValues = [...new Set(values)]
+
+        const existingTimes = await env.DB
+          .prepare(`
+            SELECT id
+            FROM universal_return_times
+            ORDER BY id ASC
+          `)
+          .all<{ id: number }>()
+
+        if (uniqueValues.length === 0) {
+          await env.DB
+            .prepare('DELETE FROM universal_return_times')
+            .run()
+        } else if (existingTimes.results.length > 0) {
+          const keepId = existingTimes.results[0].id
+          const obsoleteIds = existingTimes.results
+            .slice(1)
+            .map(item => item.id)
+
+          if (obsoleteIds.length > 0) {
+            const placeholders = obsoleteIds.map(() => '?').join(', ')
+            await env.DB
+              .prepare(`
+                INSERT INTO loan_return_notices (
+                  loan_id,
+                  return_time_id,
+                  notice_date,
+                  notified_at,
+                  overdue_notified_at,
+                  return_time_type
+                )
+                SELECT
+                  loan_id,
+                  ?,
+                  notice_date,
+                  notified_at,
+                  overdue_notified_at,
+                  return_time_type
+                FROM loan_return_notices
+                WHERE return_time_id IN (${placeholders})
+                ON CONFLICT(loan_id, return_time_id, notice_date)
+                DO UPDATE SET
+                  notified_at = COALESCE(
+                    loan_return_notices.notified_at,
+                    excluded.notified_at
+                  ),
+                  overdue_notified_at = COALESCE(
+                    loan_return_notices.overdue_notified_at,
+                    excluded.overdue_notified_at
+                  ),
+                  return_time_type = excluded.return_time_type
+              `)
+              .bind(keepId, ...obsoleteIds)
+              .run()
+          }
+
+          await env.DB.batch([
+            env.DB
+              .prepare(`
+                UPDATE universal_return_times
+                SET return_time = ?
+                WHERE id = ?
+              `)
+              .bind(uniqueValues[0], keepId),
+            env.DB
+              .prepare(`
+                DELETE FROM universal_return_times
+                WHERE id != ?
+              `)
+              .bind(keepId),
+          ])
+        } else {
+          await env.DB
+            .prepare(`
+              INSERT INTO universal_return_times (
+                return_time,
+                created_at
+              )
+              VALUES (?, datetime('now', '+9 hours'))
+            `)
+            .bind(uniqueValues[0])
+            .run()
+        }
+
+        const result = await env.DB
+          .prepare(`
+            SELECT
+              id,
+              return_time
+            FROM universal_return_times
+            ORDER BY return_time ASC
+          `)
+          .all<{
+            id: number
+            return_time: string
+          }>()
+
+                if (uniqueValues.length > 0) {
+          const nextReturnDueAt = await getNextUniversalReturnDueAt(
+            env.DB,
+            new Date(),
+            false,
+          )
+
+          if (nextReturnDueAt !== null) {
+            await env.DB.batch([
+              env.DB
+                .prepare(`
+                  UPDATE loans
+                  SET due_at = ?
+                  WHERE status = 'borrowed'
+                    AND borrower_id IN (
+                      SELECT id FROM borrowers
+                      WHERE class_name != 'チーフ'
+                    )
+                    AND tool_id IN (
+                      SELECT id FROM tools
+                      WHERE universal_return_enabled = 1
+                    )
+                `)
+                .bind(nextReturnDueAt),
+              env.DB
+                .prepare(`
+                  UPDATE loans
+                  SET due_at = ?
+                  WHERE status = 'borrowed'
+                    AND borrower_id IN (
+                      SELECT id FROM borrowers
+                      WHERE class_name != 'チーフ'
+                    )
+                    AND tool_id IN (
+                      SELECT id FROM tools
+                      WHERE universal_return_enabled = 0
+                    )
+                    AND due_at IS NOT NULL
+                    AND datetime(due_at) > datetime(?)
+                `)
+                .bind(nextReturnDueAt, nextReturnDueAt),
+            ])
+            }
+        }
+
+return json({
+          universal_return_times: result.results,
+        })
+      }
+
+      if (
+        url.pathname === '/settings/return-time-chief' &&
+        request.method === 'GET'
+      ) {
+        const result = await env.DB
+          .prepare(`
+            SELECT
+              id,
+              return_time
+            FROM universal_return_times_chief
+            ORDER BY return_time ASC
+          `)
+          .all<{
+            id: number
+            return_time: string
+          }>()
+
+        return json({
+          universal_return_times: result.results,
+        })
+      }
+
+      if (
+        url.pathname === '/settings/return-time-chief' &&
+        request.method === 'PATCH'
+      ) {
+        const body = await request.json()
+
+        if (!Array.isArray(body.universal_return_times)) {
+          return json(
+            {
+              detail: '返却時刻は配列で指定してください',
+            },
+            400,
+          )
+        }
+
+        const values = body.universal_return_times.map(
+          (value: unknown) =>
+            typeof value === 'string'
+              ? value.trim()
+              : '',
+        )
+
+        if (values.length > 1) {
+          return json(
+            {
+              detail: '全体返却時刻は1つだけ設定できます',
+            },
+            400,
+          )
+        }
+
+        if (
+          values.some(
+            (value: string) =>
+              !/^([01]\d|2[0-3]):[0-5]\d$/.test(value),
+          )
+        ) {
+          return json(
+            {
+              detail: '返却時刻はHH:mm形式で指定してください',
+            },
+            400,
+          )
+        }
+
+        const uniqueValues = [...new Set(values)]
+
+        const existingTimes = await env.DB
+          .prepare(`
+            SELECT id
+            FROM universal_return_times_chief
+            ORDER BY id ASC
+          `)
+          .all<{ id: number }>()
+
+        if (uniqueValues.length === 0) {
+          await env.DB
+            .prepare('DELETE FROM universal_return_times_chief')
+            .run()
+        } else if (existingTimes.results.length > 0) {
+          const keepId = existingTimes.results[0].id
+          const obsoleteIds = existingTimes.results
+            .slice(1)
+            .map(item => item.id)
+
+          if (obsoleteIds.length > 0) {
+            const placeholders = obsoleteIds.map(() => '?').join(', ')
+            await env.DB
+              .prepare(`
+                INSERT INTO loan_return_notices (
+                  loan_id,
+                  return_time_id,
+                  notice_date,
+                  notified_at,
+                  overdue_notified_at,
+                  return_time_type
+                )
+                SELECT
+                  loan_id,
+                  ?,
+                  notice_date,
+                  notified_at,
+                  overdue_notified_at,
+                  return_time_type
+                FROM loan_return_notices
+                WHERE return_time_id IN (${placeholders})
+                ON CONFLICT(loan_id, return_time_id, notice_date)
+                DO UPDATE SET
+                  notified_at = COALESCE(
+                    loan_return_notices.notified_at,
+                    excluded.notified_at
+                  ),
+                  overdue_notified_at = COALESCE(
+                    loan_return_notices.overdue_notified_at,
+                    excluded.overdue_notified_at
+                  ),
+                  return_time_type = excluded.return_time_type
+              `)
+              .bind(keepId, ...obsoleteIds)
+              .run()
+          }
+
+          await env.DB.batch([
+            env.DB
+              .prepare(`
+                UPDATE universal_return_times_chief
+                SET return_time = ?
+                WHERE id = ?
+              `)
+              .bind(uniqueValues[0], keepId),
+            env.DB
+              .prepare(`
+                DELETE FROM universal_return_times_chief
+                WHERE id != ?
+              `)
+              .bind(keepId),
+          ])
+        } else {
+          await env.DB
+            .prepare(`
+              INSERT INTO universal_return_times_chief (
+                return_time,
+                created_at
+              )
+              VALUES (?, datetime('now', '+9 hours'))
+            `)
+            .bind(uniqueValues[0])
+            .run()
+        }
+
+        const result = await env.DB
+          .prepare(`
+            SELECT
+              id,
+              return_time
+            FROM universal_return_times_chief
+            ORDER BY return_time ASC
+          `)
+          .all<{
+            id: number
+            return_time: string
+          }>()
+
+                if (uniqueValues.length > 0) {
+          const nextReturnDueAt = await getNextUniversalReturnDueAt(
+            env.DB,
+            new Date(),
+            true,
+          )
+
+          if (nextReturnDueAt !== null) {
+            await env.DB.batch([
+              env.DB
+                .prepare(`
+                  UPDATE loans
+                  SET due_at = ?
+                  WHERE status = 'borrowed'
+                    AND borrower_id IN (
+                      SELECT id FROM borrowers
+                      WHERE class_name = 'チーフ'
+                    )
+                    AND tool_id IN (
+                      SELECT id FROM tools
+                      WHERE universal_return_enabled_for_chief = 1
+                    )
+                `)
+                .bind(nextReturnDueAt),
+              env.DB
+                .prepare(`
+                  UPDATE loans
+                  SET due_at = ?
+                  WHERE status = 'borrowed'
+                    AND borrower_id IN (
+                      SELECT id FROM borrowers
+                      WHERE class_name = 'チーフ'
+                    )
+                    AND tool_id IN (
+                      SELECT id FROM tools
+                      WHERE universal_return_enabled_for_chief = 0
+                    )
+                    AND due_at IS NOT NULL
+                    AND datetime(due_at) > datetime(?)
+                `)
+                .bind(nextReturnDueAt, nextReturnDueAt),
+            ])
+            }
+        }
+
+return json({
+          universal_return_times: result.results,
+        })
+      }
+
+      if (
+        url.pathname === '/tools/order' &&
+        request.method === 'PATCH'
+      ) {
+        const adminError = requireAdmin(authenticated)
+        if (adminError) {
+          return adminError
+        }
+
+        const body = await request.json()
+
+        if (
+          !body ||
+          !Array.isArray(body.tool_ids)
+        ) {
+          return json(
+            {
+              detail:
+                '工具・機材の並び順が正しく指定されていません',
+            },
+            400,
+          )
+        }
+
+        const toolIds = body.tool_ids
+          .map((id: unknown) => Number(id))
+
+        if (
+          toolIds.some(
+            (id: number) =>
+              !Number.isInteger(id) || id <= 0,
+          )
+        ) {
+          return json(
+            {
+              detail:
+                '工具・機材IDが正しくありません',
+            },
+            400,
+          )
+        }
+
+        if (
+          new Set(toolIds).size !== toolIds.length
+        ) {
+          return json(
+            {
+              detail:
+                '工具・機材IDが重複しています',
+            },
+            400,
+          )
+        }
+
+        const activeToolsResult = await env.DB
+          .prepare(`
+            SELECT id
+            FROM tools
+            WHERE is_active = 1
+          `)
+          .all<{ id: number }>()
+
+        const activeToolIds = activeToolsResult.results
+          .map(tool => tool.id)
+          .sort((a, b) => a - b)
+
+        const requestedToolIds = [...toolIds]
+          .sort((a, b) => a - b)
+
+        if (
+          activeToolIds.length !==
+            requestedToolIds.length ||
+          activeToolIds.some(
+            (id, index) =>
+              id !== requestedToolIds[index],
+          )
+        ) {
+          return json(
+            {
+              detail:
+                '有効な工具・機材をすべて指定してください',
+            },
+            400,
+          )
+        }
+
+        const statements = toolIds.map(
+          (toolId: number, index: number) =>
+            env.DB
+              .prepare(`
+                UPDATE tools
+                SET
+                  display_order = ?,
+                  updated_at = datetime('now', '+9 hours')
+                WHERE id = ?
+                  AND is_active = 1
+              `)
+              .bind(index + 1, toolId),
+        )
+
+        await env.DB.batch(statements)
+
+        return json({
+          detail: '工具・機材の並び順を更新しました',
+        })
+      }
+
+      const toolMatch = url.pathname.match(/^\/tools\/(\d+)$/)
+
+      if (toolMatch) {
+        const toolId = Number(toolMatch[1])
+
+        if (!Number.isInteger(toolId) || toolId <= 0) {
+          return json(
+            {
+              detail: '工具・機材IDが正しくありません',
+            },
+            400,
+          )
+        }
+
+        const existingTool = await getTool(
+          env.DB,
+          toolId,
+        )
+
+        if (!existingTool) {
+          return json(
+            {
+              detail: '工具・機材が見つかりません',
+            },
+            404,
+          )
+        }
+
+        if (request.method === 'PATCH') {
+          const adminError = requireAdmin(authenticated)
+          if (adminError) {
+            return adminError
+          }
+
+          const body = await request.json()
+
+          const payload = getToolPayload({
+            ...body,
+            tool_items:
+              body.tool_items === undefined
+                ? []
+                : body.tool_items,
+          })
+
+          const currentItemsResult = await env.DB
+            .prepare(`
+              SELECT
+                id,
+                tool_id,
+                management_number,
+                status
+              FROM tool_items
+              WHERE tool_id = ?
+                AND management_number NOT LIKE 'DELETED-%'
+              ORDER BY id
+            `)
+            .bind(toolId)
+            .all<{
+              id: number
+              tool_id: number
+              management_number: string
+              status: string
+            }>()
+
+          const currentItems = currentItemsResult.results
+
+          if (
+            body.tool_items === undefined ||
+            !Array.isArray(body.tool_items)
+          ) {
+            return json(
+              {
+                detail:
+                  '工具・機材個体の情報を指定してください',
+              },
+              400,
+            )
+          }
+
+          const requestedIds = new Set(
+            payload.tool_items
+              .filter(
+                (item: {
+                  id: number | null
+                  management_number: string
+                }) => item.id !== null,
+              )
+              .map(
+                (item: {
+                  id: number | null
+                  management_number: string
+                }) => item.id as number,
+              ),
+          )
+
+          const currentIds = new Set(
+            currentItems.map(item => item.id),
+          )
+
+          for (const item of payload.tool_items) {
+            if (
+              item.id !== null &&
+              !currentIds.has(item.id)
+            ) {
+              return json(
+                {
+                  detail:
+                    '指定された工具・機材個体が見つかりません',
+                },
+                400,
+              )
+            }
+          }
+
+          for (const currentItem of currentItems) {
+            if (!requestedIds.has(currentItem.id)) {
+              if (currentItem.status !== 'available') {
+                return json(
+                  {
+                    detail:
+                      `${currentItem.management_number} は現在貸出中のため削除できません`,
+                  },
+                  400,
+                )
+              }
+            }
+          }
+
+          const requestedNumbers =
+            payload.tool_items.map(
+              (item: {
+                id: number | null
+                management_number: string
+              }) => item.management_number,
+            )
+
+          if (
+            new Set(requestedNumbers).size !==
+            requestedNumbers.length
+          ) {
+            return json(
+              {
+                detail:
+                  '同じ管理番号を重複して登録することはできません',
+              },
+              400,
+            )
+          }
+
+          const existingNumbers =
+            await env.DB
+              .prepare(`
+                SELECT id, management_number
+                FROM tool_items
+                WHERE tool_id != ?
+              `)
+              .bind(toolId)
+              .all<{
+                id: number
+                management_number: string
+              }>()
+
+          const otherNumbers = new Set(
+            existingNumbers.results.map(
+              item => item.management_number,
+            ),
+          )
+
+          for (const item of payload.tool_items) {
+            if (
+              otherNumbers.has(
+                item.management_number,
+              )
+            ) {
+              return json(
+                {
+                  detail:
+                    `管理番号「${item.management_number}」はすでに使用されています`,
+                },
+                400,
+              )
+            }
+          }
+
+          const statements: D1PreparedStatement[] = []
+
+          for (const item of payload.tool_items) {
+            if (item.id === null) {
+              statements.push(
+                env.DB
+                  .prepare(`
+                    INSERT INTO tool_items (
+                      tool_id,
+                      management_number,
+                      status,
+                      created_at,
+                      updated_at
+                    )
+                    VALUES (?, ?, 'available', datetime('now', '+9 hours'), datetime('now', '+9 hours'))
+                  `)
+                  .bind(
+                    toolId,
+                    item.management_number,
+                  ),
+              )
+            } else {
+              statements.push(
+                env.DB
+                  .prepare(`
+                    UPDATE tool_items
+                    SET
+                      management_number = ?,
+                      updated_at = datetime('now', '+9 hours')
+                    WHERE id = ?
+                      AND tool_id = ?
+                  `)
+                  .bind(
+                    item.management_number,
+                    item.id,
+                    toolId,
+                  ),
+              )
+            }
+          }
+
+          for (const currentItem of currentItems) {
+            if (!requestedIds.has(currentItem.id)) {
+              const history = await env.DB
+                .prepare(`
+                  SELECT id
+                  FROM loan_items
+                  WHERE tool_item_id = ?
+                  LIMIT 1
+                `)
+                .bind(currentItem.id)
+                .first<{ id: number }>()
+
+              if (history) {
+                statements.push(
+                  env.DB
+                    .prepare(`
+                      UPDATE tool_items
+                      SET
+                        management_number =
+                          'DELETED-' || id || '-' || management_number,
+                        updated_at = datetime('now', '+9 hours')
+                      WHERE id = ?
+                        AND tool_id = ?
+                        AND status = 'available'
+                    `)
+                    .bind(
+                      currentItem.id,
+                      toolId,
+                    ),
+                )
+              } else {
+                statements.push(
+                  env.DB
+                    .prepare(`
+                      DELETE FROM tool_items
+                      WHERE id = ?
+                        AND tool_id = ?
+                        AND status = 'available'
+                    `)
+                    .bind(
+                      currentItem.id,
+                      toolId,
+                    ),
+                )
+              }
+            }
+          }
+
+          statements.push(
+            env.DB
+              .prepare(`
+                UPDATE tools
+                SET
+                  name = ?,
+                  category = ?,
+                  description = ?,
+                  location = ?,
+                  max_quantity_per_class = ?,
+                  loan_duration_minutes = ?,
+                  max_quantity_per_chief = ?,
+                  loan_duration_minutes_per_chief = ?,
+                  due_notice_enabled = ?,
+                  universal_return_enabled = ?,
+                  universal_return_enabled_for_chief = ?,
+                  quantity = (
+                    SELECT COUNT(*)
+                    FROM tool_items
+                    WHERE tool_id = ?
+                      AND management_number NOT LIKE 'DELETED-%'
+                  ),
+                  available_quantity = (
+                    SELECT COUNT(*)
+                    FROM tool_items
+                    WHERE tool_id = ?
+                      AND management_number NOT LIKE 'DELETED-%'
+                      AND status = 'available'
+                  ),
+                  updated_at = datetime('now', '+9 hours')
+                WHERE id = ?
+                  AND is_active = 1
+              `)
+              .bind(
+                payload.name,
+                payload.category,
+                payload.description,
+                payload.location,
+                payload.max_quantity_per_class,
+                payload.loan_duration_minutes,
+                payload.max_quantity_per_chief,
+                payload.loan_duration_minutes_per_chief,
+                payload.due_notice_enabled,
+                payload.universal_return_enabled,
+                payload.universal_return_enabled_for_chief,
+                toolId,
+                toolId,
+                toolId,
+              ),
+          )
+
+          await env.DB.batch(statements)
+
+          return json(
+            await getTool(
+              env.DB,
+              toolId,
+            ),
+          )
+        }
+
+        if (request.method === 'DELETE') {
+          const adminError = requireAdmin(authenticated)
+          if (adminError) {
+            return adminError
+          }
+
+          const borrowedItem = await env.DB
+            .prepare(`
+              SELECT
+                id,
+                management_number
+              FROM tool_items
+              WHERE tool_id = ?
+                AND status != 'available'
+              LIMIT 1
+            `)
+            .bind(toolId)
+            .first<{
+              id: number
+              management_number: string
+            }>()
+
+          if (borrowedItem) {
+            return json(
+              {
+                detail:
+                  `${borrowedItem.management_number} は現在貸出中のため削除できません`,
+              },
+              400,
+            )
+          }
+
+          await env.DB.batch([
+            env.DB
+              .prepare(`
+                UPDATE tool_items
+                SET
+                  management_number =
+                    'DELETED-' || id || '-' || management_number,
+                  updated_at = datetime('now', '+9 hours')
+                WHERE tool_id = ?
+              `)
+              .bind(toolId),
+            env.DB
+              .prepare(`
+                UPDATE tools
+                SET
+                  is_active = 0,
+                  updated_at = datetime('now', '+9 hours')
+                WHERE id = ?
+              `)
+              .bind(toolId),
+            env.DB
+              .prepare(`
+                UPDATE reservations
+                SET
+                  status = 'cancelled',
+                  updated_at = datetime('now', '+9 hours')
+                WHERE tool_id = ?
+                  AND status = 'waiting'
+              `)
+              .bind(toolId),
+          ])
+
+          return json({
+            detail: '工具・機材を削除しました',
+          })
+        }
+      }
+
+      return json(
+        {
+          detail: 'Not Found',
+        },
+        404,
       )
-      SELECT ?, t.id, t.name, ?, ?, ?, ?, ?
-      FROM tool_rental_tools t
-      WHERE t.id = ?
-        AND t.is_active = 1
-        AND t.total_quantity - COALESCE((
-          SELECT SUM(l.quantity)
-          FROM tool_rental_loans l
-          WHERE l.tool_id = t.id AND l.status = 'checked_out'
-        ), 0) >= ?
-    `).bind(
-      id, borrowerName, optionalText(body.borrower_note), quantity,
-      auth.user.id, optionalText(body.checkout_note), toolId, quantity,
-    ).run()
 
-    if (inserted.meta.changes !== 1) {
-      const tool = await getTool(env, toolId)
-      if (!tool) return json({ error: "Tool not found" }, 404)
-      if (!tool.is_active) return json({ error: "この工具は貸出停止中です" }, 409)
-      return json({ error: "貸出可能な数量が不足しています", available_quantity: tool.available_quantity }, 409)
-    }
-
-    return json(await getLoan(env, id), 201)
+  } catch (error) {
+    console.error("Tool rental API error:", error)
+    return json({ detail: "Internal Server Error" }, 500)
   }
-
-  if (method === "POST" && resource === "loans" && resourceId && action === "return") {
-    const denied = await requirePermission(env, auth.user.id, "tool_rental.return")
-    if (denied) return denied
-
-    const body = await readJsonObject(request, true)
-    if (!body) return json({ error: "JSONオブジェクトを指定してください" }, 400)
-
-    const updated = await env.DB.prepare(`
-      UPDATE tool_rental_loans
-      SET status = 'returned', returned_by = ?, returned_at = CURRENT_TIMESTAMP,
-          return_note = ?
-      WHERE id = ? AND status = 'checked_out'
-    `).bind(auth.user.id, optionalText(body.return_note), resourceId).run()
-
-    if (updated.meta.changes !== 1) {
-      const existing = await getLoan(env, resourceId)
-      if (!existing) return json({ error: "Loan not found" }, 404)
-      return json({ error: "この貸出記録はすでに返却済みです" }, 409)
-    }
-
-    return json(await getLoan(env, resourceId))
-  }
-
-  return json({ error: "Not Found" }, 404)
 }
