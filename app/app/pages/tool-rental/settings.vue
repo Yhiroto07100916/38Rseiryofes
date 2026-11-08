@@ -134,6 +134,24 @@
       </v-card-text>
     </v-card>
 
+    <v-card rounded="xl" variant="outlined" class="mt-4">
+      <v-card-title>貸出履歴</v-card-title>
+      <v-card-text>
+        <p class="text-body-2 text-medium-emphasis mb-4">
+          返却済みの貸出履歴をまとめて削除できます。現在貸出中の記録は削除されません。この操作は元に戻せません。
+        </p>
+        <v-btn
+          color="error"
+          variant="outlined"
+          :loading="historyDeleteLoading"
+          :disabled="!auth.isAdmin.value || historyDeleteLoading"
+          @click="deleteLoanHistory"
+        >
+          返却済みの貸出履歴を削除
+        </v-btn>
+      </v-card-text>
+    </v-card>
+
     <v-progress-linear v-if="loading" indeterminate class="mt-4" />
   </v-container>
 </template>
@@ -172,6 +190,7 @@ const lineDestinations = ref<LineDestination[]>([])
 const notificationLoading = ref(false)
 const notificationTesting = ref(false)
 const lineDestinationsLoading = ref(false)
+const historyDeleteLoading = ref(false)
 
 const lineDestinationOptions = computed(() =>
   lineDestinations.value.map(destination => ({
@@ -256,6 +275,25 @@ async function sendNotificationTest() {
     errorMessage.value = error?.data?.detail ?? 'テスト通知に失敗しました。'
   } finally {
     notificationTesting.value = false
+  }
+}
+
+async function deleteLoanHistory() {
+  if (historyDeleteLoading.value || !auth.isAdmin.value) return
+  if (!window.confirm('返却済みの貸出履歴をすべて削除します。\\n\\nこの操作は元に戻せません。実行しますか？')) return
+
+  historyDeleteLoading.value = true
+  errorMessage.value = ''
+  successMessage.value = ''
+  try {
+    const result = await request<{ detail: string; deleted_count: number }>('/loans/history', {
+      method: 'DELETE',
+    })
+    successMessage.value = result.detail
+  } catch (error: any) {
+    errorMessage.value = error?.data?.detail ?? '貸出履歴の削除に失敗しました。'
+  } finally {
+    historyDeleteLoading.value = false
   }
 }
 
