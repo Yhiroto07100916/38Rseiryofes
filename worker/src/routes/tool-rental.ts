@@ -225,8 +225,15 @@ export async function handleToolRental(
       const toolItemId = Number(body.tool_item_id)
       const className = typeof body.class_name === "string" ? body.class_name.trim() : ""
       const name = typeof body.name === "string" ? body.name.trim() : ""
+      const rawTimeLimit = body.time_limit_minutes
+      const timeLimitMinutes = rawTimeLimit === undefined || rawTimeLimit === null || rawTimeLimit === ""
+        ? null
+        : Number(rawTimeLimit)
       if (!Number.isInteger(toolItemId) || toolItemId <= 0) return json({ detail: "工具の個体を選択してください" }, 400)
       if (!className || !name) return json({ detail: "クラスと氏名を入力してください" }, 400)
+      if (timeLimitMinutes !== null && (!Number.isInteger(timeLimitMinutes) || timeLimitMinutes < 5 || timeLimitMinutes > 10080)) {
+        return json({ detail: "時間制限は5分以上、10,080分（7日）以内で入力してください" }, 400)
+      }
 
       const item = await env.DB.prepare(`
         SELECT i.id, i.tool_id, i.management_number, i.status, t.name AS tool_name
@@ -238,9 +245,19 @@ export async function handleToolRental(
 
       const borrowerId = await getBorrowerId(env.DB, className, name)
       const loan = await env.DB.prepare(`
-        INSERT INTO loans (borrower_id, tool_id, quantity, borrowed_at, status, tool_name_snapshot)
-        VALUES (?, ?, 1, datetime('now', '+9 hours'), 'borrowed', ?)
-      `).bind(borrowerId, item.tool_id, item.tool_name).run()
+        INSERT INTO loans (
+          borrower_id, tool_id, quantity, borrowed_at, status,
+          tool_name_snapshot, time_limit_minutes, due_at
+        )
+        VALUES (
+          ?, ?, 1, datetime('now', '+9 hours'), 'borrowed',
+          ?, ?, CASE WHEN ? IS NULL THEN NULL
+            ELSE datetime('now', '+9 hours', '+' || (? - 5) || ' minutes') END
+        )
+      `).bind(
+        borrowerId, item.tool_id, item.tool_name,
+        timeLimitMinutes, timeLimitMinutes, timeLimitMinutes,
+      ).run()
       const loanId = Number(loan.meta.last_row_id)
       const update = await env.DB.prepare(`
         UPDATE tool_items SET status = 'borrowed', updated_at = CURRENT_TIMESTAMP
@@ -269,7 +286,7 @@ export async function handleToolRental(
           li.id AS loan_item_id, l.id AS loan_id, t.id AS tool_id,
           COALESCE(l.tool_name_snapshot, t.name) AS tool_name, ti.id AS tool_item_id,
           ti.management_number, b.class_name, b.name AS borrower_name,
-          l.borrowed_at
+          l.borrowed_at, l.time_limit_minutes, l.due_at
         FROM loan_items li
         INNER JOIN loans l ON l.id = li.loan_id
         INNER JOIN borrowers b ON b.id = l.borrower_id
@@ -350,7 +367,7 @@ export async function handleToolRental(
           li.id AS loan_item_id, l.id AS loan_id, ti.id AS tool_item_id,
           COALESCE(l.tool_name_snapshot, t.name) AS tool_name,
           ti.management_number, b.class_name, b.name AS borrower_name,
-          l.borrowed_at, li.returned_at,
+          l.borrowed_at, l.time_limit_minutes, l.due_at, li.returned_at,
           rb.class_name AS returned_by_class_name,
           rb.name AS returned_by_name,
           CASE WHEN li.returned_at IS NULL THEN 'borrowed' ELSE 'returned' END AS status
