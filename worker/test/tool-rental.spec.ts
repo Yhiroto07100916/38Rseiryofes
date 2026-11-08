@@ -73,6 +73,19 @@ describe("Tool rental API", () => {
     expect(response.status).toBe(400);
   });
 
+  it("rejects boolean values where a positive integer is required", async () => {
+    const manager = await createUser("数量検証担当");
+    await grant(manager.userId, ["tool_rental.manage", "tool_rental.view"]);
+
+    const response = await SELF.fetch("http://example.com/api/tool-rental/tools", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: manager.cookie },
+      body: JSON.stringify({ name: "テスト工具", category: "test", total_quantity: true }),
+    });
+
+    expect(response.status).toBe(400);
+  });
+
   it("rejects checkout without permission", async () => {
     const user = await createUser("閲覧者");
     const toolId = await createTool(user.userId, "レンチ", 2);
