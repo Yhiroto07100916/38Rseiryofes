@@ -79,7 +79,7 @@ export async function handleMilkCollection(request: Request, env: Env, path: str
   }else if(b.action==="contacted"||b.action==="store_approved"||b.action==="store_rejected"){
    permission="milk_collection.record_contact";if(!["chief_approved","contact_pending","contacted"].includes(from))return json({error:"チーフ会承認後に店舗連絡結果を記録できます"},409)
    to=b.action;updates.store_contact_result=b.action==="store_approved"?"approved":b.action==="store_rejected"?"rejected":"pending";updates.store_contact_note=typeof b.note==="string"?b.note.trim()||null:null;action=b.action
-  }else if(["scheduling","collecting","completed","cancelled"].includes(String(b.action))){
+  }else if(typeof b.action==="string"&&["scheduling","collecting","completed","cancelled"].includes(b.action)){
    permission="milk_collection.manage_schedule"
    if(b.action==="scheduling"&&from!=="store_approved")return json({error:"店舗の許可後に日程調整へ進めます"},409)
    if(b.action==="collecting"&&!["store_approved","scheduling"].includes(from))return json({error:"店舗許可後に受け取りを開始できます"},409)
