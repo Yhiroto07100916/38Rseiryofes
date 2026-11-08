@@ -262,8 +262,14 @@ const classGrades = [
 
 const classLoanCounts = ref<Record<string, number>>({})
 
-const returnerClassName = ref('')
-const returnerName = ref('')
+const currentUserName = computed(() =>
+  auth.user?.nickname?.trim() || auth.user?.name?.trim() || '',
+)
+
+const defaultReturnerClassName = '38R'
+
+const returnerClassName = ref(defaultReturnerClassName)
+const returnerName = ref(currentUserName.value)
 
 const loans = ref<Loan[]>([])
 const selectedLoanItemIds = ref<number[]>([])
@@ -348,8 +354,6 @@ const searchLoans = async () => {
       `/loans/current?${params.toString()}`,
     )
 
-    returnerClassName.value = searchClassName.value.trim()
-
     searched.value = true
   } catch (error) {
     console.error(error)
@@ -395,8 +399,8 @@ const returnSelected = async () => {
 
     selectedLoanItemIds.value = []
     searchClassName.value = ''
-    returnerClassName.value = ''
-    returnerName.value = ''
+    returnerClassName.value = defaultReturnerClassName
+    returnerName.value = currentUserName.value
 
     showSnackbar(
       `${selectedCount}個の返却処理が完了しました。`,
