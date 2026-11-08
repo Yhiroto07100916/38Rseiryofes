@@ -1,4 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { handleToolRentalLineWebhook, handleToolRentalNotificationRoutes } from "./tool-rental-notifications"
 
 interface Tool {
   id: number
@@ -358,6 +359,9 @@ function getToolRentalPermission(path: string, method: string): string | null {
     return "tool_rental.checkout"
   }
 
+  if (path.startsWith("/settings/notifications")) {
+    return method === "GET" ? "tool_rental.view" : "tool_rental.manage"
+  }
   if (path === "/settings/return-time" || path === "/settings/return-time-chief") {
     return method === "GET" ? "tool_rental.view" : "tool_rental.manage"
   }
@@ -370,6 +374,10 @@ export async function handleToolRental(
   pathParts: string[],
 ): Promise<Response> {
   if (request.method === "OPTIONS") return new Response(null, { status: 204 })
+
+  if (pathParts.join("/") === "line/webhook" && request.method === "POST") {
+    return handleToolRentalLineWebhook(request, env)
+  }
 
   const auth = await requireAuth(request, env)
   if (auth instanceof Response) return auth
@@ -393,6 +401,10 @@ export async function handleToolRental(
       : false
   if (!permissionAllowed && !operationalViewFallback) {
     return json({ detail: "この操作を行う権限がありません", permission }, 403)
+  }
+
+  if (url.pathname.startsWith("/settings/notifications")) {
+    return handleToolRentalNotificationRoutes(request, env, url)
   }
 
   const canManage = await hasPermission(env, auth.user.id, "tool_rental.manage")
