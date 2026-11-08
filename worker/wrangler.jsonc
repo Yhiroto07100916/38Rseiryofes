@@ -5,7 +5,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-16",
   "triggers": {
-    "crons": ["* * * * *"]
+    "crons": ["*/15 * * * *"]
   },
   "observability": {
     "enabled": true,
@@ -13,20 +13,6 @@
       "enabled": true
     }
   },
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "NOTIFICATION_SCHEDULER",
-        "class_name": "NotificationScheduler"
-      }
-    ]
-  },
-  "migrations": [
-    {
-      "tag": "notification-scheduler-v1",
-      "new_sqlite_classes": ["NotificationScheduler"]
-    }
-  ],
   "d1_databases": [
     {
       "binding": "DB",
