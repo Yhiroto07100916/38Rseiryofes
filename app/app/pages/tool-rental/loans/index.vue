@@ -462,7 +462,6 @@
 </template>
 
 <script setup lang="ts">
-definePageMeta({ middleware: 'auth' })
 
 import type {
   Reservation,
@@ -470,6 +469,8 @@ import type {
   ToolItem,
 } from '~/types/tool-rental'
 import { classOptions } from '~/constants/tool-rental-classes'
+
+definePageMeta({ middleware: 'auth' })
 
 const classGrades = [
   {
