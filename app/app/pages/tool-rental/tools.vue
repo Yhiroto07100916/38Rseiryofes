@@ -1,6 +1,7 @@
 <template>
   <div>
     <div class="d-flex flex-wrap align-center ga-3 mb-5">
+      <LayoutBackButton />
       <div>
         <h1 class="text-h5 font-weight-bold">工具・機材一覧</h1>
         <p class="text-body-2 text-medium-emphasis mb-0">工具の種類と、管理番号ごとの登録・貸出状態を確認します。</p>
