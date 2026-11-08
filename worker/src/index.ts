@@ -20,6 +20,7 @@ import { handleMinutes } from "./routes/minutes"
 import { handleMilkCollection } from "./routes/milk-collection"
 import { handleAvatarImage, handleAvatarMutation, processQueuedAvatarDeletions } from "./routes/avatars"
 import { handleSubmissions } from "./routes/submissions"
+import { handleWishlist } from "./routes/wishlist"
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -146,6 +147,30 @@ export default {
       } catch (error) {
         console.error("Scripts API error:", error)
 
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
+            { status: 500 },
+          ),
+        )
+      }
+    }
+
+    if (
+      url.pathname === "/api/wishlist" ||
+      url.pathname.startsWith("/api/wishlist/")
+    ) {
+      const path = url.pathname.slice("/api/wishlist".length)
+      const pathParts = path.split("/").filter(Boolean)
+
+      try {
+        return withCors(
+          request,
+          await handleWishlist(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("Wishlist API error:", error)
         return withCors(
           request,
           Response.json(

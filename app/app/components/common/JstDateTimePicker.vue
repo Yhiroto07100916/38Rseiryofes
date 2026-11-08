@@ -73,9 +73,33 @@ function updateValue() {
   )
 }
 
-function onDateUpdate(value: unknown) {
+function normalizeDate(value: unknown): string | null {
   const date = Array.isArray(value) ? value[0] : value
-  if (typeof date !== 'string') return
+
+  if (typeof date === 'string') {
+    const match = /^(\d{4}-\d{2}-\d{2})/.exec(date)
+    return match?.[1] ?? null
+  }
+
+  if (date instanceof Date && !Number.isNaN(date.getTime())) {
+    return [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0'),
+    ].join('-')
+  }
+
+  if (date && typeof date === 'object' && 'isoDate' in date) {
+    const isoDate = (date as { isoDate?: unknown }).isoDate
+    return typeof isoDate === 'string' ? normalizeDate(isoDate) : null
+  }
+
+  return null
+}
+
+function onDateUpdate(value: unknown) {
+  const date = normalizeDate(value)
+  if (!date) return
 
   selectedDate.value = date
   updateValue()
@@ -97,6 +121,7 @@ function clearValue() {
     <template #activator="{ props: activatorProps }">
       <v-text-field
         v-bind="activatorProps"
+        @click="menuOpen = true"
         :model-value="displayValue"
         :label="label"
         :disabled="disabled"

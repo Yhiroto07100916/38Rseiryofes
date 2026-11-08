@@ -5,6 +5,25 @@ export interface MilkCollectionComment { id:string; request_id:string; author_id
 export interface MilkCollectionHistory { id:string; request_id:string; actor_id:string; actor_name:string|null; action:string; from_status:MilkCollectionStatus|null; to_status:MilkCollectionStatus|null; details:string|null; created_at:string }
 export interface MilkCollectionDetailResponse { request:MilkCollectionRequest; comments:MilkCollectionComment[]; history:MilkCollectionHistory[] }
 
+export interface WishlistItem {
+  id: string
+  title: string
+  description: string | null
+  product_url: string | null
+  quantity: number
+  estimated_cost: number | null
+  priority: 'low' | 'normal' | 'high' | 'urgent'
+  status: 'requested' | 'planned' | 'purchased'
+  can_edit?: boolean
+  can_delete?: boolean
+  memo: string | null
+  created_by: string
+  created_by_name: string | null
+  created_by_nickname: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface CalendarCategory {
   id: string
   name: string
@@ -489,6 +508,43 @@ export const useApi = () => {
     )
   }
 
+  const getWishlistItems = () =>
+    apiFetch<{
+      items: WishlistItem[]
+      capabilities: { can_create: boolean; can_review: boolean }
+    }>('/api/wishlist')
+
+  const createWishlistItem = (data: {
+    title: string
+    description?: string | null
+    product_url?: string | null
+    quantity?: number
+    estimated_cost?: number | null
+    priority?: WishlistItem['priority']
+    memo?: string | null
+  }) =>
+    apiFetch<WishlistItem>('/api/wishlist', {
+      method: 'POST',
+      body: data,
+    })
+
+  const updateWishlistItem = (
+    id: string,
+    data: Partial<Pick<WishlistItem,
+      'title' | 'description' | 'product_url' | 'quantity' |
+      'estimated_cost' | 'priority' | 'status' | 'memo'
+    >>,
+  ) =>
+    apiFetch<WishlistItem>(`/api/wishlist/${id}`, {
+      method: 'PATCH',
+      body: data,
+    })
+
+  const deleteWishlistItem = (id: string) =>
+    apiFetch<{ success: boolean }>(`/api/wishlist/${id}`, {
+      method: 'DELETE',
+    })
+
   const getMilkCollectionRequests = () => apiFetch<{ requests: MilkCollectionRequest[] }>('/api/milk-collection')
   const createMilkCollectionRequest = (data: { store_name:string; address:string; contact_info:string; expected_quantity?:number|null; proposal_reason:string }) => apiFetch<{id:string}>('/api/milk-collection',{method:'POST',body:data})
   const getMilkCollectionRequest = (id:string) => apiFetch<MilkCollectionDetailResponse>(`/api/milk-collection/${id}`)
@@ -497,6 +553,10 @@ export const useApi = () => {
 
   return {
     apiFetch,
+    getWishlistItems,
+    createWishlistItem,
+    updateWishlistItem,
+    deleteWishlistItem,
     getMilkCollectionRequests,
     createMilkCollectionRequest,
     getMilkCollectionRequest,
