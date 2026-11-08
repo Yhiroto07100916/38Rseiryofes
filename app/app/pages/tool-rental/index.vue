@@ -63,10 +63,11 @@
 </template>
 
 <script setup lang="ts">
-definePageMeta({ middleware: 'auth' })
 
 import { computed, onMounted, ref } from 'vue'
 import type { Loan, Tool } from '~/types/tool-rental'
+
+definePageMeta({ middleware: 'auth' })
 
 const auth = useAuthStore()
 const { request } = useToolRentalApi()
