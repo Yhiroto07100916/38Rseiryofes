@@ -37,6 +37,21 @@
           class="mt-2"
         />
 
+        <div class="mt-4">
+          <div class="d-flex align-center justify-space-between mb-2">
+            <div class="text-subtitle-1 font-weight-medium">関連リンク</div>
+            <v-btn size="small" variant="tonal" prepend-icon="mdi-plus" @click="form.links.push({ title: '', url: '' })">リンクを追加</v-btn>
+          </div>
+          <div v-for="(link, index) in form.links" :key="index" class="d-flex align-start ga-2 mb-2">
+            <div class="flex-grow-1">
+              <v-text-field v-model="link.title" label="表示タイトル" placeholder="例：資料・参考ページ" variant="outlined" density="comfortable" hide-details class="mb-2" />
+              <v-text-field v-model="link.url" label="URL" placeholder="https://example.com" variant="outlined" density="comfortable" hide-details />
+            </div>
+            <v-btn icon="mdi-close" variant="text" color="error" aria-label="リンクを削除" @click="form.links.splice(index, 1)" />
+          </div>
+          <div class="text-caption text-medium-emphasis">タイトルにURLを設定します。最大20件まで登録できます。</div>
+        </div>
+
         <v-select
           v-model="form.scope"
           :items="scopeItems"
@@ -209,6 +224,7 @@ const form = ref({
   assigneeRoleIds: [] as string[],
   calendarEventId: null as string | null,
   fileIds: [] as string[],
+  links: [] as { title: string; url: string }[],
 })
 
 const users = ref<UserItem[]>([])
@@ -393,6 +409,12 @@ const createTask = async () => {
             ? { calendar_event_id: form.value.calendarEventId }
             : {}),
           file_ids: form.value.fileIds,
+          links: form.value.links
+            .filter((link) => link.title.trim() || link.url.trim())
+            .map((link) => ({
+              title: link.title.trim(),
+              url: link.url.trim(),
+            })),
         },
       },
     )
