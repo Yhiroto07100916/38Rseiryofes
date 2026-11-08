@@ -37,12 +37,18 @@ function json(data: unknown, status = 200): Response {
 }
 
 function optionalText(value: unknown): string | null {
-  if (value === undefined || value === null) return null
-  const text = String(value).trim()
+  if (typeof value !== "string") return null
+  const text = value.trim()
   return text || null
 }
 
+function requiredText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : ""
+}
+
 function positiveInteger(value: unknown): number | null {
+  if (typeof value !== "number" && typeof value !== "string") return null
+  if (typeof value === "string" && !value.trim()) return null
   const number = Number(value)
   return Number.isSafeInteger(number) && number > 0 ? number : null
 }
@@ -194,8 +200,8 @@ export async function handleToolRental(
     const body = await readJsonObject(request)
     if (!body) return json({ error: "JSONオブジェクトを指定してください" }, 400)
 
-    const name = String(body.name ?? "").trim()
-    const category = String(body.category ?? "").trim()
+    const name = requiredText(body.name)
+    const category = requiredText(body.category)
     const quantity = positiveInteger(body.total_quantity)
     if (!name) return json({ error: "工具名は必須です" }, 400)
     if (!category) return json({ error: "カテゴリは必須です" }, 400)
@@ -279,8 +285,8 @@ export async function handleToolRental(
     const body = await readJsonObject(request)
     if (!body) return json({ error: "JSONオブジェクトを指定してください" }, 400)
 
-    const toolId = String(body.tool_id ?? "").trim()
-    const borrowerName = String(body.borrower_name ?? "").trim()
+    const toolId = requiredText(body.tool_id)
+    const borrowerName = requiredText(body.borrower_name)
     const quantity = positiveInteger(body.quantity)
     if (!toolId || !borrowerName || !quantity) {
       return json({ error: "工具・借用者名・1以上の数量を指定してください" }, 400)
