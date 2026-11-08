@@ -21,14 +21,7 @@ interface Tool {
 }
 
 function json(data: unknown, status = 200): Response {
-  return Response.json(data, {
-    status,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  })
+  return Response.json(data, { status })
 }
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000
