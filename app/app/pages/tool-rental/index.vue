@@ -98,7 +98,7 @@ const items = [
 ]
 
 const visibleItems = computed(() =>
-  items.filter(item => auth.hasPermission(item.permission) || (item.permission === 'tool_rental.view' && ['tool_rental.manage', 'tool_rental.checkout', 'tool_rental.return'].some(permission => auth.hasPermission(permission)))),
+  items.filter(item => auth.hasPermission(item.permission) || (item.permission === 'tool_rental.view' && ['tool_rental.manage', 'tool_rental.checkout', 'tool_rental.return'].some(permission => auth.hasPermission(permission))) || (item.permission === 'tool_rental.history' && auth.hasPermission('tool_rental.manage'))),
 )
 
 async function loadSummary() {
