@@ -1,57 +1,53 @@
 <template>
-  <v-container class="py-6">
+  <div>
     <div class="d-flex align-center ga-3 mb-6">
       <v-avatar color="primary" variant="tonal" rounded="lg" size="48">
         <v-icon icon="mdi-toolbox-outline" size="28" />
       </v-avatar>
       <div>
-        <h1 class="text-h4 font-weight-bold">工具貸出管理</h1>
-        <div class="text-body-2 text-medium-emphasis">在庫・貸出・返却・予約・履歴を管理します。</div>
+        <h1 class="text-h5 font-weight-bold">工具・機材の貸出記録</h1>
+        <p class="text-body-2 text-medium-emphasis mb-0">38Rで管理する工具の個体と、貸出・返却の記録を確認できます。</p>
       </div>
       <v-spacer />
       <v-btn icon="mdi-refresh" variant="text" :loading="loading" aria-label="更新" @click="loadSummary" />
     </div>
 
-    <v-alert v-if="errorMessage" type="error" variant="tonal" class="mb-4">
-      {{ errorMessage }}
-    </v-alert>
-
-    <v-row v-if="canView">
-      <v-col cols="12" sm="6" md="4">
-        <v-card rounded="xl" variant="tonal">
+    <v-row class="mb-2">
+      <v-col cols="12" sm="4">
+        <v-card rounded="lg" variant="tonal">
           <v-card-text>
-            <div class="text-caption text-medium-emphasis">登録されている工具・機材</div>
+            <div class="text-caption text-medium-emphasis">工具の種類</div>
             <div class="text-h3 font-weight-bold">{{ tools.length }}</div>
           </v-card-text>
         </v-card>
       </v-col>
-      <v-col cols="12" sm="6" md="4">
-        <v-card rounded="xl" variant="tonal">
+      <v-col cols="12" sm="4">
+        <v-card rounded="lg" variant="tonal">
           <v-card-text>
-            <div class="text-caption text-medium-emphasis">貸出中の個体</div>
-            <div class="text-h3 font-weight-bold">{{ activeLoanCount }}</div>
+            <div class="text-caption text-medium-emphasis">登録個体数</div>
+            <div class="text-h3 font-weight-bold">{{ totalItems }}</div>
           </v-card-text>
         </v-card>
       </v-col>
-      <v-col cols="12" sm="6" md="4">
-        <v-card rounded="xl" variant="tonal">
+      <v-col cols="12" sm="4">
+        <v-card rounded="lg" variant="tonal">
           <v-card-text>
-            <div class="text-caption text-medium-emphasis">貸出可能な個体</div>
-            <div class="text-h3 font-weight-bold">{{ availableCount }}</div>
+            <div class="text-caption text-medium-emphasis">現在貸出中</div>
+            <div class="text-h3 font-weight-bold">{{ currentLoans.length }}</div>
           </v-card-text>
         </v-card>
       </v-col>
     </v-row>
 
-    <v-row class="mt-2">
-      <v-col v-for="item in visibleItems" :key="item.to" cols="12" sm="6" md="4">
-        <v-card :to="item.to" rounded="xl" variant="outlined" height="100%" hover>
-          <v-card-text class="d-flex align-center ga-4 pa-5">
-            <v-avatar :color="item.color" variant="tonal" rounded="lg" size="48">
-              <v-icon :icon="item.icon" size="26" />
+    <v-row>
+      <v-col v-for="item in links" :key="item.to" cols="12" sm="6" md="4">
+        <v-card :to="item.to" rounded="lg" variant="outlined" height="100%">
+          <v-card-text class="d-flex align-center ga-3">
+            <v-avatar :color="item.color" variant="tonal" rounded="lg">
+              <v-icon :icon="item.icon" />
             </v-avatar>
             <div class="flex-grow-1">
-              <div class="text-h6 font-weight-bold">{{ item.title }}</div>
+              <div class="font-weight-bold">{{ item.title }}</div>
               <div class="text-body-2 text-medium-emphasis">{{ item.description }}</div>
             </div>
             <v-icon icon="mdi-chevron-right" color="medium-emphasis" />
@@ -59,62 +55,72 @@
         </v-card>
       </v-col>
     </v-row>
-  </v-container>
+
+    <v-card rounded="lg" variant="outlined" class="mt-4">
+      <v-card-title class="text-subtitle-1">現在貸出中の個体</v-card-title>
+      <v-divider />
+      <v-table>
+        <thead>
+          <tr><th>工具</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="loan in currentLoans.slice(0, 8)" :key="loan.loan_item_id">
+            <td>{{ loan.tool_name }}</td>
+            <td><v-chip size="small" variant="tonal">{{ loan.management_number }}</v-chip></td>
+            <td>{{ loan.class_name }} {{ loan.borrower_name }}</td>
+            <td>{{ formatDate(loan.borrowed_at) }}</td>
+          </tr>
+          <tr v-if="!loading && currentLoans.length === 0">
+            <td colspan="4" class="text-center text-medium-emphasis py-5">現在貸出中の工具はありません。</td>
+          </tr>
+        </tbody>
+      </v-table>
+      <v-card-actions v-if="currentLoans.length > 8">
+        <v-spacer />
+        <v-btn to="/tool-rental/loans/current" variant="text">すべて表示</v-btn>
+      </v-card-actions>
+    </v-card>
+
+    <v-alert v-if="errorMessage" type="error" variant="tonal" class="mt-4">{{ errorMessage }}</v-alert>
+  </div>
 </template>
 
 <script setup lang="ts">
-
-import { computed, onMounted, ref } from 'vue'
-import type { Loan, Tool } from '~/types/tool-rental'
+import type { Tool, CurrentLoanItem } from '~/types/tool-rental'
 
 definePageMeta({ middleware: 'auth' })
 
-const auth = useAuthStore()
 const { request } = useToolRentalApi()
-const tools = ref<Tool[]>([])
-const activeLoans = ref<Loan[]>([])
 const loading = ref(false)
+const tools = ref<Tool[]>([])
+const currentLoans = ref<CurrentLoanItem[]>([])
 const errorMessage = ref('')
 
-const canView = computed(() =>
-  auth.hasPermission('tool_rental.view') ||
-  auth.hasPermission('tool_rental.manage'),
-)
-const activeLoanCount = computed(() =>
-  activeLoans.value.reduce((sum, loan) => sum + loan.tool_items.filter(item => !item.returned_at).length, 0),
-)
-const availableCount = computed(() =>
-  tools.value.reduce((sum, tool) => sum + tool.available_quantity, 0),
-)
+const totalItems = computed(() => tools.value.reduce((total, tool) => total + tool.quantity, 0))
 
-const items = [
-  { title: '工具・機材一覧', description: '在庫数・個体番号・貸出状態を管理', icon: 'mdi-tools', color: 'primary', to: '/tool-rental/tools', permission: 'tool_rental.view' },
-  { title: '貸出処理', description: 'クラス・氏名・個体を指定して貸出', icon: 'mdi-arrow-right-bold-circle-outline', color: 'primary', to: '/tool-rental/loans', permission: 'tool_rental.checkout' },
-  { title: '返却処理', description: '貸出中の個体を選んで返却', icon: 'mdi-arrow-left-bold-circle-outline', color: 'success', to: '/tool-rental/loans/return', permission: 'tool_rental.return' },
-  { title: '現在貸出中', description: '返却されていない工具・機材を確認', icon: 'mdi-clipboard-clock-outline', color: 'info', to: '/tool-rental/loans/current', permission: 'tool_rental.view' },
-  { title: '予約管理', description: '予約待ち・順番・貸出への移行', icon: 'mdi-calendar-clock-outline', color: 'warning', to: '/tool-rental/reservations', permission: 'tool_rental.view' },
-  { title: '貸出履歴', description: '貸出・返却・延長の記録を確認', icon: 'mdi-history', color: 'secondary', to: '/tool-rental/loans/history', permission: 'tool_rental.history' },
-  { title: '通知・全体設定', description: '通知先・返却時刻・貸出履歴を管理', icon: 'mdi-clock-cog-outline', color: 'secondary', to: '/tool-rental/settings', permission: 'tool_rental.manage' },
+const links = [
+  { title: '工具一覧', description: '工具の個体・管理番号を確認、登録', icon: 'mdi-toolbox-outline', color: 'primary', to: '/tool-rental/tools' },
+  { title: '貸出を記録', description: '借りた人と個体を記録する', icon: 'mdi-arrow-up-right-circle-outline', color: 'primary', to: '/tool-rental/loans' },
+  { title: '返却を記録', description: '返却された個体と返却者を記録する', icon: 'mdi-check-circle-outline', color: 'success', to: '/tool-rental/loans/return' },
+  { title: '貸出中の個体', description: 'まだ返却されていない工具を確認', icon: 'mdi-clipboard-list-outline', color: 'warning', to: '/tool-rental/loans/current' },
+  { title: '貸出・返却履歴', description: '過去の貸出と返却の記録を確認', icon: 'mdi-history', color: 'secondary', to: '/tool-rental/loans/history' },
 ]
 
-const visibleItems = computed(() =>
-  items.filter(item => auth.hasPermission(item.permission) || (item.permission === 'tool_rental.view' && ['tool_rental.manage', 'tool_rental.checkout', 'tool_rental.return'].some(permission => auth.hasPermission(permission))) || (item.permission === 'tool_rental.history' && auth.hasPermission('tool_rental.manage'))),
-)
+const formatDate = (value: string) => new Date(value.replace(' ', 'T') + (value.endsWith('Z') ? '' : '+09:00')).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
 
-async function loadSummary() {
-  if (!canView.value) return
+const loadSummary = async () => {
   loading.value = true
   errorMessage.value = ''
   try {
     const [toolResult, loanResult] = await Promise.all([
       request<Tool[]>('/tools'),
-      request<Loan[]>('/loans/current'),
+      request<CurrentLoanItem[]>('/loans/current'),
     ])
     tools.value = toolResult
-    activeLoans.value = loanResult
+    currentLoans.value = loanResult
   } catch (error) {
     console.error(error)
-    errorMessage.value = '工具貸出情報を取得できませんでした。権限と通信状態を確認してください。'
+    errorMessage.value = '工具の情報を読み込めませんでした。権限とAPIの状態を確認してください。'
   } finally {
     loading.value = false
   }
