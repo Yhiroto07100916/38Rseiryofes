@@ -57,6 +57,9 @@ const snackbarColor = ref('success')
 
 const currentUserName = computed(() => auth.user?.nickname?.trim() || auth.user?.name?.trim() || '')
 const form = reactive({ class_name: '38R', name: currentUserName.value })
+watch(currentUserName, value => {
+  if (!form.name.trim() && value) form.name = value
+})
 const availableTools = computed(() => tools.value.filter(tool => tool.available_quantity > 0))
 const availableItems = computed(() => items.value.filter(item => item.status === 'available').map(item => ({ ...item, label: `${item.management_number}（個体ID: ${item.id}）` })))
 const selectedTool = computed(() => tools.value.find(tool => tool.id === selectedToolId.value) ?? null)
