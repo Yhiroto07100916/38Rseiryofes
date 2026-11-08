@@ -376,7 +376,7 @@ async function sendDueNotifications(env: NotificationEnv): Promise<void> {
     FROM loans
     INNER JOIN borrowers ON borrowers.id = loans.borrower_id
     INNER JOIN tools ON tools.id = loans.tool_id
-    LEFT JOIN loan_items ON loan_items.loan_id = loans.id
+    LEFT JOIN loan_items ON loan_items.loan_id = loans.id AND loan_items.returned_at IS NULL
     LEFT JOIN tool_items ON tool_items.id = loan_items.tool_item_id
     WHERE loans.status = 'borrowed'
       AND loans.due_at IS NOT NULL
