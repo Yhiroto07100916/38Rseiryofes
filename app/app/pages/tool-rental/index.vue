@@ -102,7 +102,7 @@ const totalItems = computed(() => tools.value.reduce((total, tool) => total + to
 
 const allLinks = [
   { title: '工具一覧', description: '工具の個体・管理番号を確認、登録', icon: 'mdi-toolbox-outline', color: 'primary', to: '/tool-rental/tools' },
-  { title: '貸出を記録', description: '借りた人と個体を記録する', icon: 'mdi-arrow-up-right-circle-outline', color: 'primary', to: '/tool-rental/loans' },
+  { title: '貸出を記録', description: '借りた人と個体を記録する', icon: 'mdi-arrow-up-bold-circle-outline', color: 'primary', to: '/tool-rental/loans' },
   { title: '返却を記録', description: '返却された個体と返却者を記録する', icon: 'mdi-check-circle-outline', color: 'success', to: '/tool-rental/loans/return' },
   { title: '貸出中の個体', description: 'まだ返却されていない工具を確認', icon: 'mdi-clipboard-list-outline', color: 'warning', to: '/tool-rental/loans/current' },
   { title: '貸出・返却履歴', description: '過去の貸出と返却の記録を確認', icon: 'mdi-history', color: 'secondary', to: '/tool-rental/loans/history' },
