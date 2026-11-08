@@ -10,7 +10,7 @@
       <v-btn icon="mdi-refresh" variant="text" :loading="loading" aria-label="更新" @click="loadTools" />
     </div>
 
-    <v-text-field v-model="search" label="工具名・管理番号を検索" prepend-inner-icon="mdi-magnify" clearable hide-details class="mb-4" />
+    <v-text-field v-model="search" label="工具名・カテゴリ・保管場所を検索" prepend-inner-icon="mdi-magnify" clearable hide-details class="mb-4" />
 
     <v-row>
       <v-col v-for="tool in filteredTools" :key="tool.id" cols="12" md="6" lg="4">
