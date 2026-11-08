@@ -10,8 +10,7 @@ import { handleCalendarCategories } from "./routes/calendar-categories"
 import { handleNews } from "./routes/news"
 import { handleScripts } from "./routes/scripts"
 import { handleEquipment } from "./routes/equipment"
-import { handleToolRentalFull, scheduleToolRentalNotifications, type ToolRentalEnv } from "./routes/tool-rental-full"
-export { NotificationScheduler } from "./routes/tool-rental-full"
+import { handleToolRental } from "./routes/tool-rental"
 import { handleAccounting } from "./routes/accounting"
 import { handleFiles } from "./routes/files"
 import { handlePublicFiles } from "./routes/public-files"
@@ -187,10 +186,13 @@ export default {
       url.pathname === "/api/tool-rental" ||
       url.pathname.startsWith("/api/tool-rental/")
     ) {
+      const path = url.pathname.slice("/api/tool-rental".length)
+      const pathParts = path.split("/").filter(Boolean)
+
       try {
         return withCors(
           request,
-          await handleToolRentalFull(request, env as unknown as ToolRentalEnv),
+          await handleToolRental(request, env, pathParts),
         )
       } catch (error) {
         console.error("Tool rental API error:", error)
@@ -811,12 +813,6 @@ export default {
       await processQueuedAvatarDeletions(env, 50)
     } catch (error) {
       console.error("Scheduled avatar cleanup failed:", error)
-    }
-
-    try {
-      await scheduleToolRentalNotifications(env as unknown as ToolRentalEnv)
-    } catch (error) {
-      console.error("Tool rental notification scheduling failed:", error)
     }
   },
 } satisfies ExportedHandler<Env>
