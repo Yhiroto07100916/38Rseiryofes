@@ -10,7 +10,11 @@
       </div>
     </div>
 
-    <v-row>
+    <v-alert v-if="!canReturn" type="warning" variant="tonal" class="mb-4">
+      返却処理の権限がありません。
+    </v-alert>
+
+    <v-row v-if="canReturn">
       <v-col
         cols="12"
         lg="5"
@@ -223,6 +227,8 @@ import { classOptions } from '~/constants/tool-rental-classes'
 
 definePageMeta({ middleware: 'auth' })
 
+const auth = useAuthStore()
+const canReturn = computed(() => auth.hasPermission('tool_rental.return'))
 const { request } = useToolRentalApi()
 
 const searchClassName = ref('')
