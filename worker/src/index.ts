@@ -11,6 +11,7 @@ import { handleNews } from "./routes/news"
 import { handleScripts } from "./routes/scripts"
 import { handleEquipment } from "./routes/equipment"
 import { handleToolRental } from "./routes/tool-rental"
+import { runToolRentalNotifications } from "./routes/tool-rental-notifications"
 import { handleAccounting } from "./routes/accounting"
 import { handleFiles } from "./routes/files"
 import { handlePublicFiles } from "./routes/public-files"
@@ -814,5 +815,7 @@ export default {
     } catch (error) {
       console.error("Scheduled avatar cleanup failed:", error)
     }
+
+    await runToolRentalNotifications(env)
   },
 } satisfies ExportedHandler<Env>
