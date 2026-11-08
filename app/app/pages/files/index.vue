@@ -120,6 +120,16 @@
                 検索
               </v-btn>
             </div>
+            <v-checkbox
+              v-model="searchAllFolders"
+              label="全フォルダから検索"
+              density="compact"
+              hide-details
+              class="mt-2"
+              :disabled="!search?.trim()"
+              @update:model-value="loadFiles"
+            />
+            </div>
           </v-col>
         </v-row>
       </v-card-text>
@@ -353,6 +363,15 @@
         <v-card-title class="pt-5">{{ editingFolder ? "フォルダを編集" : "フォルダを作成" }}</v-card-title>
         <v-card-text>
           <v-text-field v-model="folderName" label="フォルダ名" maxlength="100" counter autofocus variant="outlined" class="mb-3" />
+          <v-select
+            v-model="parentFolderId"
+            :items="parentFolderOptions"
+            label="親フォルダ"
+            item-title="title"
+            item-value="value"
+            variant="outlined"
+            class="mb-3"
+          />
           <v-select v-model="folderCategory" :items="activeCategoryOptions" label="カテゴリ（任意）" clearable variant="outlined" class="mb-3" />
           <v-textarea v-model="folderDescription" label="説明（任意）" rows="2" auto-grow variant="outlined" />
         </v-card-text>
@@ -607,6 +626,7 @@ const auth = useAuthStore()
 const loading = ref(false)
 const uploading = ref(false)
 const search = ref('')
+const searchAllFolders = ref(false)
 const categoryFilter = ref<string | null>(null)
 const uploadCategory = ref('uploads')
 const showArchived = ref(false)
@@ -621,6 +641,7 @@ const folderSaving = ref(false)
 const folderName = ref('')
 const folderCategory = ref<string | null>(null)
 const folderDescription = ref('')
+const parentFolderId = ref('__root__')
 const moveDialog = ref(false)
 const moveTarget = ref<ManagedFile | null>(null)
 const moveFolderId = ref('__root__')
@@ -701,6 +722,24 @@ const moveFolderOptions = computed(() => [
   })),
 ])
 
+const parentFolderOptions = computed(() => {
+  const editing = editingFolder.value
+  const excluded = editing
+    ? moveFolders.value
+      .filter(folder =>
+        folder.id === editing.id ||
+        (folder.path ?? '').startsWith((editing.path ?? editing.name) + ' / '),
+      )
+      .map(folder => folder.id)
+    : []
+  return [
+    { title: '最上位（ルート）', value: '__root__' },
+    ...moveFolders.value
+      .filter(folder => !excluded.includes(folder.id))
+      .map(folder => ({ title: folder.path ?? folder.name, value: folder.id })),
+  ]
+})
+
 const categoryOptions = computed(() =>
   activeCategories.value.map(category => ({
     title: category.name,
@@ -780,21 +819,39 @@ const navigateToFolder = async (index: number) => {
   await Promise.all([loadFolders(), loadFiles()])
 }
 
-const openFolderDialog = () => {
+const loadAllFolders = async () => {
+  const response = await apiFetch<{ folders: FileFolder[] }>('/api/file-folders?all=true')
+  moveFolders.value = response.folders
+}
+
+const openFolderDialog = async () => {
   editingFolder.value = null
   folderName.value = ''
   folderCategory.value = null
   folderDescription.value = ''
-  folderDialog.value = true
+  parentFolderId.value = currentFolderId.value ?? '__root__'
+  try {
+    await loadAllFolders()
+    folderDialog.value = true
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = 'フォルダ一覧を取得できませんでした。'
+  }
 }
 
-
-const editFolder = (folder: FileFolder) => {
+const editFolder = async (folder: FileFolder) => {
   editingFolder.value = folder
   folderName.value = folder.name
   folderCategory.value = folder.category
   folderDescription.value = folder.description ?? ''
-  folderDialog.value = true
+  parentFolderId.value = folder.parent_id ?? '__root__'
+  try {
+    await loadAllFolders()
+    folderDialog.value = true
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = 'フォルダ一覧を取得できませんでした。'
+  }
 }
 
 const removeFolder = async (folder: FileFolder) => {
@@ -828,6 +885,7 @@ const createFolder = async () => {
         method: 'PATCH',
         body: {
           name,
+          parent_id: parentFolderId.value === '__root__' ? null : parentFolderId.value,
           category: folderCategory.value,
           description: folderDescription.value.trim() || null,
         },
@@ -865,7 +923,9 @@ const loadFiles = async () => {
     if (search.value.trim()) params.set('search', search.value.trim())
     if (categoryFilter.value) params.set('category', categoryFilter.value)
     if (showArchived.value) params.set('archived', 'true')
-    if (!showArchived.value) params.set('folder_id', currentFolderId.value ?? 'root')
+    if (!showArchived.value && !(searchAllFolders.value && search.value.trim())) {
+      params.set('folder_id', currentFolderId.value ?? 'root')
+    }
 
     const response = await apiFetch<{ files: ManagedFile[]; count: number }>(
       `/api/files?${params.toString()}`,
