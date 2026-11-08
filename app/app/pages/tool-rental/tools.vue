@@ -1,1041 +1,234 @@
 <template>
   <div>
-    <div class="d-flex flex-wrap align-center ga-3 mb-6">
+    <div class="d-flex flex-wrap align-center ga-3 mb-5">
       <div>
-        <div class="page-title">
-          工具・機材管理
-        </div>
-
-        <div v-if="auth.isAdmin.value" class="page-subtitle">
-          工具・機材の種類・在庫・貸出状況の管理、追加・編集・個体の管理ができます。
-        </div>
-        <div v-else class="page-subtitle">
-          工具・機材の種類・在庫・貸出状況を確認できます。
-        </div>
+        <h1 class="text-h5 font-weight-bold">工具・機材一覧</h1>
+        <p class="text-body-2 text-medium-emphasis mb-0">工具の種類と、管理番号ごとの登録・貸出状態を確認します。</p>
       </div>
-
       <v-spacer />
-
-      <v-btn
-        v-if="auth.isAdmin.value"
-        color="primary"
-        prepend-icon="mdi-plus"
-        @click="openCreateDialog"
-      >
-        工具・機材を登録
-      </v-btn>
+      <v-btn v-if="canManage" color="primary" prepend-icon="mdi-plus" @click="openCreate">工具を登録</v-btn>
+      <v-btn icon="mdi-refresh" variant="text" :loading="loading" aria-label="更新" @click="loadTools" />
     </div>
 
-    <v-card elevation="1">
-      <v-card-text>
-        <v-text-field
-          v-model="search"
-          prepend-inner-icon="mdi-magnify"
-          label="工具・機材を検索"
-          placeholder="工具・機材名・カテゴリ・場所"
-          clearable
-          hide-details
-          autocomplete="off"
-          inputmode="search"
-        />
-      </v-card-text>
+    <v-text-field v-model="search" label="工具名・管理番号を検索" prepend-inner-icon="mdi-magnify" clearable hide-details class="mb-4" />
 
-      <v-divider />
-
-      <div class="page-table">
-        <v-table fixed-header>
-        <thead>
-          <tr>
-            <th>工具・機材名</th>
-            <th>カテゴリ</th>
-            <th>場所</th>
-            <th>在庫</th>
-            <th>状態</th>
-            <th class="text-right">操作</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          <tr
-            v-for="tool in filteredTools"
-            :key="tool.id"
-            :draggable="
-              auth.isAdmin.value &&
-              !search.trim()
-            "
-            :class="{
-              'tool-row-draggable':
-                auth.isAdmin.value &&
-                !search.trim(),
-              'tool-row-dragging':
-                draggingToolId === tool.id,
-              'tool-row-drag-over-before':
-                dragOverToolId === tool.id &&
-                dragOverPosition === 'before',
-              'tool-row-drag-over-after':
-                dragOverToolId === tool.id &&
-                dragOverPosition === 'after',
-            }"
-            @dragstart="handleDragStart(tool.id)"
-            @dragover.prevent="
-              handleDragOver($event, tool.id)
-            "
-            @drop="handleDrop(tool.id)"
-            @dragend="handleDragEnd"
-          >
-            <td>
-              <div class="font-weight-medium">
-                {{ tool.name }}
-              </div>
-
-              <div
-                v-if="tool.description"
-                class="text-caption text-medium-emphasis"
-              >
-                {{ tool.description }}
-              </div>
-            </td>
-
-            <td>
-              {{ tool.category || '-' }}
-            </td>
-
-            <td>
-              {{ tool.location || '-' }}
-            </td>
-
-            <td>
-              <strong>{{ tool.available_quantity }}</strong>
-              / {{ tool.quantity }}
-            </td>
-
-            <td>
-              <v-chip
-                :color="
-                  tool.available_quantity > 0
-                    ? 'success'
-                    : 'error'
-                "
-                size="small"
-                variant="tonal"
-              >
-                {{
-                  tool.available_quantity > 0
-                    ? '貸出可能'
-                    : '在庫なし'
-                }}
+    <v-row>
+      <v-col v-for="tool in filteredTools" :key="tool.id" cols="12" md="6" lg="4">
+        <v-card rounded="lg" variant="outlined" height="100%">
+          <v-card-item>
+            <template #title>{{ tool.name }}</template>
+            <template #subtitle>{{ [tool.category, tool.location].filter(Boolean).join(' ・ ') || '分類・保管場所未設定' }}</template>
+            <template #append>
+              <v-chip size="small" :color="tool.available_quantity ? 'success' : 'warning'" variant="tonal">
+                {{ tool.available_quantity }} / {{ tool.quantity }} 個
               </v-chip>
-            </td>
+            </template>
+          </v-card-item>
+          <v-card-text class="pt-0">
+            <p v-if="tool.description" class="text-body-2 text-medium-emphasis">{{ tool.description }}</p>
+            <div class="d-flex ga-2 mb-3">
+              <v-chip size="small" color="success" variant="tonal">返却済み {{ tool.available_quantity }}</v-chip>
+              <v-chip size="small" color="warning" variant="tonal">貸出中 {{ tool.quantity - tool.available_quantity }}</v-chip>
+            </div>
+            <v-expansion-panels variant="accordion">
+              <v-expansion-panel>
+                <v-expansion-panel-title @click="loadItems(tool)">
+                  個体・管理番号を確認
+                </v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <div v-if="itemLoadingId === tool.id" class="text-center py-3"><v-progress-circular indeterminate size="24" /></div>
+                  <div v-else-if="itemsByTool[tool.id]?.length" class="d-flex flex-wrap ga-2">
+                    <v-chip v-for="item in itemsByTool[tool.id]" :key="item.id" size="small" :color="item.status === 'available' ? 'success' : item.status === 'borrowed' ? 'warning' : 'grey'" variant="tonal">
+                      {{ item.management_number }} · {{ statusLabel(item.status) }}
+                    </v-chip>
+                  </div>
+                  <div v-else class="text-body-2 text-medium-emphasis">個体情報がありません。</div>
+                  <v-divider class="my-3" />
+                  <div v-if="canManage" class="d-flex ga-2 align-start">
+                    <v-text-field v-model="newNumbers[tool.id]" label="管理番号を追加" placeholder="例：38R-001" density="compact" hide-details />
+                    <v-btn color="primary" :loading="addingToolId === tool.id" :disabled="!newNumbers[tool.id]?.trim()" @click="addItem(tool)">追加</v-btn>
+                  </div>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+          </v-card-text>
+          <v-card-actions v-if="canManage">
+            <v-btn variant="text" prepend-icon="mdi-pencil" @click="openEdit(tool)">基本情報を編集</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-col>
+    </v-row>
 
-            <td class="text-right">
-              <template v-if="auth.isAdmin.value">
-                <v-btn
-                  icon="mdi-pencil"
-                  variant="text"
-                  size="small"
-                  @click="openEditDialog(tool)"
-                />
+    <v-alert v-if="!loading && filteredTools.length === 0" type="info" variant="tonal">該当する工具・機材はありません。</v-alert>
 
-                <v-btn
-                  icon="mdi-delete-outline"
-                  variant="text"
-                  size="small"
-                  color="error"
-                  :disabled="
-                    tool.available_quantity < tool.quantity
-                  "
-                  @click="openDeleteDialog(tool)"
-                />
-              </template>
-
-              <span
-                v-else
-                class="text-medium-emphasis"
-              >
-                -
-              </span>
-            </td>
-          </tr>
-
-          <tr v-if="filteredTools.length === 0">
-            <td
-              colspan="6"
-              class="table-empty"
-            >
-              工具・機材がありません。
-            </td>
-          </tr>
-        </tbody>
-      </v-table>
-      </div>
-    </v-card>
-
-    <v-dialog
-      v-if="auth.isAdmin.value"
-      v-model="dialog"
-      max-width="650"
-    >
+    <v-dialog v-model="dialog" max-width="560">
       <v-card>
-        <v-card-title>
-          {{ editingTool ? '工具・機材を編集' : '工具・機材を登録' }}
-        </v-card-title>
-
+        <v-card-title>{{ editingTool ? '工具情報を編集' : '工具を登録' }}</v-card-title>
         <v-card-text>
-          <v-form @submit.prevent="saveTool">
-            <v-text-field
-              v-model="form.name"
-              label="工具・機材名"
-              required
-              class="mb-2"
-            />
-
-            <v-text-field
-              v-model="form.category"
-              label="カテゴリ"
-              class="mb-2"
-            />
-
-            <v-text-field
-              v-model="form.location"
-              label="保管場所"
-              class="mb-2"
-            />
-
-            <v-textarea
-              v-model="form.description"
-              label="説明"
-              rows="3"
-              class="mb-4"
-            />
-
-            <div class="text-subtitle-1 font-weight-medium mb-1">
-              貸出ルール
-            </div>
-
-            <div class="text-body-2 text-medium-emphasis mb-3">
-              工具・機材ごとの貸出条件を設定します。
-            </div>
-
-            <v-text-field
-              :model-value="form.maxQuantityPerClass"
-            @update:model-value="setMaxQuantityPerClass"
-              label="クラスごとの最大貸出数"
-              type="number"
-              min="1"
-              placeholder="制限なし"
-              hint="空欄にすると制限なし"
-              persistent-hint
-              class="mb-4"
-            />
-
-            <v-text-field
-              :model-value="form.loanDurationMinutes"
-            @update:model-value="setLoanDurationMinutes"
-              label="貸出時間（分）"
-              type="number"
-              min="1"
-              placeholder="制限なし"
-              hint="空欄にすると時間制限なし"
-              persistent-hint
-              class="mb-4"
-            />
-
-            <v-text-field
-              :model-value="form.maxQuantityPerChief"
-              @update:model-value="setMaxQuantityPerChief"
-              label="チーフの最大貸出数"
-              type="number"
-              min="1"
-              placeholder="制限なし"
-              hint="空欄にするとチーフの個数制限なし"
-              persistent-hint
-              class="mb-4"
-            />
-
-            <v-text-field
-              :model-value="form.loanDurationMinutesPerChief"
-              @update:model-value="setLoanDurationMinutesPerChief"
-              label="チーフの貸出時間（分）"
-              type="number"
-              min="1"
-              placeholder="制限なし"
-              hint="空欄にするとチーフの時間制限なし"
-              persistent-hint
-              class="mb-4"
-            />
-
-            <v-switch
-              v-model="form.universalReturnEnabled"
-              label="全体返却の対象にする"
-              color="primary"
-              hint="有効にすると、全体返却時刻が貸出期限に反映されます。"
-              persistent-hint
-              class="mb-4"
-            />
-
-            <v-switch
-              v-model="form.universalReturnEnabledForChief"
-              label="チーフの全体返却の対象にする"
-              color="primary"
-              hint="有効にすると、チーフ用の全体返却時刻が貸出期限に反映されます。"
-              persistent-hint
-              class="mb-4"
-            />
-
-            <div class="text-subtitle-1 font-weight-medium mb-1">
-              個体・管理番号
-            </div>
-
-            <div class="text-body-2 text-medium-emphasis mb-3">
-              実際の工具・機材1個ごとの管理番号を入力してください。
-            </div>
-
-            <div
-              v-for="(item, index) in form.toolItems"
-              :key="item.key"
-              class="d-flex align-center ga-2 mb-2"
-            >
-              <v-text-field
-                v-model="item.management_number"
-                :label="`管理番号 ${index + 1}`"
-                placeholder="例：TD-001"
-                hide-details
-                density="comfortable"
-              />
-
-              <v-btn
-                icon="mdi-minus-circle-outline"
-                variant="text"
-                color="error"
-                :disabled="
-                  form.toolItems.length <= 1 ||
-                  item.status !== 'available'
-                "
-                @click="removeToolItem(index)"
-              />
-            </div>
-
-            <v-btn
-              variant="tonal"
-              prepend-icon="mdi-plus"
-              class="mt-2"
-              @click="addToolItem"
-            >
-              個体を追加
-            </v-btn>
-
-            <v-alert
-              v-if="editingTool"
-              type="info"
-              variant="tonal"
-              class="mt-4"
-            >
-              貸出中でない工具・機材は基本情報を編集できます。ただし、貸出履歴のある個体は管理番号の変更・削除ができません。
-            </v-alert>
-
-            <v-alert
-              v-if="formError"
-              type="error"
-              variant="tonal"
-              class="mt-4"
-            >
-              {{ formError }}
-            </v-alert>
-
-            <div class="d-flex justify-end ga-2 mt-5">
-              <v-btn
-                variant="text"
-                @click="dialog = false"
-              >
-                キャンセル
-              </v-btn>
-
-              <v-btn
-                type="submit"
-                color="primary"
-                :loading="saving"
-              >
-                {{ editingTool ? '保存' : '登録' }}
-              </v-btn>
-            </div>
-          </v-form>
+          <v-text-field v-model="form.name" label="工具・機材名" autofocus />
+          <v-text-field v-model="form.category" label="カテゴリ" />
+          <v-text-field v-model="form.location" label="保管場所" />
+          <v-textarea v-model="form.description" label="説明" rows="2" />
+          <v-divider class="my-3" />
+          <div class="text-subtitle-2 mb-2">個体の管理番号</div>
+          <v-textarea v-if="!editingTool" v-model="form.managementNumbers" label="管理番号（1行に1つ）" placeholder="38R-001&#10;38R-002" rows="4" hint="工具1個につき管理番号を1つ登録します。" persistent-hint />
         </v-card-text>
-      </v-card>
-    </v-dialog>
-
-    <v-dialog
-      v-if="auth.isAdmin.value"
-      v-model="deleteDialog"
-      max-width="480"
-    >
-      <v-card>
-        <v-card-title>
-          工具・機材を削除
-        </v-card-title>
-
-        <v-card-text>
-          「{{ deletingTool?.name }}」を削除しますか？
-          <br />
-          <br />
-          <strong>
-            現在貸出中でなければ削除できます。過去の貸出履歴は残ります。
-          </strong>
-        </v-card-text>
-
         <v-card-actions>
           <v-spacer />
-
-          <v-btn @click="deleteDialog = false">
-            キャンセル
-          </v-btn>
-
-          <v-btn
-            color="error"
-            :loading="deleting"
-            @click="deleteTool"
-          >
-            削除する
-          </v-btn>
+          <v-btn variant="text" :disabled="saving" @click="dialog = false">キャンセル</v-btn>
+          <v-btn color="primary" :loading="saving" :disabled="!form.name.trim() || (!editingTool && !form.managementNumbers.trim())" @click="saveTool">保存</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-snackbar
-      v-model="snackbar"
-      :color="snackbarColor"
-      timeout="3000"
-    >
-      {{ snackbarText }}
-    </v-snackbar>
+    <v-snackbar v-model="snackbar" :color="snackbarColor" timeout="3500">{{ snackbarText }}</v-snackbar>
   </div>
 </template>
 
 <script setup lang="ts">
-
 import type { Tool, ToolItem } from '~/types/tool-rental'
 
 definePageMeta({ middleware: 'auth' })
 
+const auth = useAuthStore()
+const canManage = computed(() => auth.hasPermission('tool_rental.manage'))
 const { request } = useToolRentalApi()
-const auth = useToolRentalAuth()
-
 const tools = ref<Tool[]>([])
+const itemsByTool = ref<Record<number, ToolItem[]>>({})
+const newNumbers = ref<Record<number, string>>({})
 const search = ref('')
-
+const loading = ref(false)
+const itemLoadingId = ref<number | null>(null)
+const addingToolId = ref<number | null>(null)
 const dialog = ref(false)
-const deleteDialog = ref(false)
-
-const editingTool = ref<Tool | null>(null)
-const deletingTool = ref<Tool | null>(null)
-
 const saving = ref(false)
-const deleting = ref(false)
-const formError = ref('')
-
+const editingTool = ref<Tool | null>(null)
+const form = reactive({ name: '', category: '', location: '', description: '', managementNumbers: '' })
 const snackbar = ref(false)
 const snackbarText = ref('')
 const snackbarColor = ref('success')
 
-const draggingToolId = ref<number | null>(null)
-const dragOverToolId = ref<number | null>(null)
-const dragOverPosition = ref<'before' | 'after' | null>(null)
-
-interface FormToolItem {
-  key: string
-  id: number | null
-  management_number: string
-  status: string
-  hasHistory: boolean
-}
-
-const form = reactive<{
-  name: string
-  category: string
-  description: string
-  location: string
-  maxQuantityPerClass: number | null
-  loanDurationMinutes: number | null
-  maxQuantityPerChief: number | null
-  loanDurationMinutesPerChief: number | null
-  universalReturnEnabled: boolean
-  universalReturnEnabledForChief: boolean
-  toolItems: FormToolItem[]
-}>({
-  name: '',
-  category: '',
-  description: '',
-  location: '',
-  maxQuantityPerClass: null,
-  loanDurationMinutes: null,
-  maxQuantityPerChief: null,
-  loanDurationMinutesPerChief: null,
-  universalReturnEnabled: true,
-  universalReturnEnabledForChief: true,
-  toolItems: [],
-})
-
-const setMaxQuantityPerClass = (value: string | number | null) => {
-  if (value === '' || value === null) {
-    form.maxQuantityPerClass = null
-    return
-  }
-
-  const numberValue = Number(value)
-
-  form.maxQuantityPerClass =
-    Number.isFinite(numberValue) ? numberValue : null
-}
-
-const setLoanDurationMinutes = (value: string | number | null) => {
-  if (value === '' || value === null) {
-    form.loanDurationMinutes = null
-    return
-  }
-
-  const numberValue = Number(value)
-
-  form.loanDurationMinutes =
-    Number.isFinite(numberValue) ? numberValue : null
-}
-
-const setMaxQuantityPerChief = (
-  value: string | number | null,
-) => {
-  if (value === '' || value === null) {
-    form.maxQuantityPerChief = null
-    return
-  }
-
-  const numberValue = Number(value)
-
-  form.maxQuantityPerChief =
-    Number.isFinite(numberValue) ? numberValue : null
-}
-
-const setLoanDurationMinutesPerChief = (
-  value: string | number | null,
-) => {
-  if (value === '' || value === null) {
-    form.loanDurationMinutesPerChief = null
-    return
-  }
-
-  const numberValue = Number(value)
-
-  form.loanDurationMinutesPerChief =
-    Number.isFinite(numberValue) ? numberValue : null
-}
-
-let itemKey = 0
-
-const createFormItem = (
-  item?: Partial<FormToolItem>,
-): FormToolItem => ({
-  key: `tool-item-${++itemKey}`,
-  id: item?.id ?? null,
-  management_number: item?.management_number ?? '',
-  status: item?.status ?? 'available',
-  hasHistory: item?.hasHistory ?? false,
-})
-
 const filteredTools = computed(() => {
-  const keyword = search.value.trim().toLowerCase()
-
-  if (!keyword) {
-    return tools.value
-  }
-
-  return tools.value.filter((tool) =>
-    [
-      tool.name,
-      tool.category,
-      tool.description,
-      tool.location,
-    ]
-      .filter(Boolean)
-      .some((value) =>
-        value!.toLowerCase().includes(keyword),
-      ),
-  )
+  const query = search.value.trim().toLowerCase()
+  if (!query) return tools.value
+  return tools.value.filter(tool => {
+    const base = [tool.name, tool.category, tool.location, tool.description].join(' ').toLowerCase()
+    const itemMatch = (itemsByTool.value[tool.id] ?? []).some(item => item.management_number.toLowerCase().includes(query))
+    return base.includes(query) || itemMatch
+  })
 })
+
+const statusLabel = (status: string) => status === 'available' ? '返却済み' : status === 'borrowed' ? '貸出中' : '使用停止'
+
+const showMessage = (message: string, color = 'success') => {
+  snackbarText.value = message
+  snackbarColor.value = color
+  snackbar.value = true
+}
 
 const loadTools = async () => {
-  tools.value = await request<Tool[]>('/tools')
-}
-
-const handleDragStart = (toolId: number) => {
-  if (!auth.isAdmin.value || search.value.trim()) {
-    return
-  }
-
-  draggingToolId.value = toolId
-  dragOverToolId.value = null
-  dragOverPosition.value = null
-}
-
-const handleDragOver = (
-  event: DragEvent,
-  targetToolId: number,
-) => {
-  if (
-    draggingToolId.value === null ||
-    draggingToolId.value === targetToolId ||
-    !auth.isAdmin.value ||
-    search.value.trim()
-  ) {
-    return
-  }
-
-  const target = event.currentTarget as HTMLElement
-  const rect = target.getBoundingClientRect()
-
-  dragOverToolId.value = targetToolId
-  dragOverPosition.value =
-    event.clientY < rect.top + rect.height / 2
-      ? 'before'
-      : 'after'
-}
-
-const handleDrop = async (
-  targetToolId: number,
-) => {
-  if (
-    draggingToolId.value === null ||
-    dragOverToolId.value === null ||
-    dragOverPosition.value === null ||
-    draggingToolId.value === targetToolId ||
-    !auth.isAdmin.value ||
-    search.value.trim()
-  ) {
-    return
-  }
-
-  const fromIndex = tools.value.findIndex(
-    tool => tool.id === draggingToolId.value,
-  )
-
-  const targetIndex = tools.value.findIndex(
-    tool => tool.id === targetToolId,
-  )
-
-  if (
-    fromIndex === -1 ||
-    targetIndex === -1
-  ) {
-    return
-  }
-
-  const newTools = [...tools.value]
-  const [movedTool] = newTools.splice(
-    fromIndex,
-    1,
-  )
-
-  if (!movedTool) {
-    return
-  }
-
-  let insertIndex = targetIndex
-
-  if (dragOverPosition.value === 'after') {
-    insertIndex++
-  }
-
-  if (fromIndex < insertIndex) {
-    insertIndex--
-  }
-
-  newTools.splice(
-    insertIndex,
-    0,
-    movedTool,
-  )
-
-  tools.value = newTools
-
+  loading.value = true
   try {
-    await request('/tools/order', {
-      method: 'PATCH',
-      body: {
-        tool_ids: tools.value.map(
-          tool => tool.id,
-        ),
-      },
-    })
-
-    showSnackbar(
-      '並び順を更新しました。',
-    )
+    tools.value = await request<Tool[]>('/tools')
   } catch (error) {
     console.error(error)
-
-    await loadTools()
-
-    showSnackbar(
-      '並び順の更新に失敗しました。',
-      'error',
-    )
+    showMessage('工具・機材一覧を取得できませんでした。', 'error')
+  } finally {
+    loading.value = false
   }
 }
 
-const handleDragEnd = () => {
-  draggingToolId.value = null
-  dragOverToolId.value = null
-  dragOverPosition.value = null
+const loadItems = async (tool: Tool) => {
+  if (itemsByTool.value[tool.id]) return
+  itemLoadingId.value = tool.id
+  try {
+    itemsByTool.value[tool.id] = await request<ToolItem[]>(`/tools/${tool.id}/items`)
+  } catch (error) {
+    console.error(error)
+    showMessage('個体情報を取得できませんでした。', 'error')
+  } finally {
+    itemLoadingId.value = null
+  }
 }
 
 const resetForm = () => {
   form.name = ''
   form.category = ''
-  form.description = ''
   form.location = ''
-  form.maxQuantityPerClass = null
-  form.loanDurationMinutes = null
-  form.maxQuantityPerChief = null
-  form.loanDurationMinutesPerChief = null
-  form.universalReturnEnabled = true
-  form.universalReturnEnabledForChief = true
-  form.toolItems = [
-    createFormItem(),
-  ]
-  formError.value = ''
+  form.description = ''
+  form.managementNumbers = ''
 }
 
-const addToolItem = () => {
-  form.toolItems.push(createFormItem())
-}
-
-const removeToolItem = (index: number) => {
-  const item = form.toolItems[index]
-
-  if (
-    !item ||
-    form.toolItems.length <= 1 ||
-    item.hasHistory ||
-    item.status !== 'available'
-  ) {
-    return
-  }
-
-  form.toolItems.splice(index, 1)
-}
-
-const loadToolItems = async (
-  toolId: number,
-) => {
-  const items = await request<ToolItem[]>(
-    `/tools/${toolId}/items`,
-  )
-
-  return items.map(item =>
-    createFormItem({
-      id: item.id,
-      management_number: item.management_number,
-      status: item.status,
-      hasHistory: item.has_history,
-    }),
-  )
-}
-
-const openCreateDialog = () => {
+const openCreate = () => {
   editingTool.value = null
   resetForm()
   dialog.value = true
 }
 
-const openEditDialog = async (tool: Tool) => {
+const openEdit = (tool: Tool) => {
   editingTool.value = tool
-  formError.value = ''
-
-  try {
-    const items = await request<ToolItem[]>(
-      `/tools/${tool.id}/items`,
-    )
-
-    form.name = tool.name
-    form.category = tool.category || ''
-    form.description = tool.description || ''
-    form.location = tool.location || ''
-    form.maxQuantityPerClass = tool.max_quantity_per_class
-    form.loanDurationMinutes = tool.loan_duration_minutes
-    form.maxQuantityPerChief = tool.max_quantity_per_chief
-    form.loanDurationMinutesPerChief =
-      tool.loan_duration_minutes_per_chief
-    form.universalReturnEnabled =
-      tool.universal_return_enabled === 1
-    form.universalReturnEnabledForChief =
-      tool.universal_return_enabled_for_chief === 1
-
-    form.toolItems = items.map(item =>
-      createFormItem({
-        id: item.id,
-        management_number: item.management_number,
-        status: item.status,
-        hasHistory: item.has_history,
-      }),
-    )
-
-    if (form.toolItems.length === 0) {
-      form.toolItems = [createFormItem()]
-    }
-
-    dialog.value = true
-  } catch (error: any) {
-    console.error(error)
-
-    showSnackbar(
-      error?.data?.detail ||
-      '工具・機材個体の取得に失敗しました。',
-      'error',
-    )
-  }
+  form.name = tool.name
+  form.category = tool.category ?? ''
+  form.location = tool.location ?? ''
+  form.description = tool.description ?? ''
+  form.managementNumbers = ''
+  dialog.value = true
 }
 
 const saveTool = async () => {
-  if (!form.name.trim()) {
-    formError.value = '工具・機材名を入力してください。'
-    return
-  }
-
-  if (form.toolItems.length === 0) {
-    formError.value =
-      '工具・機材個体を1つ以上登録してください。'
-    return
-  }
-
-  if (
-    form.maxQuantityPerClass !== null &&
-    (!Number.isInteger(form.maxQuantityPerClass) ||
-      form.maxQuantityPerClass <= 0)
-  ) {
-    formError.value =
-      'クラスごとの最大貸出数は1以上で指定してください。'
-    return
-  }
-
-  if (
-    form.loanDurationMinutes !== null &&
-    (!Number.isInteger(form.loanDurationMinutes) ||
-      form.loanDurationMinutes <= 0)
-  ) {
-    formError.value =
-      '貸出時間は1分以上で指定してください。'
-    return
-  }
-
-    if (
-    form.maxQuantityPerChief !== null &&
-    (!Number.isInteger(form.maxQuantityPerChief) ||
-      form.maxQuantityPerChief <= 0)
-  ) {
-    formError.value =
-      'チーフの最大貸出数は1以上で指定してください。'
-    return
-  }
-
-  if (
-    form.loanDurationMinutesPerChief !== null &&
-    (!Number.isInteger(form.loanDurationMinutesPerChief) ||
-      form.loanDurationMinutesPerChief <= 0)
-  ) {
-    formError.value =
-      'チーフの貸出時間は1分以上で指定してください。'
-    return
-  }
-
-  const managementNumbers =
-    form.toolItems.map(item =>
-      item.management_number.trim(),
-    )
-
-  if (
-    managementNumbers.some(
-      number => !number,
-    )
-  ) {
-    formError.value =
-      'すべての個体に管理番号を入力してください。'
-    return
-  }
-
-  if (
-    new Set(managementNumbers).size !==
-    managementNumbers.length
-  ) {
-    formError.value =
-      '同じ管理番号を重複して登録することはできません。'
-    return
-  }
-
+  if (!canManage.value || !form.name.trim()) return
   saving.value = true
-  formError.value = ''
-
   try {
-    const body = {
-      name: form.name.trim(),
-      category: form.category.trim() || null,
-      description: form.description.trim() || null,
-      location: form.location.trim() || null,
-      max_quantity_per_class:
-        form.maxQuantityPerClass,
-      loan_duration_minutes:
-        form.loanDurationMinutes,
-      max_quantity_per_chief:
-        form.maxQuantityPerChief,
-      loan_duration_minutes_per_chief:
-        form.loanDurationMinutesPerChief,
-      universal_return_enabled:
-        form.universalReturnEnabled,
-      universal_return_enabled_for_chief:
-        form.universalReturnEnabledForChief,
-      tool_items: form.toolItems.map(item => ({
-        id: item.id,
-        management_number:
-          item.management_number.trim(),
-      })),
-    }
-
     if (editingTool.value) {
-      await request<Tool>(
-        `/tools/${editingTool.value.id}`,
-        {
-          method: 'PATCH',
-          body,
-        },
-      )
-
-      showSnackbar('工具・機材を更新しました。')
-    } else {
-      await request<Tool>('/tools', {
-        method: 'POST',
-        body,
+      await request(`/tools/${editingTool.value.id}`, {
+        method: 'PATCH',
+        body: { name: form.name, category: form.category, location: form.location, description: form.description },
       })
-
-      showSnackbar('工具・機材を登録しました。')
+      showMessage('工具情報を更新しました。')
+    } else {
+      const managementNumbers = form.managementNumbers.split(/\r?\n/).map(value => value.trim()).filter(Boolean)
+      if (!managementNumbers.length) return
+      await request('/tools', {
+        method: 'POST',
+        body: {
+          name: form.name,
+          category: form.category,
+          location: form.location,
+          description: form.description,
+          tool_items: managementNumbers.map(management_number => ({ management_number })),
+        },
+      })
+      showMessage('工具と個体を登録しました。')
     }
-
     dialog.value = false
     await loadTools()
   } catch (error: any) {
-    console.error(error)
-
-    formError.value =
-      error?.data?.detail ||
-      '保存に失敗しました。'
+    showMessage(error?.data?.detail || '保存に失敗しました。', 'error')
   } finally {
     saving.value = false
   }
 }
 
-const openDeleteDialog = (tool: Tool) => {
-  deletingTool.value = tool
-  deleteDialog.value = true
-}
-
-const deleteTool = async () => {
-  if (!deletingTool.value) {
-    return
-  }
-
-  deleting.value = true
-
+const addItem = async (tool: Tool) => {
+  const managementNumber = newNumbers.value[tool.id]?.trim()
+  if (!canManage.value || !managementNumber) return
+  addingToolId.value = tool.id
   try {
-    await request(
-      `/tools/${deletingTool.value.id}`,
-      {
-        method: 'DELETE',
-      },
-    )
-
-    deleteDialog.value = false
-    deletingTool.value = null
-    showSnackbar('工具・機材を削除しました。')
+    await request(`/tools/${tool.id}/items`, {
+      method: 'POST',
+      body: { management_numbers: [managementNumber] },
+    })
+    newNumbers.value[tool.id] = ''
+    delete itemsByTool.value[tool.id]
+    await loadItems(tool)
     await loadTools()
+    showMessage('個体を追加しました。')
   } catch (error: any) {
-    console.error(error)
-
-    showSnackbar(
-      error?.data?.detail ||
-      '削除に失敗しました。',
-      'error',
-    )
+    showMessage(error?.data?.detail || '個体の追加に失敗しました。', 'error')
   } finally {
-    deleting.value = false
+    addingToolId.value = null
   }
 }
 
-const showSnackbar = (
-  text: string,
-  color = 'success',
-) => {
-  snackbarText.value = text
-  snackbarColor.value = color
-  snackbar.value = true
-}
-
-onMounted(() => {
-  loadTools()
-})
+onMounted(loadTools)
 </script>
-
-<style scoped>
-
-.tool-row-draggable {
-  cursor: grab;
-}
-
-.tool-row-draggable:active {
-  cursor: grabbing;
-}
-
-.tool-row-dragging {
-  opacity: 0.5;
-}
-
-.tool-row-drag-over-before > td {
-  box-shadow:
-    inset 0 4px 0 rgb(var(--v-theme-primary));
-}
-
-.tool-row-drag-over-after > td {
-  box-shadow:
-    inset 0 -4px 0 rgb(var(--v-theme-primary));
-}
-
-.page-table {
-  max-height: calc(100vh - 220px);
-  overflow-y: auto;
-}
-
-:deep(.v-table__wrapper) {
-  overflow: visible;
-}
-
-:deep(thead th) {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  background: rgb(var(--v-theme-surface));
-}
-</style>
-
-<style scoped>
-.page-title {
-  margin: 4px 0 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  line-height: 1.35;
-}
-
-.page-subtitle {
-  margin-top: 4px;
-  color: rgba(var(--v-theme-on-surface), 0.62);
-  font-size: 0.875rem;
-}
-
-.table-empty {
-  padding: 28px 16px;
-  color: rgba(var(--v-theme-on-surface), 0.62);
-  text-align: center;
-}
-</style>
