@@ -264,7 +264,7 @@ import { classOptions } from '~/constants/tool-rental-classes'
 definePageMeta({ middleware: 'auth' })
 
 const auth = useAuthStore()
-const canExtend = computed(() => auth.hasPermission('tool_rental.checkout') || auth.hasPermission('tool_rental.manage'))
+const canExtend = computed(() => auth.hasPermission('tool_rental.checkout'))
 interface LoanToolItem {
   loan_item_id: number
   loan_id: number
