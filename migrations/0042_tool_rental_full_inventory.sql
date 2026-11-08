@@ -4,6 +4,8 @@ CREATE TABLE tools (
   category TEXT,
   description TEXT,
   location TEXT,
+  quantity INTEGER NOT NULL DEFAULT 0,
+  available_quantity INTEGER NOT NULL DEFAULT 0,
   max_quantity_per_class INTEGER,
   loan_duration_minutes INTEGER,
   max_quantity_per_chief INTEGER,
@@ -137,7 +139,8 @@ CREATE TABLE loan_return_notices (
   notice_date TEXT NOT NULL,
   notified_at TEXT,
   overdue_notified_at TEXT,
-  FOREIGN KEY (loan_id) REFERENCES loans(id) ON DELETE CASCADE
+  FOREIGN KEY (loan_id) REFERENCES loans(id) ON DELETE CASCADE,
+  UNIQUE (loan_id, return_time_id, notice_date)
 );
 
 CREATE INDEX idx_loan_return_notices_loan
