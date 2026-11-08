@@ -46,7 +46,13 @@ const filteredLoans = computed(() => {
   return loans.value.filter(loan => [loan.tool_name, loan.management_number, loan.class_name, loan.borrower_name].join(' ').toLowerCase().includes(query))
 })
 
-const formatDate = (value: string) => new Date(value.replace(' ', 'T') + (value.endsWith('Z') ? '' : '+09:00')).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+const formatDate = (value: string) => {
+  const normalized = value.replace(' ', 'T')
+  const date = /(?:Z|[+-]\\d{2}:\\d{2})$/.test(normalized)
+    ? new Date(normalized)
+    : new Date(`${normalized}+09:00`)
+  return date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+}
 
 const loadLoans = async () => {
   loading.value = true
