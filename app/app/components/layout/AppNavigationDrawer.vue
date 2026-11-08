@@ -161,7 +161,7 @@ const items: NavigationItem[] = [
 { icon: "mdi-bullhorn", title: "NEWS", to: "/news" },
 { icon: "mdi-clipboard-check-outline", title: "提出物管理", to: "/submissions", permission: "submissions.view" },
 { icon: "mdi-cart-outline", title: "ほしい物リスト", to: "/wishlist" },
-{ icon: "mdi-toolbox-outline", title: "工具貸出管理", to: "/tool-rental", permissions: ["tool_rental.view", "tool_rental.checkout", "tool_rental.return", "tool_rental.history", "tool_rental.manage"] },
+{ icon: "mdi-toolbox-outline", title: "工具・機材の貸出記録", to: "/tool-rental", permissions: ["tool_rental.view", "tool_rental.checkout", "tool_rental.return", "tool_rental.history", "tool_rental.manage"] },
 { title: "投票", icon: "mdi-vote-outline", to: "/surveys" },
 { title: "議事録", icon: "mdi-clipboard-text-multiple", to: "/minutes" },
 { title: "決定事項", icon: "mdi-notebook-check-outline", to: "/decisions" },
