@@ -97,7 +97,7 @@ const items = [
 ]
 
 const visibleItems = computed(() =>
-  items.filter(item => auth.hasPermission(item.permission) || (item.permission === 'tool_rental.view' && auth.hasPermission('tool_rental.manage'))),
+  items.filter(item => auth.hasPermission(item.permission) || (item.permission === 'tool_rental.view' && ['tool_rental.manage', 'tool_rental.checkout', 'tool_rental.return'].some(permission => auth.hasPermission(permission)))),
 )
 
 async function loadSummary() {
