@@ -242,6 +242,9 @@
                     {{ categoryName(file.category) }}
                     · {{ formatSize(file.size) }}
                     · {{ formatDate(file.created_at) }}
+                    <template v-if="searchAllFolders && search.trim()">
+                      · {{ file.folder_path || 'ルート' }}
+                    </template>
                   </div>
 
                   <div
@@ -610,6 +613,7 @@ interface ManagedFile {
   size: number
   category: string
   folder_id?: string | null
+  folder_path?: string | null
   uploaded_by: string
   created_at: string
   archived_at: string | null
@@ -936,10 +940,18 @@ const loadFiles = async () => {
       params.set('folder_id', currentFolderId.value ?? 'root')
     }
 
+    if (searchAllFolders.value && search.value.trim() && !showArchived.value) {
+      await loadAllFolders()
+    }
+
     const response = await apiFetch<{ files: ManagedFile[]; count: number }>(
       `/api/files?${params.toString()}`,
     )
-    files.value = response.files
+    const folderPaths = new Map(moveFolders.value.map(folder => [folder.id, folder.path ?? folder.name]))
+    files.value = response.files.map(file => ({
+      ...file,
+      folder_path: file.folder_id ? folderPaths.get(file.folder_id) ?? '不明なフォルダ' : 'ルート',
+    }))
   } catch (error) {
     console.error(error)
     errorMessage.value = 'ファイル一覧を取得できませんでした。'
