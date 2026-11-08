@@ -1,6 +1,7 @@
 <template>
   <div>
     <div class="d-flex flex-wrap align-center ga-3 mb-5">
+      <LayoutBackButton />
       <div>
         <h1 class="text-h5 font-weight-bold">貸出中の個体</h1>
         <p class="text-body-2 text-medium-emphasis mb-0">まだ返却が記録されていない工具の一覧です。</p>
