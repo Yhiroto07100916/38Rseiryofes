@@ -173,8 +173,14 @@ export async function handleToolRental(
     if (denied) return denied
 
     const url = new URL(request.url)
-    const limit = Math.min(200, Math.max(1, Math.floor(Number(url.searchParams.get("limit")) || 100)))
-    const offset = Math.max(0, Math.floor(Number(url.searchParams.get("offset")) || 0))
+    const requestedLimit = Number(url.searchParams.get("limit"))
+    const requestedOffset = Number(url.searchParams.get("offset"))
+    const limit = Number.isSafeInteger(requestedLimit)
+      ? Math.min(200, Math.max(1, requestedLimit))
+      : 100
+    const offset = Number.isSafeInteger(requestedOffset) && requestedOffset >= 0
+      ? Math.min(1_000_000, requestedOffset)
+      : 0
     const result = await env.DB.prepare(`
       SELECT
         l.id, l.tool_id, COALESCE(NULLIF(l.tool_name_snapshot, ''), t.name) AS tool_name, l.borrower_name,
