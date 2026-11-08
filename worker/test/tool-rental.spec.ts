@@ -239,6 +239,31 @@ describe("Tool rental full workflow API", () => {
     expect(reservations[0].status).toBe("waiting")
   })
 
+  it("restricts notification settings to managers and supports disabling notifications", async () => {
+    const viewer = await createUser("通知閲覧担当")
+    await grant(viewer.userId, ["tool_rental.view"])
+
+    const read = await api(viewer, "/settings/notifications")
+    expect(read.status).toBe(200)
+    expect((await read.json() as { channel: string }).channel).toBe("none")
+
+    const denied = await api(viewer, "/settings/notifications", {
+      method: "PATCH",
+      body: { channel: "none" },
+    })
+    expect(denied.status).toBe(403)
+
+    const manager = await createUser("通知管理担当")
+    await grant(manager.userId, ["tool_rental.manage", "tool_rental.view"])
+
+    const saved = await api(manager, "/settings/notifications", {
+      method: "PATCH",
+      body: { channel: "none" },
+    })
+    expect(saved.status).toBe(200)
+    expect((await saved.json() as { channel: string }).channel).toBe("none")
+  })
+
   it("saves the normal and chief universal return times", async () => {
     const manager = await createUser("返却時刻管理担当")
     await grant(manager.userId, ["tool_rental.manage", "tool_rental.view"])
