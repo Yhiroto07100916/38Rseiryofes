@@ -477,7 +477,7 @@ import { classOptions } from '~/constants/tool-rental-classes'
 definePageMeta({ middleware: 'auth' })
 
 const auth = useAuthStore()
-const canCheckout = computed(() => auth.hasPermission('tool_rental.checkout') || auth.hasPermission('tool_rental.manage'))
+const canCheckout = computed(() => auth.hasPermission('tool_rental.checkout'))
 
 const classGrades = [
   {
