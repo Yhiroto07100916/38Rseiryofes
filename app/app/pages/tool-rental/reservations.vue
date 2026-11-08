@@ -102,6 +102,7 @@
             <template #append>
               <div class="d-flex align-center ga-2">
                 <v-btn
+                  v-if="canCheckout"
                   color="primary"
                   variant="tonal"
                   prepend-icon="mdi-arrow-right"
@@ -111,6 +112,7 @@
                 </v-btn>
 
                 <v-btn
+                  v-if="canCheckout"
                   color="error"
                   variant="text"
                   icon="mdi-close"
@@ -177,6 +179,8 @@ import type { Reservation } from '~/types/tool-rental'
 
 definePageMeta({ middleware: 'auth' })
 
+const auth = useAuthStore()
+const canCheckout = computed(() => auth.hasPermission('tool_rental.checkout') || auth.hasPermission('tool_rental.manage'))
 const { request } = useToolRentalApi()
 
 const reservations = ref<Reservation[]>([])
