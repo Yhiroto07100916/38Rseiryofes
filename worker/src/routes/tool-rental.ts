@@ -1572,15 +1572,17 @@ export async function handleToolRental(
               borrowed_at,
               returned_quantity,
               status,
-              due_at
+              due_at,
+              tool_name_snapshot
             )
-            VALUES (?, ?, ?, datetime('now', '+9 hours'), 0, 'borrowed', ?)
+            VALUES (?, ?, ?, datetime('now', '+9 hours'), 0, 'borrowed', ?, ?)
           `)
           .bind(
             borrower.id,
             toolId,
             quantity,
             dueAt,
+            tool.name,
           )
           .run()
 
@@ -1671,7 +1673,7 @@ export async function handleToolRental(
               loans.status,
               borrowers.class_name,
               borrowers.name AS borrower_name,
-              tools.name AS tool_name
+              COALESCE(loans.tool_name_snapshot, tools.name) AS tool_name
             FROM loans
             INNER JOIN borrowers
               ON borrowers.id = loans.borrower_id
@@ -1727,7 +1729,7 @@ if (url.pathname === '/loans/current' && request.method === 'GET') {
     '  loans.status,',
     '  borrowers.class_name,',
     '  borrowers.name AS borrower_name,',
-    '  tools.name AS tool_name,',
+    '  COALESCE(loans.tool_name_snapshot, tools.name) AS tool_name,',
     '  tools.universal_return_enabled,',
     '  tools.loan_duration_minutes,',
     '  tools.loan_duration_minutes_per_chief',
@@ -2389,7 +2391,7 @@ const loanHistoryEditMatch = url.pathname.match(/^\/loans\/history\/(\d+)$/)
               returned_borrowers.class_name AS returned_by_class_name,
               returned_borrowers.name AS returned_by_name,
 
-              tools.name AS tool_name,
+              COALESCE(loans.tool_name_snapshot, tools.name) AS tool_name,
               CASE
                 WHEN tool_items.management_number LIKE 'DELETED-%'
                 THEN substr(
@@ -2527,7 +2529,7 @@ const loanHistoryEditMatch = url.pathname.match(/^\/loans\/history\/(\d+)$/)
                 loans.status,
                 borrowers.class_name,
                 borrowers.name AS borrower_name,
-                tools.name AS tool_name,
+                COALESCE(loans.tool_name_snapshot, tools.name) AS tool_name,
                 tools.loan_duration_minutes,
                 tools.loan_duration_minutes_per_chief
               FROM loans
@@ -2749,7 +2751,8 @@ const loanHistoryEditMatch = url.pathname.match(/^\/loans\/history\/(\d+)$/)
                 borrowed_at,
                 returned_quantity,
                 status,
-                due_at
+                due_at,
+                tool_name_snapshot
               )
               VALUES (
                 ?,
@@ -2758,6 +2761,7 @@ const loanHistoryEditMatch = url.pathname.match(/^\/loans\/history\/(\d+)$/)
                 datetime('now', '+9 hours'),
                 0,
                 'borrowed',
+                ?,
                 ?
               )
             `)
@@ -2766,6 +2770,7 @@ const loanHistoryEditMatch = url.pathname.match(/^\/loans\/history\/(\d+)$/)
               loanResult.tool_id,
               loanItems.length,
               dueAt,
+              loanResult.tool_name,
             )
             .run()
 
@@ -2979,7 +2984,7 @@ const loanHistoryEditMatch = url.pathname.match(/^\/loans\/history\/(\d+)$/)
                 loans.status AS loan_status,
                 borrowers.class_name,
                 borrowers.name AS borrower_name,
-                tools.name AS tool_name,
+                COALESCE(loans.tool_name_snapshot, tools.name) AS tool_name,
                 tool_items.management_number,
                 tool_items.status AS tool_item_status
               FROM loan_items
@@ -3185,7 +3190,7 @@ const loanHistoryEditMatch = url.pathname.match(/^\/loans\/history\/(\d+)$/)
                 borrowers.name AS borrower_name,
                 returned_borrowers.class_name AS returned_by_class_name,
                 returned_borrowers.name AS returned_by_name,
-                tools.name AS tool_name,
+                COALESCE(loans.tool_name_snapshot, tools.name) AS tool_name,
                 CASE
                   WHEN tool_items.management_number LIKE 'DELETED-%'
                   THEN substr(
