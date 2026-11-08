@@ -8,7 +8,6 @@
             <v-icon icon="mdi-toolbox-outline" />
           </v-avatar>
           <div class="flex-grow-1">
-            <div class="text-caption text-medium-emphasis">TOOL RENTAL</div>
             <h1 class="text-h4 font-weight-bold">工具貸出管理</h1>
           </div>
           <v-btn

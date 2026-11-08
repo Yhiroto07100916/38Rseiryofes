@@ -240,6 +240,117 @@
           </v-card>
         </v-col>
 
+        <v-col
+          cols="12"
+          sm="6"
+          md="4"
+        >
+          <v-card
+            to="/scripts"
+            rounded="xl"
+            variant="outlined"
+            class="admin-card"
+          >
+            <v-card-item>
+              <template #prepend>
+                <v-icon
+                  icon="mdi-script-text-outline"
+                  size="32"
+                  color="primary"
+                />
+              </template>
+
+              <v-card-title>
+                台本管理
+              </v-card-title>
+
+              <v-card-subtitle>
+                クラス劇の台本を管理
+              </v-card-subtitle>
+            </v-card-item>
+
+            <v-card-actions>
+              <v-spacer />
+
+              <v-icon icon="mdi-chevron-right" />
+            </v-card-actions>
+          </v-card>
+        </v-col>
+
+        <v-col
+          cols="12"
+          sm="6"
+          md="4"
+        >
+          <v-card
+            to="/files"
+            rounded="xl"
+            variant="outlined"
+            class="admin-card"
+          >
+            <v-card-item>
+              <template #prepend>
+                <v-icon
+                  icon="mdi-file-document-multiple-outline"
+                  size="32"
+                  color="primary"
+                />
+              </template>
+
+              <v-card-title>
+                書類管理
+              </v-card-title>
+
+              <v-card-subtitle>
+                星陵祭準備に必要な書類を管理
+              </v-card-subtitle>
+            </v-card-item>
+
+            <v-card-actions>
+              <v-spacer />
+
+              <v-icon icon="mdi-chevron-right" />
+            </v-card-actions>
+          </v-card>
+        </v-col>
+
+        <v-col
+          cols="12"
+          sm="6"
+          md="4"
+        >
+          <v-card
+            to="/admin/settings"
+            rounded="xl"
+            variant="outlined"
+            class="admin-card"
+          >
+            <v-card-item>
+              <template #prepend>
+                <v-icon
+                  icon="mdi-cog-outline"
+                  size="32"
+                  color="primary"
+                />
+              </template>
+
+              <v-card-title>
+                サイト設定
+              </v-card-title>
+
+              <v-card-subtitle>
+                38Rサイト全体の設定を管理
+              </v-card-subtitle>
+            </v-card-item>
+
+            <v-card-actions>
+              <v-spacer />
+
+              <v-icon icon="mdi-chevron-right" />
+            </v-card-actions>
+          </v-card>
+        </v-col>
+
       </v-row>
 
       <div class="section-header">
