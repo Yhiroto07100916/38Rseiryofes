@@ -29,16 +29,11 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
 
   const routeMiddleware = to.meta.middleware
-  const middlewareNames = (
-    Array.isArray(routeMiddleware)
-      ? routeMiddleware
-      : routeMiddleware
-        ? [routeMiddleware]
-        : []
-  ).filter(
-    (middleware): middleware is string =>
-      typeof middleware === 'string',
-  )
+  const middlewareNames = Array.isArray(routeMiddleware)
+    ? routeMiddleware
+    : routeMiddleware
+      ? [routeMiddleware]
+      : []
 
   if (middlewareNames.includes('admin')) {
     const isAdmin = auth.accountRoles.some(
