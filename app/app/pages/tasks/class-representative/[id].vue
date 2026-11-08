@@ -86,13 +86,15 @@
                   <div class="text-subtitle-2 font-weight-medium">関連リンク</div>
                   <v-btn size="small" variant="tonal" prepend-icon="mdi-plus" @click="editForm.links.push({ title: '', url: '' })">追加</v-btn>
                 </div>
-                <div v-for="(link, index) in editForm.links" :key="index" class="d-flex align-start ga-2 mb-2">
-                  <div class="flex-grow-1">
-                    <v-text-field v-model="link.title" label="表示タイトル" placeholder="例：資料・参考ページ" variant="outlined" density="comfortable" hide-details class="mb-2" />
-                    <v-text-field v-model="link.url" label="URL" placeholder="https://example.com" variant="outlined" density="comfortable" hide-details />
+                <template v-for="(link, index) in editForm.links" :key="index">
+                  <div class="d-flex align-start ga-2 mb-2">
+                    <div class="flex-grow-1">
+                      <v-text-field v-model="link.title" label="表示タイトル" placeholder="例：資料・参考ページ" variant="outlined" density="comfortable" hide-details class="mb-2" />
+                      <v-text-field v-model="link.url" label="URL" placeholder="https://example.com" variant="outlined" density="comfortable" hide-details />
+                    </div>
+                    <v-btn icon="mdi-close" variant="text" color="error" aria-label="リンクを削除" @click="editForm.links.splice(index, 1)" />
                   </div>
-                  <v-btn icon="mdi-close" variant="text" color="error" aria-label="リンクを削除" @click="editForm.links.splice(index, 1)" />
-                </div>
+                </template>
                 <div class="text-caption text-medium-emphasis">最大20件。タイトルとURLを両方入力してください。</div>
               </div>
 
@@ -619,6 +621,7 @@ const {
 } = useApi()
 
 const task = ref<Task | null>(null)
+const taskForDisplay = computed(() => task.value!)
 const comments = ref<TaskComment[]>([])
 
 const loading = ref(false)
