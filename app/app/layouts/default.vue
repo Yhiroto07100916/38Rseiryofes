@@ -15,6 +15,8 @@
 
     <AppBottomNavigation />
 
+    <ToolRentalTimers />
+
 
   </v-app>
 </template>
