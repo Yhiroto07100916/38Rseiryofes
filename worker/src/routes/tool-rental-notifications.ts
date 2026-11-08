@@ -368,7 +368,6 @@ async function sendDueNotifications(env: NotificationEnv): Promise<void> {
   const settings = await getNotificationSettings(env)
   if (settings.channel === "none") return
   const now = Date.now()
-  const { date } = notificationJstParts()
   const result = await env.DB.prepare(`
     SELECT
       loans.id, loans.due_at, loans.due_notice_sent_at, loans.due_at_notification_sent_at,
@@ -434,7 +433,7 @@ async function sendUniversalReturnNotifications(env: NotificationEnv): Promise<v
     for (const time of times.results) {
       const returnAt = new Date(`${date}T${time.return_time}:00+09:00`).getTime()
       const beforeWindow = now.getTime() >= returnAt - 5 * 60 * 1000 && now.getTime() < returnAt
-      const overdueWindow = now.getTime() >= returnAt && now.getTime() < returnAt + 5 * 60 * 1000
+      const overdueWindow = now.getTime() >= returnAt
       if (!beforeWindow && !overdueWindow) continue
 
       const rows = await env.DB.prepare(`
