@@ -172,9 +172,10 @@
 </template>
 
 <script setup lang="ts">
-definePageMeta({ middleware: 'auth' })
 
 import type { Reservation } from '~/types/tool-rental'
+
+definePageMeta({ middleware: 'auth' })
 
 const { request } = useToolRentalApi()
 
