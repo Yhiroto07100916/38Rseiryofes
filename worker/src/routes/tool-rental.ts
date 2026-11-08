@@ -134,10 +134,15 @@ export async function handleToolRental(
         typeof body.location === "string" ? body.location.trim() || null : null,
       ).run()
       const toolId = Number(created.meta.last_row_id)
-      for (const managementNumber of numbers) {
-        await env.DB.prepare(
-          "INSERT INTO tool_items (tool_id, management_number, status) VALUES (?, ?, 'available')",
-        ).bind(toolId, managementNumber).run()
+      try {
+        await env.DB.batch(numbers.map(managementNumber =>
+          env.DB.prepare(
+            "INSERT INTO tool_items (tool_id, management_number, status) VALUES (?, ?, 'available')",
+          ).bind(toolId, managementNumber),
+        ))
+      } catch (error) {
+        await env.DB.prepare("DELETE FROM tools WHERE id = ?").bind(toolId).run()
+        throw error
       }
       await refreshToolCounts(env.DB, toolId)
       return json({ id: toolId }, 201)
@@ -170,11 +175,11 @@ export async function handleToolRental(
       const tool = await env.DB.prepare("SELECT id FROM tools WHERE id = ? AND is_active = 1")
         .bind(toolId).first()
       if (!tool) return json({ detail: "工具・機材が見つかりません" }, 404)
-      for (const number of numbers) {
-        await env.DB.prepare(
+      await env.DB.batch(numbers.map(number =>
+        env.DB.prepare(
           "INSERT INTO tool_items (tool_id, management_number, status) VALUES (?, ?, 'available')",
-        ).bind(toolId, number).run()
-      }
+        ).bind(toolId, number),
+      ))
       await refreshToolCounts(env.DB, toolId)
       return json({ added: numbers.length }, 201)
     }
