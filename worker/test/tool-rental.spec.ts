@@ -60,6 +60,19 @@ describe("Tool rental API", () => {
     expect(tool.available_quantity).toBe(3);
   });
 
+  it("rejects non-object JSON bodies without throwing", async () => {
+    const manager = await createUser("入力検証担当");
+    await grant(manager.userId, ["tool_rental.manage", "tool_rental.view"]);
+
+    const response = await SELF.fetch("http://example.com/api/tool-rental/tools", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: manager.cookie },
+      body: "null",
+    });
+
+    expect(response.status).toBe(400);
+  });
+
   it("rejects checkout without permission", async () => {
     const user = await createUser("閲覧者");
     const toolId = await createTool(user.userId, "レンチ", 2);
