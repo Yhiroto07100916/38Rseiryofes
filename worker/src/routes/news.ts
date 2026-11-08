@@ -608,8 +608,6 @@ export async function handleNews(
     try {
       await enqueueNewsPushDeliveries(env, {
         id: newsId,
-        title,
-        detail,
       })
     } catch (error) {
       console.error("Failed to enqueue news push notifications:", error)
