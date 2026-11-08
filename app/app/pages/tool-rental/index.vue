@@ -94,7 +94,7 @@ const items = [
   { title: '現在貸出中', description: '返却されていない工具・機材を確認', icon: 'mdi-clipboard-clock-outline', color: 'info', to: '/tool-rental/loans/current', permission: 'tool_rental.view' },
   { title: '予約管理', description: '予約待ち・順番・貸出への移行', icon: 'mdi-calendar-clock-outline', color: 'warning', to: '/tool-rental/reservations', permission: 'tool_rental.view' },
   { title: '貸出履歴', description: '貸出・返却・延長の記録を確認', icon: 'mdi-history', color: 'secondary', to: '/tool-rental/loans/history', permission: 'tool_rental.history' },
-  { title: '返却時刻設定', description: '通常・チーフの全体返却時刻を設定', icon: 'mdi-clock-cog-outline', color: 'secondary', to: '/tool-rental/settings', permission: 'tool_rental.manage' },
+  { title: '通知・全体設定', description: '通知先・返却時刻・貸出履歴を管理', icon: 'mdi-clock-cog-outline', color: 'secondary', to: '/tool-rental/settings', permission: 'tool_rental.manage' },
 ]
 
 const visibleItems = computed(() =>
