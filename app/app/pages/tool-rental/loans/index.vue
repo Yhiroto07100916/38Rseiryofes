@@ -71,7 +71,7 @@ const snackbarText = ref('')
 const snackbarColor = ref('success')
 
 const currentUserName = computed(() => auth.user?.nickname?.trim() || auth.user?.name?.trim() || '')
-const form = reactive({ class_name: '38R', name: currentUserName.value, time_limit_minutes: null as number | null })
+const form = reactive({ class_name: '38R', name: currentUserName.value, time_limit_minutes: null as number | null | '' })
 watch(currentUserName, value => {
   if (!form.name.trim() && value) form.name = value
 })
@@ -79,7 +79,7 @@ const availableTools = computed(() => tools.value.filter(tool => tool.available_
 const availableItems = computed(() => items.value.filter(item => item.status === 'available').map(item => ({ ...item, label: `${item.management_number}（個体ID: ${item.id}）` })))
 const selectedTool = computed(() => tools.value.find(tool => tool.id === selectedToolId.value) ?? null)
 const selectedItem = computed(() => availableItems.value.find(item => item.id === selectedItemId.value) ?? null)
-const timeLimitValid = computed(() => form.time_limit_minutes === null || form.time_limit_minutes === undefined || form.time_limit_minutes === ('' as unknown as number) || (Number.isInteger(form.time_limit_minutes) && form.time_limit_minutes >= 5 && form.time_limit_minutes <= 10080))
+const timeLimitValid = computed(() => form.time_limit_minutes === null || form.time_limit_minutes === undefined || form.time_limit_minutes === '' || (Number.isInteger(form.time_limit_minutes) && form.time_limit_minutes >= 5 && form.time_limit_minutes <= 10080))
 const canSubmit = computed(() => !!form.class_name.trim() && !!form.name.trim() && selectedItemId.value !== null && timeLimitValid.value && !saving.value)
 
 const showMessage = (message: string, color = 'success') => {
