@@ -1,11 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
 
-type Env = {
-  DB: D1Database
-  FILES_BUCKET: R2Bucket
-  AI?: Ai
-}
-
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 const MODEL = "@cf/meta/llama-3.2-11b-vision-instruct"
 
