@@ -419,9 +419,10 @@
 </template>
 
 <script setup lang="ts">
-definePageMeta({ middleware: 'auth' })
 
 import type { Tool, ToolItem } from '~/types/tool-rental'
+
+definePageMeta({ middleware: 'auth' })
 
 const { request } = useToolRentalApi()
 const auth = useToolRentalAuth()
