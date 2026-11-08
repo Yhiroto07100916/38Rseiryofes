@@ -15,15 +15,15 @@
       </v-card-text>
       <v-divider />
       <v-table>
-        <thead><tr><th>工具</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th></tr></thead>
+        <thead><tr><th>工具</th><th>個体ID</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th></tr></thead>
         <tbody>
           <tr v-for="loan in filteredLoans" :key="loan.loan_item_id">
             <td>{{ loan.tool_name }}</td>
-            <td><v-chip size="small" variant="tonal">{{ loan.management_number }}</v-chip></td>
+            <td>{{ loan.tool_item_id }}</td><td><v-chip size="small" variant="tonal">{{ loan.management_number }}</v-chip></td>
             <td>{{ loan.class_name }} {{ loan.borrower_name }}</td>
             <td>{{ formatDate(loan.borrowed_at) }}</td>
           </tr>
-          <tr v-if="!loading && filteredLoans.length === 0"><td colspan="4" class="text-center text-medium-emphasis py-6">貸出中の個体はありません。</td></tr>
+          <tr v-if="!loading && filteredLoans.length === 0"><td colspan="5" class="text-center text-medium-emphasis py-6">貸出中の個体はありません。</td></tr>
         </tbody>
       </v-table>
     </v-card>
