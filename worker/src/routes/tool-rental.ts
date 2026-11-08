@@ -250,9 +250,15 @@ export async function handleToolRental(
         await env.DB.prepare("DELETE FROM loans WHERE id = ?").bind(loanId).run()
         return json({ detail: "ほかの操作で貸出済みになりました。画面を更新してください。" }, 409)
       }
-      await env.DB.prepare(
-        "INSERT INTO loan_items (loan_id, tool_item_id, created_at) VALUES (?, ?, datetime('now', '+9 hours'))",
-      ).bind(loanId, toolItemId).run()
+      try {
+        await env.DB.prepare(
+          "INSERT INTO loan_items (loan_id, tool_item_id, created_at) VALUES (?, ?, datetime('now', '+9 hours'))",
+        ).bind(loanId, toolItemId).run()
+      } catch (error) {
+        await env.DB.prepare("UPDATE tool_items SET status = 'available' WHERE id = ?").bind(toolItemId).run()
+        await env.DB.prepare("DELETE FROM loans WHERE id = ?").bind(loanId).run()
+        throw error
+      }
       await refreshToolCounts(env.DB, item.tool_id)
       return json({ success: true, loan_id: loanId }, 201)
     }
@@ -300,10 +306,16 @@ export async function handleToolRental(
       `).bind(returnerId, loanItemId).run()
       if (!updated.meta.changes) return json({ detail: "すでに返却が記録されています" }, 409)
 
-      await env.DB.prepare(`
+      const itemUpdated = await env.DB.prepare(`
         UPDATE tool_items SET status = 'available', updated_at = CURRENT_TIMESTAMP
         WHERE id = ? AND status = 'borrowed'
       `).bind(loanItem.tool_item_id).run()
+      if (!itemUpdated.meta.changes) {
+        await env.DB.prepare(
+          "UPDATE loan_items SET returned_at = NULL, returned_by_id = NULL WHERE id = ?",
+        ).bind(loanItemId).run()
+        return json({ detail: "個体の状態を更新できませんでした。再読み込みしてください。" }, 409)
+      }
 
       const remaining = await env.DB.prepare(
         "SELECT COUNT(*) AS count FROM loan_items WHERE loan_id = ? AND returned_at IS NULL",
