@@ -315,6 +315,33 @@
             </v-col>
           </v-row>
 
+          <v-select
+            v-if="form.category === 'brought_in'"
+            v-model="form.owner_user_id"
+            :items="ownerItems"
+            item-title="title"
+            item-value="value"
+            label="持ち主"
+            variant="outlined"
+            clearable
+            class="mb-2"
+          >
+            <template #item="{ props, item }">
+              <v-list-item v-bind="props" :title="item.raw.title">
+                <template #prepend>
+                  <UserAvatar :user="item.raw" :size="36" />
+                </template>
+              </v-list-item>
+            </template>
+
+            <template #selection="{ item }">
+              <div class="d-flex align-center ga-2">
+                <UserAvatar :user="item.raw" :size="28" />
+                <span>{{ item.raw.title }}</span>
+              </div>
+            </template>
+          </v-select>
+
           <v-row>
             <v-col cols="6">
               <v-text-field
@@ -460,12 +487,21 @@ interface EquipmentForm {
   prepared_quantity: number
   status: string
   storage_location: string
+  owner_user_id: string | null
 }
 
 const api = useApi()
 const auth = useAuthStore()
 
 const equipment = ref<EquipmentItem[]>([])
+const ownerItems = ref<{
+  id: string
+  name: string
+  nickname: string | null
+  avatar_key: string | null
+  title: string
+  value: string
+}[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
@@ -489,6 +525,7 @@ const form = reactive<EquipmentForm>({
   prepared_quantity: 0,
   status: 'not_started',
   storage_location: '',
+  owner_user_id: null,
 })
 
 const canCreate = computed(() => auth.hasPermission('equipment.create'))
@@ -497,6 +534,7 @@ const canDelete = computed(() => auth.hasPermission('equipment.delete'))
 
 const categoryItems = [
   { title: '備品', value: 'equipment' },
+  { title: '持ち込み品', value: 'brought_in' },
   { title: '小道具', value: 'prop' },
   { title: '材料', value: 'material' },
   { title: '衣装', value: 'costume' },
@@ -514,6 +552,7 @@ const statusItems = [
 
 const categoryFilterItems = [
   { title: '備品', value: 'equipment' },
+  { title: '持ち込み品', value: 'brought_in' },
   { title: '小道具', value: 'prop' },
   { title: '材料', value: 'material' },
   { title: '衣装', value: 'costume' },
@@ -566,7 +605,30 @@ const resetForm = () => {
   form.prepared_quantity = 0
   form.status = 'not_started'
   form.storage_location = ''
+  form.owner_user_id = null
   formError.value = ''
+}
+
+const loadOwnerItems = async () => {
+  try {
+    const response = await api.apiFetch<{
+      users: {
+        id: string
+        name: string
+        nickname: string | null
+        avatar_key: string | null
+      }[]
+    }>('/api/equipment/options')
+
+    ownerItems.value = response.users.map((user) => ({
+      ...user,
+      title: user.nickname || user.name,
+      value: user.id,
+    }))
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = '持ち主一覧の読み込みに失敗しました。'
+  }
 }
 
 const loadEquipment = async () => {
@@ -602,6 +664,7 @@ const openEditDialog = (item: EquipmentItem) => {
   form.prepared_quantity = item.prepared_quantity
   form.status = item.status
   form.storage_location = item.storage_location ?? ''
+  form.owner_user_id = item.owner_user_id
   formError.value = ''
   formDialog.value = true
 }
@@ -643,6 +706,9 @@ const saveEquipment = async () => {
       prepared_quantity: form.prepared_quantity,
       status: form.status,
       storage_location: form.storage_location.trim() || null,
+      owner_user_id: form.category === 'brought_in'
+        ? form.owner_user_id
+        : null,
     }
 
     if (editingItem.value) {
@@ -705,6 +771,7 @@ const categoryIcon = (category: string) => {
     prop: 'mdi-drama-masks',
     material: 'mdi-hammer-wrench',
     costume: 'mdi-tshirt-crew-outline',
+    brought_in: 'mdi-account-box-outline',
     other: 'mdi-package-variant',
   }
 
@@ -737,6 +804,7 @@ watch(
 
 onMounted(() => {
   loadEquipment()
+  loadOwnerItems()
 })
 </script>
 
