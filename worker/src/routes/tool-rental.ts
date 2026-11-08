@@ -388,7 +388,9 @@ export async function handleToolRental(
       hasPermission(env, auth.user.id, "tool_rental.checkout"),
       hasPermission(env, auth.user.id, "tool_rental.return"),
     ]).then(results => results.some(Boolean))
-    : false
+    : permission === "tool_rental.history"
+      ? await hasPermission(env, auth.user.id, "tool_rental.manage")
+      : false
   if (!permissionAllowed && !operationalViewFallback) {
     return json({ detail: "この操作を行う権限がありません", permission }, 403)
   }
