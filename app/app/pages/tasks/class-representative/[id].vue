@@ -160,7 +160,7 @@
                 <template #item="{ props, item }">
                   <v-list-item v-bind="props">
                     <template #prepend>
-                      <UserAvatar :user="item.raw" :size="32" class="mr-2" />
+                      <UserAvatar :user="item" :size="32" class="mr-2" />
                     </template>
                   </v-list-item>
                 </template>
@@ -710,7 +710,7 @@ const loadLinkOptions = async () => {
       calendarEventsLoading.value = true
       try {
         const now = new Date()
-        const [year, month, day] = jstDateKey(now).split('-').map(Number)
+        const [year = now.getFullYear(), month = now.getMonth() + 1, day = now.getDate()] = jstDateKey(now).split('-').map(Number)
         const from = new Date(Date.UTC(year - 1, month - 1, day))
         const to = new Date(Date.UTC(year + 2, month - 1, day))
         const fromDateKey = jstDateKey(from)
