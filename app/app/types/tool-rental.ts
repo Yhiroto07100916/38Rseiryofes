@@ -38,6 +38,8 @@ export interface LoanToolItem {
   loan_item_id: number
   tool_item_id: number
   management_number: string
+  returned_at?: string | null
+  status?: string
 }
 
 export interface Loan {
