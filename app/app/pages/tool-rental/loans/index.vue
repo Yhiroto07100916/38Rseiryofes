@@ -20,7 +20,7 @@
         <v-divider class="my-3" />
         <div class="text-subtitle-1 font-weight-bold mb-3">借りた工具</div>
         <v-select v-model="selectedToolId" :items="availableTools" item-title="name" item-value="id" label="工具・機材" placeholder="工具を選択" no-data-text="貸出可能な工具がありません" @update:model-value="loadItems" />
-        <v-select v-model="selectedItemId" :items="availableItems" item-title="management_number" item-value="id" label="管理番号" placeholder="個体を選択" no-data-text="貸出可能な個体がありません" :disabled="!selectedToolId || itemLoading" :loading="itemLoading" />
+        <v-select v-model="selectedItemId" :items="availableItems" item-title="label" item-value="id" label="管理番号" placeholder="個体を選択" no-data-text="貸出可能な個体がありません" :disabled="!selectedToolId || itemLoading" :loading="itemLoading" />
         <v-alert v-if="selectedItem" type="info" variant="tonal" class="mt-2">
           {{ selectedTool?.name }} の {{ selectedItem.management_number }} を貸出中として記録します。
         </v-alert>
@@ -58,7 +58,7 @@ const snackbarColor = ref('success')
 const currentUserName = computed(() => auth.user?.nickname?.trim() || auth.user?.name?.trim() || '')
 const form = reactive({ class_name: '38R', name: currentUserName.value })
 const availableTools = computed(() => tools.value.filter(tool => tool.available_quantity > 0))
-const availableItems = computed(() => items.value.filter(item => item.status === 'available'))
+const availableItems = computed(() => items.value.filter(item => item.status === 'available').map(item => ({ ...item, label: `${item.management_number}（個体ID: ${item.id}）` })))
 const selectedTool = computed(() => tools.value.find(tool => tool.id === selectedToolId.value) ?? null)
 const selectedItem = computed(() => availableItems.value.find(item => item.id === selectedItemId.value) ?? null)
 const canSubmit = computed(() => !!form.class_name.trim() && !!form.name.trim() && selectedItemId.value !== null && !saving.value)
