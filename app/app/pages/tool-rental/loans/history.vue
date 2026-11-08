@@ -26,7 +26,7 @@
         <tbody>
           <tr v-for="record in filteredRecords" :key="record.loan_item_id">
             <td>{{ record.tool_name }}</td>
-            <td>{{ record.loan_item_id }}</td><td><v-chip size="small" variant="tonal">{{ record.management_number }}</v-chip></td>
+            <td>{{ record.tool_item_id }}</td><td><v-chip size="small" variant="tonal">{{ record.management_number }}</v-chip></td>
             <td>{{ record.class_name }} {{ record.borrower_name }}</td>
             <td>{{ formatDate(record.borrowed_at) }}</td>
             <td>{{ record.returned_by_name ? `${record.returned_by_class_name} ${record.returned_by_name}` : '—' }}</td>
