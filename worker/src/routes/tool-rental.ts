@@ -389,10 +389,14 @@ export async function handleToolRental(
   const permissionAllowed = permission
     ? await hasPermission(env, auth.user.id, permission)
     : true
-  const managerCanView = permission === "tool_rental.view"
-    ? await hasPermission(env, auth.user.id, "tool_rental.manage")
+  const operationalViewFallback = permission === "tool_rental.view"
+    ? await Promise.all([
+      hasPermission(env, auth.user.id, "tool_rental.manage"),
+      hasPermission(env, auth.user.id, "tool_rental.checkout"),
+      hasPermission(env, auth.user.id, "tool_rental.return"),
+    ]).then(results => results.some(Boolean))
     : false
-  if (!permissionAllowed && !managerCanView) {
+  if (!permissionAllowed && !operationalViewFallback) {
     return json({ detail: "この操作を行う権限がありません", permission }, 403)
   }
 
