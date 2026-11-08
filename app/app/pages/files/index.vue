@@ -120,15 +120,6 @@
                 検索
               </v-btn>
             </div>
-            <v-checkbox
-              v-model="searchAllFolders"
-              label="全フォルダから検索"
-              density="compact"
-              hide-details
-              class="mt-2"
-              :disabled="!search?.trim()"
-              @update:model-value="loadFiles"
-            />
           </v-col>
         </v-row>
       </v-card-text>
@@ -155,7 +146,7 @@
         </div>
 
         <v-row align="center">
-          <v-col cols="12" sm="5">
+          <v-col cols="12" sm="4">
             <v-select
               v-model="uploadCategory"
               :items="activeCategoryOptions"
@@ -165,7 +156,20 @@
               hide-details
             />
           </v-col>
-          <v-col cols="12" sm="7">
+          <v-col cols="12" sm="4">
+            <v-select
+              v-model="uploadFolderId"
+              :items="uploadFolderOptions"
+              label="保存先フォルダ"
+              item-title="title"
+              item-value="value"
+              variant="outlined"
+              density="comfortable"
+              hide-details
+              :menu-props="{ maxHeight: 360 }"
+            />
+          </v-col>
+          <v-col cols="12" sm="4">
             <v-file-input
               v-model="selectedFile"
               label="ファイルを選択"
@@ -242,7 +246,7 @@
                     {{ categoryName(file.category) }}
                     · {{ formatSize(file.size) }}
                     · {{ formatDate(file.created_at) }}
-                    <template v-if="searchAllFolders && search.trim()">
+                    <template v-if="search.trim()">
                       · {{ file.folder_path || 'ルート' }}
                     </template>
                   </div>
@@ -629,9 +633,9 @@ const auth = useAuthStore()
 const loading = ref(false)
 const uploading = ref(false)
 const search = ref('')
-const searchAllFolders = ref(false)
 const categoryFilter = ref<string | null>(null)
 const uploadCategory = ref('uploads')
+const uploadFolderId = ref('__current__')
 const showArchived = ref(false)
 const selectedFile = ref<File | File[] | null>(null)
 const files = ref<ManagedFile[]>([])
@@ -719,6 +723,20 @@ const activeCategoryOptions = computed(() =>
 
 const moveFolderOptions = computed(() => [
   { title: 'すべてのファイル（ルート）', value: '__root__' },
+  ...moveFolders.value.map(folder => ({
+    title: folder.path ?? folder.name,
+    value: folder.id,
+  })),
+])
+
+const uploadFolderOptions = computed(() => [
+  {
+    title: currentFolderId.value
+      ? `現在のフォルダ（${folderPath.value.map(folder => folder.name).join(' / ')}）`
+      : '現在のフォルダ（ルート）',
+    value: '__current__',
+  },
+  { title: 'ルートに保存', value: '__root__' },
   ...moveFolders.value.map(folder => ({
     title: folder.path ?? folder.name,
     value: folder.id,
@@ -936,11 +954,11 @@ const loadFiles = async () => {
     if (search.value.trim()) params.set('search', search.value.trim())
     if (categoryFilter.value) params.set('category', categoryFilter.value)
     if (showArchived.value) params.set('archived', 'true')
-    if (!showArchived.value && !(searchAllFolders.value && search.value.trim())) {
+    if (!showArchived.value && !search.value.trim()) {
       params.set('folder_id', currentFolderId.value ?? 'root')
     }
 
-    if (searchAllFolders.value && search.value.trim() && !showArchived.value) {
+    if (search.value.trim() && !showArchived.value) {
       await loadAllFolders()
     }
 
@@ -984,7 +1002,12 @@ const uploadFile = async () => {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('category', uploadCategory.value)
-    if (currentFolderId.value) formData.append('folder_id', currentFolderId.value)
+    const destinationFolderId = uploadFolderId.value === '__current__'
+      ? currentFolderId.value
+      : uploadFolderId.value === '__root__'
+        ? null
+        : uploadFolderId.value
+    if (destinationFolderId) formData.append('folder_id', destinationFolderId)
 
     await apiFetch('/api/files', {
       method: 'POST',
@@ -1348,6 +1371,13 @@ onMounted(async () => {
   } catch (error) {
     console.error(error)
     errorMessage.value = 'カテゴリを取得できませんでした。'
+  }
+
+  try {
+    await loadAllFolders()
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = 'フォルダ一覧を取得できませんでした。'
   }
 
   await loadFolders()
