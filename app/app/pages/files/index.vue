@@ -33,6 +33,30 @@
       </div>
     </div>
 
+    <v-card v-if="!showArchived" rounded="xl" variant="outlined" class="mb-4">
+      <v-card-text class="py-3">
+        <div class="d-flex align-center flex-wrap ga-2">
+          <v-btn size="small" variant="text" prepend-icon="mdi-home-outline" @click="navigateToFolder(-1)">
+            すべて
+          </v-btn>
+          <template v-for="(folder, index) in folderPath" :key="folder.id">
+            <v-icon icon="mdi-chevron-right" size="small" color="medium-emphasis" />
+            <v-btn
+              size="small"
+              :variant="index === folderPath.length - 1 ? 'tonal' : 'text'"
+              @click="navigateToFolder(index)"
+            >
+              {{ folder.name }}
+            </v-btn>
+          </template>
+          <v-spacer />
+          <v-btn color="primary" size="small" prepend-icon="mdi-folder-plus-outline" @click="openFolderDialog">
+            フォルダ作成
+          </v-btn>
+        </div>
+      </v-card-text>
+    </v-card>
+
     <v-alert
       v-if="errorMessage"
       type="error"
@@ -150,6 +174,32 @@
       </v-card-text>
     </v-card>
 
+    <v-card v-if="folders.length && !showArchived" rounded="xl" variant="outlined" class="mb-5">
+      <v-list class="pa-0">
+        <template v-for="(folder, index) in folders" :key="folder.id">
+          <v-list-item
+            :title="folder.name"
+            :subtitle="(folder.category_name ? folder.category_name + ' · ' : '') + 'フォルダ ' + folder.folder_count + '件 · ファイル ' + folder.file_count + '件'"
+            @click="openFolder(folder)"
+          >
+            <template #prepend>
+              <v-avatar color="amber" variant="tonal" rounded="lg">
+                <v-icon icon="mdi-folder" />
+              </v-avatar>
+            </template>
+            <template #append>
+              <div class="d-flex align-center ga-1">
+                <v-btn v-if="canManageFiles || folder.created_by === auth.user?.id" icon="mdi-pencil-outline" size="small" variant="text" aria-label="フォルダを編集" @click.stop="editFolder(folder)" />
+                <v-btn v-if="canManageFiles || folder.created_by === auth.user?.id" icon="mdi-delete-outline" size="small" color="error" variant="text" aria-label="フォルダを削除" @click.stop="removeFolder(folder)" />
+                <v-icon icon="mdi-chevron-right" color="medium-emphasis" />
+              </div>
+            </template>
+          </v-list-item>
+          <v-divider v-if="index < folders.length - 1" />
+        </template>
+      </v-list>
+    </v-card>
+
     <div class="d-flex align-center justify-space-between mb-3">
       <h2 class="text-subtitle-1 font-weight-bold">
         {{ showArchived ? 'アーカイブ済みファイル' : 'ファイル一覧' }}
@@ -201,6 +251,14 @@
                   size="small"
                   aria-label="閲覧"
                   @click="previewFile(file)"
+                />
+                <v-btn
+                  v-if="canManageFiles || file.uploaded_by === auth.user?.id"
+                  icon="mdi-folder-move-outline"
+                  variant="text"
+                  size="small"
+                  aria-label="フォルダへ移動"
+                  @click="openMoveDialog(file)"
                 />
                 <v-btn
                   icon="mdi-open-in-new"
@@ -267,6 +325,44 @@
         </div>
       </v-card-text>
     </v-card>
+
+    <v-dialog v-model="moveDialog" max-width="480">
+      <v-card rounded="xl">
+        <v-card-title class="pt-5">ファイルを移動</v-card-title>
+        <v-card-text>
+          <div class="text-body-2 text-medium-emphasis mb-3">{{ moveTarget?.original_name }}</div>
+          <v-select
+            v-model="moveFolderId"
+            :items="moveFolderOptions"
+            label="移動先フォルダ"
+            variant="outlined"
+            item-title="title"
+            item-value="value"
+          />
+        </v-card-text>
+        <v-card-actions class="px-6 pb-5">
+          <v-spacer />
+          <v-btn variant="text" :disabled="movingFile" @click="moveDialog = false">キャンセル</v-btn>
+          <v-btn color="primary" :loading="movingFile" @click="moveFile">移動</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="folderDialog" max-width="480" persistent>
+      <v-card rounded="xl">
+        <v-card-title class="pt-5">{{ editingFolder ? "フォルダを編集" : "フォルダを作成" }}</v-card-title>
+        <v-card-text>
+          <v-text-field v-model="folderName" label="フォルダ名" maxlength="100" counter autofocus variant="outlined" class="mb-3" />
+          <v-select v-model="folderCategory" :items="activeCategoryOptions" label="カテゴリ（任意）" clearable variant="outlined" class="mb-3" />
+          <v-textarea v-model="folderDescription" label="説明（任意）" rows="2" auto-grow variant="outlined" />
+        </v-card-text>
+        <v-card-actions class="px-6 pb-5">
+          <v-spacer />
+          <v-btn variant="text" :disabled="folderSaving" @click="folderDialog = false">キャンセル</v-btn>
+          <v-btn color="primary" :loading="folderSaving" :disabled="!folderName.trim()" @click="createFolder">{{ editingFolder ? "保存" : "作成" }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-dialog v-model="shareDialog" max-width="600">
       <v-card rounded="xl">
@@ -474,6 +570,20 @@ interface FileCategory {
   is_active: number
 }
 
+interface FileFolder {
+  id: string
+  name: string
+  parent_id: string | null
+  category: string | null
+  category_name?: string | null
+  description: string | null
+  folder_count: number
+  file_count: number
+  created_by?: string
+  path?: string
+  depth?: number
+}
+
 interface ManagedFile {
   id: string
   object_key: string
@@ -481,6 +591,7 @@ interface ManagedFile {
   content_type: string
   size: number
   category: string
+  folder_id?: string | null
   uploaded_by: string
   created_at: string
   archived_at: string | null
@@ -501,6 +612,20 @@ const uploadCategory = ref('uploads')
 const showArchived = ref(false)
 const selectedFile = ref<File | File[] | null>(null)
 const files = ref<ManagedFile[]>([])
+const folders = ref<FileFolder[]>([])
+const currentFolderId = ref<string | null>(null)
+const folderPath = ref<FileFolder[]>([])
+const folderDialog = ref(false)
+const editingFolder = ref<FileFolder | null>(null)
+const folderSaving = ref(false)
+const folderName = ref('')
+const folderCategory = ref<string | null>(null)
+const folderDescription = ref('')
+const moveDialog = ref(false)
+const moveTarget = ref<ManagedFile | null>(null)
+const moveFolderId = ref('__root__')
+const moveFolders = ref<FileFolder[]>([])
+const movingFile = ref(false)
 const categories = ref<FileCategory[]>([])
 const errorMessage = ref('')
 const snackbar = ref(false)
@@ -568,6 +693,14 @@ const activeCategoryOptions = computed(() =>
   })),
 )
 
+const moveFolderOptions = computed(() => [
+  { title: 'すべてのファイル（ルート）', value: '__root__' },
+  ...moveFolders.value.map(folder => ({
+    title: folder.path ?? folder.name,
+    value: folder.id,
+  })),
+])
+
 const categoryOptions = computed(() =>
   activeCategories.value.map(category => ({
     title: category.name,
@@ -612,6 +745,116 @@ const loadCategories = async () => {
   }
 }
 
+const loadFolders = async () => {
+  if (showArchived.value) {
+    folders.value = []
+    return
+  }
+  const query = currentFolderId.value
+    ? '?parent_id=' + encodeURIComponent(currentFolderId.value)
+    : ''
+  try {
+    const response = await apiFetch<{ folders: FileFolder[] }>('/api/file-folders' + query)
+    folders.value = response.folders
+  } catch (error) {
+    console.error(error)
+    folders.value = []
+    errorMessage.value = 'フォルダ一覧を取得できませんでした。'
+  }
+}
+
+const openFolder = async (folder: FileFolder) => {
+  currentFolderId.value = folder.id
+  folderPath.value = [...folderPath.value, folder]
+  await Promise.all([loadFolders(), loadFiles()])
+}
+
+const navigateToFolder = async (index: number) => {
+  if (index < 0) {
+    currentFolderId.value = null
+    folderPath.value = []
+  } else {
+    folderPath.value = folderPath.value.slice(0, index + 1)
+    currentFolderId.value = folderPath.value[index]?.id ?? null
+  }
+  await Promise.all([loadFolders(), loadFiles()])
+}
+
+const openFolderDialog = () => {
+  editingFolder.value = null
+  folderName.value = ''
+  folderCategory.value = null
+  folderDescription.value = ''
+  folderDialog.value = true
+}
+
+
+const editFolder = (folder: FileFolder) => {
+  editingFolder.value = folder
+  folderName.value = folder.name
+  folderCategory.value = folder.category
+  folderDescription.value = folder.description ?? ''
+  folderDialog.value = true
+}
+
+const removeFolder = async (folder: FileFolder) => {
+  const confirmed = await confirm({
+    title: 'フォルダを削除',
+    message: '「' + folder.name + '」を削除しますか？中にフォルダやファイルがある場合は削除できません。',
+    confirmText: '削除',
+    confirmColor: 'error',
+  })
+  if (!confirmed) return
+
+  try {
+    await apiFetch('/api/file-folders/' + encodeURIComponent(folder.id), { method: 'DELETE' })
+    snackbarMessage.value = 'フォルダを削除しました。'
+    snackbar.value = true
+    await loadFolders()
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = 'フォルダを削除できませんでした。中身が空か確認してください。'
+  }
+}
+
+const createFolder = async () => {
+  const name = folderName.value.trim()
+  if (!name || folderSaving.value) return
+  folderSaving.value = true
+  errorMessage.value = ''
+  try {
+    if (editingFolder.value) {
+      await apiFetch('/api/file-folders/' + encodeURIComponent(editingFolder.value.id), {
+        method: 'PATCH',
+        body: {
+          name,
+          category: folderCategory.value,
+          description: folderDescription.value.trim() || null,
+        },
+      })
+    } else {
+      await apiFetch('/api/file-folders', {
+        method: 'POST',
+        body: {
+          name,
+          parent_id: currentFolderId.value,
+          category: folderCategory.value,
+          description: folderDescription.value.trim() || null,
+        },
+      })
+    }
+    folderDialog.value = false
+    snackbarMessage.value = editingFolder.value ? 'フォルダを更新しました。' : 'フォルダを作成しました。'
+    snackbar.value = true
+    await loadFolders()
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = 'フォルダを作成できませんでした。'
+  } finally {
+    folderSaving.value = false
+  }
+}
+
 const loadFiles = async () => {
   loading.value = true
   errorMessage.value = ''
@@ -622,6 +865,7 @@ const loadFiles = async () => {
     if (search.value.trim()) params.set('search', search.value.trim())
     if (categoryFilter.value) params.set('category', categoryFilter.value)
     if (showArchived.value) params.set('archived', 'true')
+    if (!showArchived.value) params.set('folder_id', currentFolderId.value ?? 'root')
 
     const response = await apiFetch<{ files: ManagedFile[]; count: number }>(
       `/api/files?${params.toString()}`,
@@ -659,6 +903,7 @@ const uploadFile = async () => {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('category', uploadCategory.value)
+    if (currentFolderId.value) formData.append('folder_id', currentFolderId.value)
 
     await apiFetch('/api/files', {
       method: 'POST',
@@ -674,6 +919,40 @@ const uploadFile = async () => {
     errorMessage.value = 'アップロードに失敗しました。カテゴリやファイルサイズを確認してください。'
   } finally {
     uploading.value = false
+  }
+}
+
+const openMoveDialog = async (file: ManagedFile) => {
+  moveTarget.value = file
+  moveFolderId.value = file.folder_id ?? '__root__'
+  moveDialog.value = true
+  try {
+    const response = await apiFetch<{ folders: FileFolder[] }>('/api/file-folders?all=true')
+    moveFolders.value = response.folders
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = '移動先フォルダを取得できませんでした。'
+    moveDialog.value = false
+  }
+}
+
+const moveFile = async () => {
+  if (!moveTarget.value || movingFile.value) return
+  movingFile.value = true
+  try {
+    await apiFetch('/api/files/' + encodeURIComponent(moveTarget.value.id) + '/move', {
+      method: 'PATCH',
+      body: { folder_id: moveFolderId.value === '__root__' ? null : moveFolderId.value },
+    })
+    moveDialog.value = false
+    snackbarMessage.value = 'ファイルを移動しました。'
+    snackbar.value = true
+    await Promise.all([loadFiles(), loadFolders()])
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = 'ファイルを移動できませんでした。'
+  } finally {
+    movingFile.value = false
   }
 }
 
@@ -978,6 +1257,7 @@ const changeArchive = async (
 }
 
 watch([categoryFilter, showArchived], () => {
+  void loadFolders()
   void loadFiles()
 })
 
@@ -989,6 +1269,7 @@ onMounted(async () => {
     errorMessage.value = 'カテゴリを取得できませんでした。'
   }
 
+  await loadFolders()
   await loadFiles()
 })
 </script>\n
