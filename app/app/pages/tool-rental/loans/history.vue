@@ -22,18 +22,18 @@
       </v-card-text>
       <v-divider />
       <v-table>
-        <thead><tr><th>工具</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th><th>返却を記録した人</th><th>返却日時</th><th>状態</th></tr></thead>
+        <thead><tr><th>工具</th><th>個体ID</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th><th>返却を記録した人</th><th>返却日時</th><th>状態</th></tr></thead>
         <tbody>
           <tr v-for="record in filteredRecords" :key="record.loan_item_id">
             <td>{{ record.tool_name }}</td>
-            <td><v-chip size="small" variant="tonal">{{ record.management_number }}</v-chip></td>
+            <td>{{ record.loan_item_id }}</td><td><v-chip size="small" variant="tonal">{{ record.management_number }}</v-chip></td>
             <td>{{ record.class_name }} {{ record.borrower_name }}</td>
             <td>{{ formatDate(record.borrowed_at) }}</td>
             <td>{{ record.returned_by_name ? `${record.returned_by_class_name} ${record.returned_by_name}` : '—' }}</td>
             <td>{{ record.returned_at ? formatDate(record.returned_at) : '—' }}</td>
             <td><v-chip size="small" :color="record.status === 'returned' ? 'success' : 'warning'" variant="tonal">{{ record.status === 'returned' ? '返却済み' : '貸出中' }}</v-chip></td>
           </tr>
-          <tr v-if="!loading && filteredRecords.length === 0"><td colspan="7" class="text-center text-medium-emphasis py-6">履歴はありません。</td></tr>
+          <tr v-if="!loading && filteredRecords.length === 0"><td colspan="8" class="text-center text-medium-emphasis py-6">履歴はありません。</td></tr>
         </tbody>
       </v-table>
       <v-card-actions class="text-caption text-medium-emphasis">直近500件を表示します。</v-card-actions>
