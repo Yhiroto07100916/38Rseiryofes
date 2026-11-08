@@ -359,9 +359,7 @@ function getToolRentalPermission(path: string, method: string): string | null {
     return "tool_rental.checkout"
   }
 
-  if (path.startsWith("/settings/notifications")) {
-    return method === "GET" ? "tool_rental.view" : "tool_rental.manage"
-  }
+  if (path.startsWith("/settings/notifications")) return "tool_rental.manage"
   if (path === "/settings/return-time" || path === "/settings/return-time-chief") {
     return method === "GET" ? "tool_rental.view" : "tool_rental.manage"
   }
