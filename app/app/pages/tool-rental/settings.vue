@@ -22,7 +22,7 @@
           type="time"
           label="返却時刻"
           variant="outlined"
-          :disabled="loading || saving || !auth.isAdmin.value"
+          :disabled="loading || Boolean(saving) || !auth.isAdmin.value"
         />
         <div class="d-flex ga-2">
           <v-btn color="primary" :loading="saving === 'class'" :disabled="!auth.isAdmin.value || loading" @click="saveReturnTime('class')">保存</v-btn>
@@ -42,7 +42,7 @@
           type="time"
           label="チーフ用返却時刻"
           variant="outlined"
-          :disabled="loading || saving || !auth.isAdmin.value"
+          :disabled="loading || Boolean(saving) || !auth.isAdmin.value"
         />
         <div class="d-flex ga-2">
           <v-btn color="primary" :loading="saving === 'chief'" :disabled="!auth.isAdmin.value || loading" @click="saveReturnTime('chief')">保存</v-btn>
