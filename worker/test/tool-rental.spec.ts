@@ -239,6 +239,14 @@ describe("Tool rental full workflow API", () => {
     expect(reservations[0].status).toBe("waiting")
   })
 
+  it("validates LINE webhook requests without requiring a site session", async () => {
+    const response = await api(null, "/line/webhook", {
+      method: "POST",
+      body: { events: [] },
+    })
+    expect(response.status).toBe(401)
+  })
+
   it("restricts notification settings to managers and supports disabling notifications", async () => {
     const viewer = await createUser("通知閲覧担当")
     await grant(viewer.userId, ["tool_rental.view"])
