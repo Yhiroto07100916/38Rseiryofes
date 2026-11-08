@@ -81,6 +81,21 @@
                 class="mb-3"
               />
 
+              <div class="mb-4">
+                <div class="d-flex align-center justify-space-between mb-2">
+                  <div class="text-subtitle-2 font-weight-medium">関連リンク</div>
+                  <v-btn size="small" variant="tonal" prepend-icon="mdi-plus" @click="editForm.links.push({ title: '', url: '' })">追加</v-btn>
+                </div>
+                <div v-for="(link, index) in editForm.links" :key="index" class="d-flex align-start ga-2 mb-2">
+                  <div class="flex-grow-1">
+                    <v-text-field v-model="link.title" label="表示タイトル" placeholder="例：資料・参考ページ" variant="outlined" density="comfortable" hide-details class="mb-2" />
+                    <v-text-field v-model="link.url" label="URL" placeholder="https://example.com" variant="outlined" density="comfortable" hide-details />
+                  </div>
+                  <v-btn icon="mdi-close" variant="text" color="error" aria-label="リンクを削除" @click="editForm.links.splice(index, 1)" />
+                </div>
+                <div class="text-caption text-medium-emphasis">最大20件。タイトルとURLを両方入力してください。</div>
+              </div>
+
               <v-row>
                 <v-col
                   cols="12"
@@ -229,6 +244,16 @@
             class="text-body-1 mt-4 task-description"
           >
             {{ task.description }}
+          </div>
+
+          <div v-if="task.links?.length" class="mt-4">
+            <div class="text-subtitle-2 font-weight-medium mb-2">関連リンク</div>
+            <div class="d-flex flex-column align-start ga-2">
+              <a v-for="link in task.links" :key="link.id" :href="link.url" target="_blank" rel="noopener noreferrer" class="d-inline-flex align-center ga-2 text-primary text-decoration-none">
+                <v-icon icon="mdi-open-in-new" size="small" />
+                <span>{{ link.title }}</span>
+              </a>
+            </div>
           </div>
 
           <v-divider class="my-5" />
@@ -647,6 +672,7 @@ const editForm = ref({
   assigneeRoleIds: [] as string[],
   calendarEventId: null as string | null,
   fileIds: [] as string[],
+  links: [] as { title: string; url: string }[],
 })
 
 const canEdit = computed(() =>
@@ -918,6 +944,10 @@ const startEdit = async () => {
     dueAt: toDatetimeLocal(task.value.due_at),
     calendarEventId: task.value.calendar_event?.id ?? null,
     fileIds: (task.value.files ?? []).map((file) => file.id),
+    links: (task.value.links ?? []).map((link) => ({
+      title: link.title,
+      url: link.url,
+    })),
     assigneeUserIds: task.value.assignments.users.map(
       (user) => user.id,
     ),
@@ -967,6 +997,12 @@ const saveEdit = async () => {
       body.calendar_event_id = editForm.value.calendarEventId
     }
     body.file_ids = editForm.value.fileIds
+    body.links = editForm.value.links
+      .filter((link) => link.title.trim() || link.url.trim())
+      .map((link) => ({
+        title: link.title.trim(),
+        url: link.url.trim(),
+      }))
   }
 
   if (Object.keys(body).length === 0) {
