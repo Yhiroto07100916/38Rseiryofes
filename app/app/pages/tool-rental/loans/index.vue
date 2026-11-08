@@ -38,6 +38,7 @@
           max="10080"
           step="1"
           clearable
+          :error-messages="timeLimitError"
         />
       </v-card-text>
       <v-card-actions class="px-4 pb-4">
@@ -79,7 +80,15 @@ const availableTools = computed(() => tools.value.filter(tool => tool.available_
 const availableItems = computed(() => items.value.filter(item => item.status === 'available').map(item => ({ ...item, label: `${item.management_number}（個体ID: ${item.id}）` })))
 const selectedTool = computed(() => tools.value.find(tool => tool.id === selectedToolId.value) ?? null)
 const selectedItem = computed(() => availableItems.value.find(item => item.id === selectedItemId.value) ?? null)
-const timeLimitValid = computed(() => form.time_limit_minutes === null || form.time_limit_minutes === undefined || form.time_limit_minutes === '' || (Number.isInteger(form.time_limit_minutes) && form.time_limit_minutes >= 5 && form.time_limit_minutes <= 10080))
+const timeLimitError = computed(() => {
+  const value = form.time_limit_minutes
+  if (value === null || value === undefined || value === '') return ''
+  if (!Number.isInteger(value)) return '整数で入力してください。'
+  if (value < 5) return '5分以上で入力してください。'
+  if (value > 10080) return '10,080分（7日）以内で入力してください。'
+  return ''
+})
+const timeLimitValid = computed(() => !timeLimitError.value)
 const canSubmit = computed(() => !!form.class_name.trim() && !!form.name.trim() && selectedItemId.value !== null && timeLimitValid.value && !saving.value)
 
 const showMessage = (message: string, color = 'success') => {
