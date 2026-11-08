@@ -31,9 +31,6 @@ function json(data: unknown, status = 200): Response {
   })
 }
 
-const SESSION_TTL_SECONDS = 8 * 60 * 60
-
-
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000
 
 const formatJstDateTime = (date = new Date()): string => {
@@ -330,20 +327,47 @@ function requireAdmin(user: { role: string }): Response | null {
 }
 
 function getToolRentalPermission(path: string, method: string): string | null {
-  if (path === "/tools") return method === "GET" ? "tool_rental.view" : "tool_rental.manage"
+  const parts = path.split("/").filter(Boolean)
+
+  if (path === "/tools") {
+    return method === "GET" ? "tool_rental.view" : "tool_rental.manage"
+  }
   if (path === "/tools/order") return "tool_rental.manage"
-  if (/^\\/tools\\/\\d+(?:\\/items)?$/.test(path)) return method === "GET" ? "tool_rental.view" : "tool_rental.manage"
+  if (parts[0] === "tools" && parts.length === 2) {
+    return method === "GET" ? "tool_rental.view" : "tool_rental.manage"
+  }
+  if (parts[0] === "tools" && parts.length === 3 && parts[2] === "items") {
+    return method === "GET" ? "tool_rental.view" : "tool_rental.manage"
+  }
+
   if (path === "/loans") return method === "POST" ? "tool_rental.checkout" : null
   if (path === "/loans/current") return "tool_rental.view"
-  if (path === "/loans/history") return method === "GET" ? "tool_rental.history" : "tool_rental.manage"
-  if (path === "/loans/history/delete" || /^\\/loans\\/history\\/\\d+$/.test(path)) return "tool_rental.manage"
+  if (path === "/loans/history") {
+    return method === "GET" ? "tool_rental.history" : "tool_rental.manage"
+  }
+  if (path === "/loans/history/delete") return "tool_rental.manage"
+  if (parts[0] === "loans" && parts[1] === "history" && parts.length === 3) {
+    return "tool_rental.manage"
+  }
   if (path === "/loans/return") return "tool_rental.return"
-  if (/^\\/loans\\/\\d+\\/extend\\/\\d+$/.test(path)) return "tool_rental.checkout"
-  if (path === "/reservations") return method === "GET" ? "tool_rental.view" : "tool_rental.checkout"
+  if (parts[0] === "loans" && parts.length === 4 && parts[2] === "extend") {
+    return "tool_rental.checkout"
+  }
+
+  if (path === "/reservations") {
+    return method === "GET" ? "tool_rental.view" : "tool_rental.checkout"
+  }
   if (path === "/reservations/next") return "tool_rental.view"
-  if (/^\\/reservations\\/\\d+$/.test(path)) return "tool_rental.view"
-  if (/^\\/reservations\\/\\d+\\/(?:cancel|complete)$/.test(path)) return "tool_rental.checkout"
-  if (path === "/settings/return-time" || path === "/settings/return-time-chief") return method === "GET" ? "tool_rental.view" : "tool_rental.manage"
+  if (parts[0] === "reservations" && parts.length === 2) {
+    return method === "GET" ? "tool_rental.view" : "tool_rental.checkout"
+  }
+  if (parts[0] === "reservations" && parts.length === 3 && ["cancel", "complete"].includes(parts[2])) {
+    return "tool_rental.checkout"
+  }
+
+  if (path === "/settings/return-time" || path === "/settings/return-time-chief") {
+    return method === "GET" ? "tool_rental.view" : "tool_rental.manage"
+  }
   return null
 }
 
