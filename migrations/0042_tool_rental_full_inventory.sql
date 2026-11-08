@@ -246,6 +246,23 @@ SELECT
 FROM tool_rental_loans
 GROUP BY borrower_name;
 
+INSERT OR IGNORE INTO borrowers (
+  class_name,
+  name,
+  created_at,
+  updated_at
+)
+SELECT
+  '未設定',
+  COALESCE(NULLIF(users.nickname, ''), users.name),
+  MIN(old_loans.checked_out_at),
+  MAX(COALESCE(old_loans.returned_at, old_loans.checked_out_at))
+FROM tool_rental_loans AS old_loans
+INNER JOIN users
+  ON users.id = old_loans.returned_by
+WHERE old_loans.returned_by IS NOT NULL
+GROUP BY users.id, COALESCE(NULLIF(users.nickname, ''), users.name);
+
 INSERT INTO loans (
   borrower_id,
   tool_id,
@@ -265,7 +282,15 @@ SELECT
   old_loans.quantity,
   old_loans.checked_out_at,
   CASE WHEN old_loans.status = 'returned' THEN COALESCE(old_loans.returned_at, old_loans.checked_out_at) ELSE NULL END,
-  NULL,
+  (
+    SELECT returners.id
+    FROM users AS returner_users
+    INNER JOIN borrowers AS returners
+      ON returners.class_name = '未設定'
+      AND returners.name = COALESCE(NULLIF(returner_users.nickname, ''), returner_users.name)
+    WHERE returner_users.id = old_loans.returned_by
+    LIMIT 1
+  ),
   CASE WHEN old_loans.status = 'returned' THEN old_loans.quantity ELSE 0 END,
   CASE WHEN old_loans.status = 'returned' THEN 'returned' ELSE 'borrowed' END,
   NULL,
@@ -322,7 +347,7 @@ SELECT
     THEN COALESCE(old_loans.returned_at, old_loans.checked_out_at)
     ELSE NULL
   END,
-  NULL
+  new_loans.returned_by_id
 FROM tool_rental_loans AS old_loans
 INNER JOIN loans AS new_loans
   ON new_loans.legacy_loan_id = old_loans.id
