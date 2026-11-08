@@ -330,7 +330,8 @@ export async function handleToolRental(
       const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""
       const result = await env.DB.prepare(`
         SELECT
-          li.id AS loan_item_id, l.id AS loan_id, t.name AS tool_name,
+          li.id AS loan_item_id, l.id AS loan_id, ti.id AS tool_item_id,
+          COALESCE(l.tool_name_snapshot, t.name) AS tool_name,
           ti.management_number, b.class_name, b.name AS borrower_name,
           l.borrowed_at, li.returned_at,
           rb.class_name AS returned_by_class_name,
