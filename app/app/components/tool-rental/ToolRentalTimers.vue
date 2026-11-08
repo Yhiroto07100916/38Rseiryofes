@@ -79,7 +79,7 @@ watch(
       loans.value = []
     }
   },
-  { immediate: true },
+  { flush: 'post' },
 )
 
 function deadlineMs(loan: CurrentLoanItem): number {
@@ -130,6 +130,7 @@ async function loadTimers() {
 
 onMounted(async () => {
   if (!auth.initialized) await auth.fetchMe()
+  await loadTimers()
   now.value = Date.now()
   clockInterval = setInterval(() => {
     now.value = Date.now()
