@@ -402,7 +402,7 @@ const loadCalendarEvents = async () => {
 
   try {
     const now = new Date()
-    const [year, month] = jstDateKey(now).split('-').map(Number)
+    const [year = now.getFullYear(), month = now.getMonth() + 1] = jstDateKey(now).split('-').map(Number)
 
     const fromDate = new Date(Date.UTC(year, month - 1 - 3, 1))
     const toDate = new Date(Date.UTC(year, month - 1 + 4, 0))
