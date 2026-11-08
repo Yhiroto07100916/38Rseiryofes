@@ -514,9 +514,15 @@ const { request } = useToolRentalApi()
 
 const tools = ref<Tool[]>([])
 
+const currentUserName = computed(() =>
+  auth.user?.nickname?.trim() || auth.user?.name?.trim() || '',
+)
+
+const defaultBorrowerClassName = '38R'
+
 const form = reactive({
-  className: '',
-  name: '',
+  className: defaultBorrowerClassName,
+  name: currentUserName.value,
 })
 
 const selectedTools = ref<SelectedTool[]>([])
@@ -833,8 +839,8 @@ const lendTool = async () => {
       }
     }
 
-    form.className = ''
-    form.name = ''
+    form.className = defaultBorrowerClassName
+    form.name = currentUserName.value
     selectedTools.value = []
     currentToolId.value = null
     currentItemIds.value = []
