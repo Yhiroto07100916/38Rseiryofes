@@ -386,7 +386,13 @@ export async function handleToolRental(
   const method = request.method.toUpperCase()
   const permission = getToolRentalPermission(url.pathname, method)
 
-  if (permission && !(await hasPermission(env, auth.user.id, permission))) {
+  const permissionAllowed = permission
+    ? await hasPermission(env, auth.user.id, permission)
+    : true
+  const managerCanView = permission === "tool_rental.view"
+    ? await hasPermission(env, auth.user.id, "tool_rental.manage")
+    : false
+  if (!permissionAllowed && !managerCanView) {
     return json({ detail: "この操作を行う権限がありません", permission }, 403)
   }
 
