@@ -115,7 +115,13 @@ const links = computed(() => allLinks.filter(item => {
   return auth.hasPermission('tool_rental.history') || auth.hasPermission('tool_rental.manage')
 }))
 
-const formatDate = (value: string) => new Date(value.replace(' ', 'T') + (value.endsWith('Z') ? '' : '+09:00')).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+const formatDate = (value: string) => {
+  const normalized = value.replace(' ', 'T')
+  const date = /(?:Z|[+-]\\d{2}:\\d{2})$/.test(normalized)
+    ? new Date(normalized)
+    : new Date(`${normalized}+09:00`)
+  return date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+}
 
 const loadSummary = async () => {
   loading.value = true
