@@ -217,10 +217,11 @@
 </template>
 
 <script setup lang="ts">
-definePageMeta({ middleware: 'auth' })
 
 import type { Loan } from '~/types/tool-rental'
 import { classOptions } from '~/constants/tool-rental-classes'
+
+definePageMeta({ middleware: 'auth' })
 
 const { request } = useToolRentalApi()
 
