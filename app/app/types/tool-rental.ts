@@ -47,9 +47,12 @@ export interface Loan {
   borrower_id: number
   tool_id: number
   quantity: number
+  returned_quantity?: number
   borrowed_at: string
   due_at: string | null
   overdue_seconds: number
+  loan_duration_minutes?: number | null
+  loan_duration_minutes_per_chief?: number | null
   is_extended?: number | boolean
   returned_at: string | null
   returned_by_id: number | null
