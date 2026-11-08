@@ -150,9 +150,10 @@
               <td>
                 <v-btn
                   v-if="
-                    loan.class_name === 'チーフ'
+                    canExtend &&
+                    (loan.class_name === 'チーフ'
                       ? loan.loan_duration_minutes_per_chief !== null
-                      : loan.loan_duration_minutes !== null
+                      : loan.loan_duration_minutes !== null)
                   "
                   size="small"
                   variant="outlined"
@@ -262,6 +263,8 @@ import { classOptions } from '~/constants/tool-rental-classes'
 
 definePageMeta({ middleware: 'auth' })
 
+const auth = useAuthStore()
+const canExtend = computed(() => auth.hasPermission('tool_rental.checkout') || auth.hasPermission('tool_rental.manage'))
 const snackbar = useSnackbar()
 const showSnackbar = (
   message: string,
