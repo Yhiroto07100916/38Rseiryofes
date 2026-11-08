@@ -36,6 +36,7 @@ export interface CurrentLoanItem {
 export interface LoanHistoryItem {
   loan_item_id: number
   loan_id: number
+  tool_item_id: number
   tool_name: string
   management_number: string
   class_name: string
