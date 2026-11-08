@@ -44,7 +44,22 @@ function optionalText(value: unknown): string | null {
 
 function positiveInteger(value: unknown): number | null {
   const number = Number(value)
-  return Number.isInteger(number) && number > 0 ? number : null
+  return Number.isSafeInteger(number) && number > 0 ? number : null
+}
+
+async function readJsonObject(
+  request: Request,
+  allowEmpty = false,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const value: unknown = await request.json()
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null
+    }
+    return value as Record<string, unknown>
+  } catch {
+    return allowEmpty ? {} : null
+  }
 }
 
 async function allowed(env: Env, userId: string, permission: string) {
@@ -176,8 +191,8 @@ export async function handleToolRental(
     const denied = await requirePermission(env, auth.user.id, "tool_rental.manage")
     if (denied) return denied
 
-    let body: Record<string, unknown>
-    try { body = await request.json() } catch { return json({ error: "Invalid JSON" }, 400) }
+    const body = await readJsonObject(request)
+    if (!body) return json({ error: "JSONオブジェクトを指定してください" }, 400)
 
     const name = String(body.name ?? "").trim()
     const category = String(body.category ?? "").trim()
@@ -203,8 +218,8 @@ export async function handleToolRental(
     const denied = await requirePermission(env, auth.user.id, "tool_rental.manage")
     if (denied) return denied
 
-    let body: Record<string, unknown>
-    try { body = await request.json() } catch { return json({ error: "Invalid JSON" }, 400) }
+    const body = await readJsonObject(request)
+    if (!body) return json({ error: "JSONオブジェクトを指定してください" }, 400)
 
     const existing = await getTool(env, resourceId)
     if (!existing) return json({ error: "Tool not found" }, 404)
@@ -219,6 +234,13 @@ export async function handleToolRental(
     if (!quantity) return json({ error: "数量は1以上の整数で指定してください" }, 400)
     if (quantity < (existing.checked_out_quantity ?? 0)) {
       return json({ error: "貸出中の数量を下回る在庫数には変更できません" }, 409)
+    }
+
+    if (
+      body.is_active !== undefined &&
+      ![true, false, 0, 1].includes(body.is_active as boolean | number)
+    ) {
+      return json({ error: "貸出状態の指定が不正です" }, 400)
     }
 
     const isActive = body.is_active === undefined
@@ -254,8 +276,8 @@ export async function handleToolRental(
     const denied = await requirePermission(env, auth.user.id, "tool_rental.checkout")
     if (denied) return denied
 
-    let body: Record<string, unknown>
-    try { body = await request.json() } catch { return json({ error: "Invalid JSON" }, 400) }
+    const body = await readJsonObject(request)
+    if (!body) return json({ error: "JSONオブジェクトを指定してください" }, 400)
 
     const toolId = String(body.tool_id ?? "").trim()
     const borrowerName = String(body.borrower_name ?? "").trim()
@@ -298,8 +320,8 @@ export async function handleToolRental(
     const denied = await requirePermission(env, auth.user.id, "tool_rental.return")
     if (denied) return denied
 
-    let body: Record<string, unknown> = {}
-    try { body = await request.json() } catch { /* empty body is accepted */ }
+    const body = await readJsonObject(request, true)
+    if (!body) return json({ error: "JSONオブジェクトを指定してください" }, 400)
 
     const updated = await env.DB.prepare(`
       UPDATE tool_rental_loans
