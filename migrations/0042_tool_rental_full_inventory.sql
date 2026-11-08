@@ -264,7 +264,7 @@ SELECT
   new_tools.id,
   old_loans.quantity,
   old_loans.checked_out_at,
-  old_loans.returned_at,
+  CASE WHEN old_loans.status = 'returned' THEN COALESCE(old_loans.returned_at, old_loans.checked_out_at) ELSE NULL END,
   NULL,
   CASE WHEN old_loans.status = 'returned' THEN old_loans.quantity ELSE 0 END,
   CASE WHEN old_loans.status = 'returned' THEN 'returned' ELSE 'borrowed' END,
