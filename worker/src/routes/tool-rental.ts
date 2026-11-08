@@ -39,7 +39,7 @@ async function getBorrowerId(
     INSERT INTO borrowers (class_name, name)
     VALUES (?, ?)
     ON CONFLICT(class_name, name)
-    DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+    DO UPDATE SET updated_at = datetime('now', '+9 hours')
   `).bind(className, name).run()
 
   const borrower = await db.prepare(
@@ -234,7 +234,7 @@ export async function handleToolRental(
       const borrowerId = await getBorrowerId(env.DB, className, name)
       const loan = await env.DB.prepare(`
         INSERT INTO loans (borrower_id, tool_id, quantity, borrowed_at, status, tool_name_snapshot)
-        VALUES (?, ?, 1, CURRENT_TIMESTAMP, 'borrowed', ?)
+        VALUES (?, ?, 1, datetime('now', '+9 hours'), 'borrowed', ?)
       `).bind(borrowerId, item.tool_id, item.tool_name).run()
       const loanId = Number(loan.meta.last_row_id)
       const update = await env.DB.prepare(`
@@ -246,7 +246,7 @@ export async function handleToolRental(
         return json({ detail: "ほかの操作で貸出済みになりました。画面を更新してください。" }, 409)
       }
       await env.DB.prepare(
-        "INSERT INTO loan_items (loan_id, tool_item_id, created_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+        "INSERT INTO loan_items (loan_id, tool_item_id, created_at) VALUES (?, ?, datetime('now', '+9 hours'))",
       ).bind(loanId, toolItemId).run()
       await refreshToolCounts(env.DB, item.tool_id)
       return json({ success: true, loan_id: loanId }, 201)
@@ -256,7 +256,7 @@ export async function handleToolRental(
       const result = await env.DB.prepare(`
         SELECT
           li.id AS loan_item_id, l.id AS loan_id, t.id AS tool_id,
-          t.name AS tool_name, ti.id AS tool_item_id,
+          COALESCE(l.tool_name_snapshot, t.name) AS tool_name, ti.id AS tool_item_id,
           ti.management_number, b.class_name, b.name AS borrower_name,
           l.borrowed_at
         FROM loan_items li
@@ -290,7 +290,7 @@ export async function handleToolRental(
       const returnerId = await getBorrowerId(env.DB, className, name)
       const updated = await env.DB.prepare(`
         UPDATE loan_items
-        SET returned_at = CURRENT_TIMESTAMP, returned_by_id = ?
+        SET returned_at = datetime('now', '+9 hours'), returned_by_id = ?
         WHERE id = ? AND returned_at IS NULL
       `).bind(returnerId, loanItemId).run()
       if (!updated.meta.changes) return json({ detail: "すでに返却が記録されています" }, 409)
@@ -308,7 +308,7 @@ export async function handleToolRental(
         SET
           returned_quantity = returned_quantity + 1,
           returned_by_id = ?,
-          returned_at = CASE WHEN ? = 0 THEN CURRENT_TIMESTAMP ELSE NULL END,
+          returned_at = CASE WHEN ? = 0 THEN datetime('now', '+9 hours') ELSE NULL END,
           status = CASE WHEN ? = 0 THEN 'returned' ELSE 'borrowed' END
         WHERE id = ?
       `).bind(returnerId, remaining?.count ?? 0, remaining?.count ?? 0, loanItem.loan_id).run()
