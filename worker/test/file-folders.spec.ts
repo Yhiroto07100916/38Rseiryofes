@@ -119,6 +119,29 @@ describe("File folder management", () => {
     expect(response.status).toBe(409);
   });
 
+  it("moves a folder to another parent and updates its full path", async () => {
+    const fixture = await createFixture();
+    const firstParentId = await createFolder(fixture, "旧分類");
+    const secondParentId = await createFolder(fixture, "新分類");
+    const childId = await createFolder(fixture, "資料", firstParentId);
+
+    const moveResponse = await request(fixture, `/api/file-folders/${childId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ parent_id: secondParentId }),
+    });
+    expect(moveResponse.status).toBe(200);
+
+    const treeResponse = await request(fixture, "/api/file-folders?all=true");
+    const tree = await treeResponse.json() as {
+      folders: Array<{ id: string; parent_id: string | null; path: string }>;
+    };
+    expect(tree.folders.find(folder => folder.id === childId)).toMatchObject({
+      parent_id: secondParentId,
+      path: "新分類 / 資料",
+    });
+  });
+
   it("does not delete a folder that contains another folder", async () => {
     const fixture = await createFixture();
     const parentId = await createFolder(fixture, "親");
