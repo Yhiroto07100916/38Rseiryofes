@@ -157,7 +157,14 @@
                   <span v-if="loan.checked_out_by_name"> · 受付：{{ loan.checked_out_by_name }}</span>
                 </v-list-item-subtitle>
                 <template #append>
-                  <v-btn color="success" variant="tonal" size="small" @click="returnLoan(loan)">
+                  <v-btn
+                    color="success"
+                    variant="tonal"
+                    size="small"
+                    :loading="returningLoanId === loan.id"
+                    :disabled="Boolean(returningLoanId) && returningLoanId !== loan.id"
+                    @click="returnLoan(loan)"
+                  >
                     返却処理
                   </v-btn>
                 </template>
@@ -292,6 +299,7 @@ const history = ref<LoanItem[]>([])
 const loading = ref(false)
 const historyLoading = ref(false)
 const saving = ref(false)
+const returningLoanId = ref('')
 const errorMessage = ref('')
 const successMessage = ref('')
 const formError = ref('')
@@ -452,7 +460,9 @@ async function submitCheckout() {
 }
 
 async function returnLoan(loan: LoanItem) {
+  if (returningLoanId.value) return
   if (!window.confirm(`「${loan.tool_name}」${loan.quantity}個を返却済みにしますか？`)) return
+  returningLoanId.value = loan.id
   try {
     await api.apiFetch(`/api/tool-rental/loans/${loan.id}/return`, {
       method: 'POST',
@@ -463,6 +473,8 @@ async function returnLoan(loan: LoanItem) {
   } catch (error) {
     console.error(error)
     errorMessage.value = '返却処理に失敗しました。最新の貸出状況を確認してください。'
+  } finally {
+    returningLoanId.value = ''
   }
 }
 
