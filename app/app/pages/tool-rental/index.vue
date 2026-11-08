@@ -176,7 +176,7 @@
         <v-card v-if="canHistory" rounded="xl" variant="outlined">
           <v-card-title class="d-flex align-center justify-space-between">
             <span>貸出履歴</span>
-            <v-btn variant="text" size="small" :loading="historyLoading" @click="loadHistory">更新</v-btn>
+            <v-btn variant="text" size="small" :loading="historyLoading" @click="loadHistory"><v-icon icon="mdi-refresh" /></v-btn>
           </v-card-title>
           <v-divider />
           <v-card-text v-if="history.length === 0" class="text-center text-medium-emphasis py-6">

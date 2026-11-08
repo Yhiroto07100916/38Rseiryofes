@@ -183,17 +183,20 @@ onMounted(loadItems)
     class="py-8"
   >
     <div class="d-flex flex-wrap align-center justify-space-between ga-4 mb-6">
+        <div class="d-flex align-center ga-3 mb-6">
+            <LayoutBackButton />
+
+            <v-avatar color="primary" variant="tonal" rounded="lg">
+              <v-icon icon="mdi-cart" />
+            </v-avatar>
+        
+      
       <div>
-        <div class="text-overline text-primary font-weight-bold">
-          SHARED RESOURCES
-        </div>
         <h1 class="text-h4 font-weight-bold">
           ほしい物リスト
         </h1>
-        <p class="text-body-2 text-medium-emphasis mt-2">
-          企画・クラス運営で必要な物品を共有して管理します。
-        </p>
       </div>
+        </div>
 
       <v-btn
         v-if="canCreate"
