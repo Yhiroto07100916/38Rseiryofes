@@ -223,6 +223,12 @@ import { classOptions } from '~/constants/tool-rental-classes'
 
 definePageMeta({ middleware: 'auth' })
 
+const snackbar = useSnackbar()
+const showSnackbar = (
+  message: string,
+  type: 'success' | 'error' | 'warning' | 'info' = 'info',
+) => snackbar.show(message, type)
+
 const { request } = useToolRentalApi()
 
 const searchClassName = ref('')
