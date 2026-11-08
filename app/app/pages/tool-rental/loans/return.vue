@@ -127,6 +127,7 @@ const confirmReturn = async () => {
     dialog.value = false
     selectedLoan.value = null
     showMessage('返却を記録しました。')
+    window.dispatchEvent(new Event('tool-rental:changed'))
     await loadLoans()
   } catch (error: any) {
     showMessage(error?.data?.detail || '返却の記録に失敗しました。', 'error')
