@@ -8,7 +8,7 @@
   >
     <v-card-title class="d-flex align-center ga-2 py-2 px-3">
       <v-icon icon="mdi-timer-sand" color="primary" />
-      <span class="text-subtitle-2 font-weight-bold">貸出タイマー</span>
+      <span class="text-subtitle-2 font-weight-bold">工具タイマー</span>
       <v-spacer />
       <v-chip size="x-small" color="primary" variant="tonal">{{ visibleTimers.length }}件</v-chip>
       <v-btn
