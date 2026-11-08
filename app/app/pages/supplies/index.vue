@@ -327,17 +327,17 @@
             class="mb-2"
           >
             <template #item="{ props, item }">
-              <v-list-item v-bind="props" :title="item.raw.title">
+              <v-list-item v-bind="props" :title="item.title">
                 <template #prepend>
-                  <UserAvatar :user="item.raw" :size="36" />
+                  <UserAvatar :user="item" :size="36" />
                 </template>
               </v-list-item>
             </template>
 
             <template #selection="{ item }">
               <div class="d-flex align-center ga-2">
-                <UserAvatar :user="item.raw" :size="28" />
-                <span>{{ item.raw.title }}</span>
+                <UserAvatar :user="item" :size="28" />
+                <span>{{ item.title }}</span>
               </div>
             </template>
           </v-select>
