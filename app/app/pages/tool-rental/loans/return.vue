@@ -11,16 +11,16 @@
       </v-card-text>
       <v-divider />
       <v-table>
-        <thead><tr><th>工具</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th><th class="text-right">操作</th></tr></thead>
+        <thead><tr><th>工具</th><th>個体ID</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th><th class="text-right">操作</th></tr></thead>
         <tbody>
           <tr v-for="loan in filteredLoans" :key="loan.loan_item_id">
             <td>{{ loan.tool_name }}</td>
-            <td><v-chip size="small" variant="tonal">{{ loan.management_number }}</v-chip></td>
+            <td>{{ loan.tool_item_id }}</td><td><v-chip size="small" variant="tonal">{{ loan.management_number }}</v-chip></td>
             <td>{{ loan.class_name }} {{ loan.borrower_name }}</td>
             <td>{{ formatDate(loan.borrowed_at) }}</td>
             <td class="text-right"><v-btn color="success" size="small" variant="tonal" :disabled="savingId !== null" :loading="savingId === loan.loan_item_id" @click="openReturn(loan)">返却を記録</v-btn></td>
           </tr>
-          <tr v-if="!loading && filteredLoans.length === 0"><td colspan="5" class="text-center text-medium-emphasis py-6">該当する貸出中の個体はありません。</td></tr>
+          <tr v-if="!loading && filteredLoans.length === 0"><td colspan="6" class="text-center text-medium-emphasis py-6">該当する貸出中の個体はありません。</td></tr>
         </tbody>
       </v-table>
       <v-card-actions><v-spacer /><v-btn variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="loadLoans">更新</v-btn></v-card-actions>
@@ -31,7 +31,7 @@
         <v-card-title>返却内容の確認</v-card-title>
         <v-card-text>
           <v-alert v-if="selectedLoan" type="info" variant="tonal" class="mb-4">
-            {{ selectedLoan.tool_name }} / {{ selectedLoan.management_number }}<br>
+            {{ selectedLoan.tool_name }} / 個体ID: {{ selectedLoan.tool_item_id }} / {{ selectedLoan.management_number }}<br>
             借りた人：{{ selectedLoan.class_name }} {{ selectedLoan.borrower_name }}
           </v-alert>
           <div class="text-subtitle-2 mb-2">返却を記録した人</div>
