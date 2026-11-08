@@ -1,6 +1,7 @@
 <template>
   <div>
     <div class="d-flex align-center ga-3 mb-6">
+      <LayoutBackButton />
       <v-avatar color="primary" variant="tonal" rounded="lg" size="48">
         <v-icon icon="mdi-toolbox-outline" size="28" />
       </v-avatar>
