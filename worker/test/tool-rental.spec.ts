@@ -173,10 +173,23 @@ describe("Tool rental full workflow API", () => {
     expect(updatedItems.find(item => item.id === firstToolItemId)?.status).toBe("available")
     expect(updatedItems.filter(item => item.status === "borrowed")).toHaveLength(1)
 
+    await env.DB.prepare("UPDATE tools SET name = ? WHERE id = ?")
+      .bind("変更後の工具名", tool.id)
+      .run()
+
     const currentLoans = await api(manager, "/loans/current")
     expect(currentLoans.status).toBe(200)
-    const current = await currentLoans.json() as Array<{ id: number; quantity: number; returned_quantity: number }>
-    expect(current.some(item => item.id === loan.id && item.returned_quantity === 1)).toBe(true)
+    const current = await currentLoans.json() as Array<{
+      id: number
+      quantity: number
+      returned_quantity: number
+      tool_name: string
+    }>
+    expect(current.some(item =>
+      item.id === loan.id &&
+      item.returned_quantity === 1 &&
+      item.tool_name === "個体返却テスト",
+    )).toBe(true)
   })
 
   it("queues reservations when all individual items are checked out", async () => {
