@@ -11,10 +11,19 @@
       <span class="text-subtitle-2 font-weight-bold">貸出タイマー</span>
       <v-spacer />
       <v-chip size="x-small" color="primary" variant="tonal">{{ visibleTimers.length }}件</v-chip>
+      <v-btn
+        :icon="timerCollapsed ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+        size="x-small"
+        variant="text"
+        :aria-label="timerCollapsed ? 'タイマーを開く' : 'タイマーを畳む'"
+        :title="timerCollapsed ? 'タイマーを開く' : 'タイマーを畳む'"
+        @click="toggleCollapsed"
+      />
       <v-btn icon="mdi-refresh" size="x-small" variant="text" aria-label="タイマーを更新" :loading="loading" @click="loadTimers" />
     </v-card-title>
-    <v-divider />
-    <v-card-text class="pa-0 timer-list">
+    <template v-if="!timerCollapsed">
+      <v-divider />
+      <v-card-text class="pa-0 timer-list">
       <div
         v-for="loan in visibleTimers"
         :key="loan.loan_item_id"
@@ -42,7 +51,8 @@
           </div>
         </div>
       </div>
-    </v-card-text>
+      </v-card-text>
+    </template>
   </v-card>
 </template>
 
@@ -54,8 +64,30 @@ const { request } = useToolRentalApi()
 const loans = ref<CurrentLoanItem[]>([])
 const now = ref(Date.now())
 const loading = ref(false)
+const timerCollapsed = ref(false)
 let clockInterval: ReturnType<typeof setInterval> | undefined
 let refreshInterval: ReturnType<typeof setInterval> | undefined
+
+const collapseStorageKey = computed(() =>
+  `tool-rental-timers-collapsed:${auth.user?.id ?? 'default'}`,
+)
+
+function restoreCollapsedPreference() {
+  try {
+    timerCollapsed.value = localStorage.getItem(collapseStorageKey.value) === 'true'
+  } catch {
+    timerCollapsed.value = false
+  }
+}
+
+function toggleCollapsed() {
+  timerCollapsed.value = !timerCollapsed.value
+  try {
+    localStorage.setItem(collapseStorageKey.value, String(timerCollapsed.value))
+  } catch {
+    // Storageが利用できない環境では、現在の画面内だけで切り替える。
+  }
+}
 
 const canViewTimers = computed(() =>
   auth.hasPermission('tool_rental.view')
@@ -132,8 +164,14 @@ const handleToolRentalChanged = () => {
   void loadTimers()
 }
 
+watch(
+  () => auth.user?.id,
+  () => restoreCollapsedPreference(),
+)
+
 onMounted(async () => {
   if (!auth.initialized) await auth.fetchMe()
+  restoreCollapsedPreference()
   await loadTimers()
   window.addEventListener('tool-rental:changed', handleToolRentalChanged)
   now.value = Date.now()
