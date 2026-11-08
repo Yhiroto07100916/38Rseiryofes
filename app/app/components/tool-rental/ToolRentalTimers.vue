@@ -128,9 +128,14 @@ async function loadTimers() {
   }
 }
 
+const handleToolRentalChanged = () => {
+  void loadTimers()
+}
+
 onMounted(async () => {
   if (!auth.initialized) await auth.fetchMe()
   await loadTimers()
+  window.addEventListener('tool-rental:changed', handleToolRentalChanged)
   now.value = Date.now()
   clockInterval = setInterval(() => {
     now.value = Date.now()
@@ -141,6 +146,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('tool-rental:changed', handleToolRentalChanged)
   if (clockInterval) clearInterval(clockInterval)
   if (refreshInterval) clearInterval(refreshInterval)
 })
