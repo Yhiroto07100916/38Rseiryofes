@@ -693,7 +693,6 @@ const resetForm = () => {
   form.loanDurationMinutes = null
   form.maxQuantityPerChief = null
   form.loanDurationMinutesPerChief = null
-  form.dueNoticeEnabled = true
   form.universalReturnEnabled = true
   form.universalReturnEnabledForChief = true
   form.toolItems = [
