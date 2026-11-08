@@ -134,7 +134,7 @@ const checkout = async () => {
         tool_item_id: selectedItemId.value,
         class_name: form.class_name.trim(),
         name: form.name.trim(),
-        time_limit_minutes: form.time_limit_minutes === null || form.time_limit_minutes === undefined || form.time_limit_minutes === ('' as unknown as number)
+        time_limit_minutes: form.time_limit_minutes === null || form.time_limit_minutes === undefined || form.time_limit_minutes === ''
           ? null
           : Number(form.time_limit_minutes),
       },
