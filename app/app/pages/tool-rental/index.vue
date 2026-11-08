@@ -117,7 +117,7 @@ const links = computed(() => allLinks.filter(item => {
 
 const formatDate = (value: string) => {
   const normalized = value.replace(' ', 'T')
-  const date = /(?:Z|[+-]\\d{2}:\\d{2})$/.test(normalized)
+  const date = /(?:Z|[+-]\d{2}:\d{2})$/.test(normalized)
     ? new Date(normalized)
     : new Date(`${normalized}+09:00`)
   return date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
