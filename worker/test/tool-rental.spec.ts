@@ -135,11 +135,15 @@ describe("38R tool inventory and lending ledger", () => {
       loan_item_id: number
       management_number: string
       borrower_name: string
+      time_limit_minutes: number | null
+      due_at: string | null
     }>
     expect(current).toHaveLength(1)
     expect(current[0]).toMatchObject({
       management_number: "38R-TOOL-002",
       borrower_name: "借りた人",
+      time_limit_minutes: null,
+      due_at: null,
     })
 
     const returned = await api(manager, "/loans/return", {
@@ -174,6 +178,55 @@ describe("38R tool inventory and lending ledger", () => {
     const itemsAfterReturn = await api(manager, `/tools/${tool.id}/items`)
     const updatedItems = await itemsAfterReturn.json() as Array<{ status: string }>
     expect(updatedItems[0].status).toBe("available")
+  })
+
+  it("starts a persisted countdown five minutes before the optional time limit", async () => {
+    const manager = await createUser("タイマー確認担当")
+    await grant(manager.userId, [
+      "tool_rental.view",
+      "tool_rental.manage",
+      "tool_rental.checkout",
+    ])
+
+    const tool = await createTool(manager, "タイマー用工具", "38R-TOOL-TIMER")
+    const itemResponse = await api(manager, `/tools/${tool.id}/items`)
+    const items = await itemResponse.json() as Array<{ id: number }>
+
+    const invalid = await api(manager, "/loans", {
+      method: "POST",
+      body: {
+        tool_item_id: items[0].id,
+        class_name: "38R",
+        name: "借りた人",
+        time_limit_minutes: 4,
+      },
+    })
+    expect(invalid.status).toBe(400)
+
+    const checkout = await api(manager, "/loans", {
+      method: "POST",
+      body: {
+        tool_item_id: items[0].id,
+        class_name: "38R",
+        name: "借りた人",
+        time_limit_minutes: 60,
+      },
+    })
+    expect(checkout.status).toBe(201)
+
+    const currentResponse = await api(manager, "/loans/current")
+    const current = await currentResponse.json() as Array<{
+      borrowed_at: string
+      time_limit_minutes: number | null
+      due_at: string | null
+    }>
+    expect(current).toHaveLength(1)
+    expect(current[0].time_limit_minutes).toBe(60)
+    expect(current[0].due_at).not.toBeNull()
+
+    const borrowedAt = new Date(`${current[0].borrowed_at.replace(' ', 'T')}+09:00`).getTime()
+    const dueAt = new Date(`${current[0].due_at?.replace(' ', 'T')}+09:00`).getTime()
+    expect(Math.round((dueAt - borrowedAt) / 60000)).toBe(55)
   })
 
   it("rejects a second checkout of an already borrowed individual item", async () => {
