@@ -10,6 +10,10 @@
       </div>
     </div>
 
+    <v-alert v-if="!canCheckout" type="warning" variant="tonal" class="mb-4">
+      貸出処理の権限がありません。
+    </v-alert>
+
     <v-alert
       v-if="selectedReservation"
       type="info"
@@ -41,7 +45,7 @@
       {{ reservationWaitingError }}
     </v-alert>
 
-    <v-row>
+    <v-row v-if="canCheckout">
       <v-col
         cols="12"
         lg="7"
@@ -471,6 +475,9 @@ import type {
 import { classOptions } from '~/constants/tool-rental-classes'
 
 definePageMeta({ middleware: 'auth' })
+
+const auth = useAuthStore()
+const canCheckout = computed(() => auth.hasPermission('tool_rental.checkout') || auth.hasPermission('tool_rental.manage'))
 
 const classGrades = [
   {
