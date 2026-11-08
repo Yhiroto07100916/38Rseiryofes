@@ -50,6 +50,7 @@ CREATE TABLE loans (
   quantity INTEGER NOT NULL CHECK (quantity > 0),
   borrowed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   returned_at TEXT,
+  returned_by_id INTEGER,
   returned_quantity INTEGER NOT NULL DEFAULT 0 CHECK (returned_quantity >= 0),
   status TEXT NOT NULL DEFAULT 'borrowed'
     CHECK (status IN ('borrowed', 'returned')),
@@ -58,6 +59,7 @@ CREATE TABLE loans (
   due_at_notification_sent_at TEXT,
   return_notice_sent_at TEXT,
   FOREIGN KEY (borrower_id) REFERENCES borrowers(id) ON DELETE RESTRICT,
+  FOREIGN KEY (returned_by_id) REFERENCES borrowers(id) ON DELETE RESTRICT,
   FOREIGN KEY (tool_id) REFERENCES tools(id) ON DELETE RESTRICT
 );
 
@@ -125,3 +127,18 @@ CREATE TABLE universal_return_times_chief (
   return_time TEXT NOT NULL UNIQUE,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE loan_return_notices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  loan_id INTEGER NOT NULL,
+  return_time_id INTEGER NOT NULL,
+  return_time_type TEXT NOT NULL DEFAULT 'class'
+    CHECK (return_time_type IN ('class', 'chief')),
+  notice_date TEXT NOT NULL,
+  notified_at TEXT,
+  overdue_notified_at TEXT,
+  FOREIGN KEY (loan_id) REFERENCES loans(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_loan_return_notices_loan
+  ON loan_return_notices(loan_id, notice_date);
