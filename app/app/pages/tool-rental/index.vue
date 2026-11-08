@@ -90,6 +90,7 @@ import type { Tool, CurrentLoanItem } from '~/types/tool-rental'
 
 definePageMeta({ middleware: 'auth' })
 
+const auth = useAuthStore()
 const { request } = useToolRentalApi()
 const loading = ref(false)
 const tools = ref<Tool[]>([])
@@ -98,7 +99,7 @@ const errorMessage = ref('')
 
 const totalItems = computed(() => tools.value.reduce((total, tool) => total + tool.quantity, 0))
 
-const links = [
+const allLinks = [
   { title: '工具一覧', description: '工具の個体・管理番号を確認、登録', icon: 'mdi-toolbox-outline', color: 'primary', to: '/tool-rental/tools' },
   { title: '貸出を記録', description: '借りた人と個体を記録する', icon: 'mdi-arrow-up-right-circle-outline', color: 'primary', to: '/tool-rental/loans' },
   { title: '返却を記録', description: '返却された個体と返却者を記録する', icon: 'mdi-check-circle-outline', color: 'success', to: '/tool-rental/loans/return' },
@@ -106,18 +107,32 @@ const links = [
   { title: '貸出・返却履歴', description: '過去の貸出と返却の記録を確認', icon: 'mdi-history', color: 'secondary', to: '/tool-rental/loans/history' },
 ]
 
+const links = computed(() => allLinks.filter(item => {
+  if (item.to.endsWith('/tools')) return auth.hasPermission('tool_rental.view') || auth.hasPermission('tool_rental.manage')
+  if (item.to.endsWith('/loans')) return auth.hasPermission('tool_rental.checkout') || auth.hasPermission('tool_rental.manage')
+  if (item.to.endsWith('/return')) return auth.hasPermission('tool_rental.return') || auth.hasPermission('tool_rental.manage')
+  if (item.to.endsWith('/current')) return auth.hasPermission('tool_rental.view') || auth.hasPermission('tool_rental.manage') || auth.hasPermission('tool_rental.checkout') || auth.hasPermission('tool_rental.return')
+  return auth.hasPermission('tool_rental.history') || auth.hasPermission('tool_rental.manage')
+}))
+
 const formatDate = (value: string) => new Date(value.replace(' ', 'T') + (value.endsWith('Z') ? '' : '+09:00')).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
 
 const loadSummary = async () => {
   loading.value = true
   errorMessage.value = ''
   try {
-    const [toolResult, loanResult] = await Promise.all([
-      request<Tool[]>('/tools'),
-      request<CurrentLoanItem[]>('/loans/current'),
-    ])
-    tools.value = toolResult
-    currentLoans.value = loanResult
+    const canView = auth.hasPermission('tool_rental.view') || auth.hasPermission('tool_rental.manage') || auth.hasPermission('tool_rental.checkout') || auth.hasPermission('tool_rental.return')
+    if (canView) {
+      const [toolResult, loanResult] = await Promise.all([
+        request<Tool[]>('/tools'),
+        request<CurrentLoanItem[]>('/loans/current'),
+      ])
+      tools.value = toolResult
+      currentLoans.value = loanResult
+    } else {
+      tools.value = []
+      currentLoans.value = []
+    }
   } catch (error) {
     console.error(error)
     errorMessage.value = '工具の情報を読み込めませんでした。権限とAPIの状態を確認してください。'
