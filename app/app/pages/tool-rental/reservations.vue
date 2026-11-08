@@ -180,7 +180,7 @@ import type { Reservation } from '~/types/tool-rental'
 definePageMeta({ middleware: 'auth' })
 
 const auth = useAuthStore()
-const canCheckout = computed(() => auth.hasPermission('tool_rental.checkout') || auth.hasPermission('tool_rental.manage'))
+const canCheckout = computed(() => auth.hasPermission('tool_rental.checkout'))
 const { request } = useToolRentalApi()
 
 const reservations = ref<Reservation[]>([])
