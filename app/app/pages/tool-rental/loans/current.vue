@@ -1,537 +1,63 @@
 <template>
   <div>
-    <div class="d-flex flex-wrap align-center ga-3 mb-6">
+    <div class="d-flex flex-wrap align-center ga-3 mb-5">
       <div>
-        <div class="page-title">
-          現在貸出中
-        </div>
-
-        <div class="page-subtitle">
-          現在返却されていない工具・機材を確認します。
-        </div>
+        <h1 class="text-h5 font-weight-bold">貸出中の個体</h1>
+        <p class="text-body-2 text-medium-emphasis mb-0">まだ返却が記録されていない工具の一覧です。</p>
       </div>
-
       <v-spacer />
-
-      <v-btn
-        prepend-icon="mdi-refresh"
-        variant="outlined"
-        :loading="loading"
-        @click="loadLoans"
-      >
-        更新
-      </v-btn>
+      <v-btn variant="outlined" prepend-icon="mdi-refresh" :loading="loading" @click="loadLoans">更新</v-btn>
     </div>
 
-    <v-card elevation="1">
+    <v-card rounded="lg" variant="outlined">
       <v-card-text>
-        <v-row>
-          <v-col
-            cols="12"
-            md="4"
-          >
-            <v-select
-              v-model="className"
-              :items="classOptions"
-              label="クラス"
-              placeholder="クラスを選択"
-              clearable
-              hide-details
-            />
-          </v-col>
-
-          <v-col
-            cols="12"
-            md="4"
-          >
-            <v-select
-              v-model="toolId"
-              :items="tools"
-              item-title="name"
-              item-value="id"
-              label="工具・機材"
-              placeholder="工具・機材を選択"
-              clearable
-              hide-details
-            />
-          </v-col>
-
-          <v-col
-            cols="12"
-            md="2"
-            class="d-flex align-center"
-          >
-            <v-btn
-              color="primary"
-              block
-              :loading="loading"
-              @click="loadLoans"
-            >
-              検索
-            </v-btn>
-          </v-col>
-
-          <v-col
-            cols="12"
-            md="2"
-            class="d-flex align-center"
-          >
-            <v-btn
-              variant="outlined"
-              block
-              :disabled="
-                !className && toolId === null
-              "
-              @click="clearFilters"
-            >
-              条件をクリア
-            </v-btn>
-          </v-col>
-        </v-row>
+        <v-text-field v-model="search" label="工具・管理番号・クラス・氏名で検索" prepend-inner-icon="mdi-magnify" clearable hide-details />
       </v-card-text>
-
       <v-divider />
-
-      <div class="page-table">
-        <v-table fixed-header>
-        <thead>
-          <tr>
-            <th>クラス</th>
-            <th>氏名</th>
-            <th>工具・機材</th>
-            <th>管理番号</th>
-            <th>貸出日時</th>
-            <th>返却期限</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-
+      <v-table>
+        <thead><tr><th>工具</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th></tr></thead>
         <tbody>
-          <template
-            v-for="loan in loans"
-            :key="loan.id"
-          >
-            <tr
-              v-for="item in loan.tool_items"
-              :key="item.loan_item_id"
-              :class="isOverdue(loan) ? 'current-loan-row-overdue' : ''"
-            >
-              <td>{{ loan.class_name }}</td>
-
-              <td class="font-weight-medium">
-                {{ loan.borrower_name }}
-              </td>
-
-              <td>{{ loan.tool_name }}</td>
-
-              <td class="font-weight-medium">
-                {{ item.management_number }}
-              </td>
-
-              <td>{{ formatDate(loan.borrowed_at) }}</td>
-
-              <td>
-                <span v-if="loan.due_at">
-                  {{ formatDate(loan.due_at) }}
-                </span>
-                <span
-                  v-else-if="
-                    loan.universal_return_enabled &&
-                    universalReturnTime
-                  "
-                >
-                  {{ universalReturnTime }}
-                </span>
-                <span v-else class="text-medium-emphasis">
-                  -
-                </span>
-              </td>
-
-              <td>
-                <v-btn
-                  v-if="
-                    canExtend &&
-                    (loan.class_name === 'チーフ'
-                      ? loan.loan_duration_minutes_per_chief !== null
-                      : loan.loan_duration_minutes !== null)
-                  "
-                  size="small"
-                  variant="outlined"
-                  color="primary"
-                  @click="openExtendDialog(loan, item)"
-                >
-                  延長
-                </v-btn>
-              </td>
-            </tr>
-          </template>
-
-          <tr v-if="!loading && loans.length === 0">
-            <td
-              colspan="7"
-              class="table-empty"
-            >
-              現在貸出中の工具・機材はありません。
-            </td>
+          <tr v-for="loan in filteredLoans" :key="loan.loan_item_id">
+            <td>{{ loan.tool_name }}</td>
+            <td><v-chip size="small" variant="tonal">{{ loan.management_number }}</v-chip></td>
+            <td>{{ loan.class_name }} {{ loan.borrower_name }}</td>
+            <td>{{ formatDate(loan.borrowed_at) }}</td>
           </tr>
+          <tr v-if="!loading && filteredLoans.length === 0"><td colspan="4" class="text-center text-medium-emphasis py-6">貸出中の個体はありません。</td></tr>
         </tbody>
       </v-table>
-      </div>
     </v-card>
-
-    <v-dialog
-      v-model="extendDialog"
-      max-width="500"
-    >
-      <v-card>
-        <v-card-title>
-          貸出を延長しますか？
-        </v-card-title>
-
-        <v-card-text>
-          <div v-if="selectedLoan">
-            <div class="mb-2">
-              <strong>工具・機材：</strong>
-              {{ selectedLoan.tool_name }}
-            </div>
-
-            <div class="mb-2">
-              <strong>管理番号：</strong>
-              {{ selectedLoanManagementNumbers }}
-            </div>
-
-            <div class="mb-4">
-              <strong>クラス：</strong>
-              {{ selectedLoan.class_name }}
-            </div>
-
-            <v-text-field
-              v-model="extendName"
-              label="延長する方の氏名"
-              placeholder="氏名を入力"
-              autofocus
-              hide-details
-            />
-          </div>
-        </v-card-text>
-
-        <v-card-actions>
-          <v-spacer />
-
-          <v-btn
-            variant="text"
-            :disabled="extending"
-            @click="closeExtendDialog"
-          >
-            キャンセル
-          </v-btn>
-
-          <v-btn
-            color="primary"
-            :loading="extending"
-            :disabled="!extendName.trim()"
-            @click="extendLoan"
-          >
-            延長する
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <v-alert
-      type="info"
-      variant="tonal"
-      class="mt-4"
-    >
-      返却処理は「返却」画面から行ってください。
-    </v-alert>
-
-    <v-snackbar
-      v-model="snackbar"
-      :color="snackbarColor"
-      timeout="3500"
-    >
-      {{ snackbarText }}
-    </v-snackbar>
   </div>
 </template>
 
 <script setup lang="ts">
-
-import type { Loan, Tool } from '~/types/tool-rental'
-import { classOptions } from '~/constants/tool-rental-classes'
+import type { CurrentLoanItem } from '~/types/tool-rental'
 
 definePageMeta({ middleware: 'auth' })
 
-const auth = useAuthStore()
-const canExtend = computed(() => auth.hasPermission('tool_rental.checkout'))
-interface LoanToolItem {
-  loan_item_id: number
-  loan_id: number
-  tool_item_id: number
-  returned_at: string | null
-  management_number: string
-  status: string
-}
-
-interface CurrentLoan extends Loan {
-  tool_items: LoanToolItem[]
-  loan_duration_minutes: number | null
-  loan_duration_minutes_per_chief: number | null
-}
-
 const { request } = useToolRentalApi()
-
-const loans = ref<CurrentLoan[]>([])
-const tools = ref<Tool[]>([])
-const className = ref<string | null>(null)
-const toolId = ref<number | null>(null)
-
+const loans = ref<CurrentLoanItem[]>([])
+const search = ref('')
 const loading = ref(false)
 
-const snackbar = ref(false)
-const snackbarText = ref('')
-const snackbarColor = ref('success')
-const universalReturnTime = ref<string | null>(null)
+const filteredLoans = computed(() => {
+  const query = search.value.trim().toLowerCase()
+  if (!query) return loans.value
+  return loans.value.filter(loan => [loan.tool_name, loan.management_number, loan.class_name, loan.borrower_name].join(' ').toLowerCase().includes(query))
+})
 
-const extendDialog = ref(false)
-const extending = ref(false)
-const selectedLoan = ref<CurrentLoan | null>(null)
-const extendName = ref('')
-
-const selectedLoanManagementNumbers = computed(() =>
-  selectedLoan.value?.tool_items
-    .map(item => item.management_number)
-    .join(', ') ?? '',
-)
-
-const formatDate = (value: string) => {
-  const normalized = value.replace(' ', 'T')
-
-  const date =
-    /(?:Z|[+-]\d{2}:\d{2})$/.test(normalized)
-      ? new Date(normalized)
-      : new Date(`${normalized}+09:00`)
-
-  return date.toLocaleString('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-  })
-}
-
-const loadUniversalReturnTime = async () => {
-  try {
-    const result = await request<{
-      universal_return_times: {
-        id: number
-        return_time: string
-      }[]
-    }>('/settings/return-time')
-
-    const times = result.universal_return_times ?? []
-
-    universalReturnTime.value =
-      times[0]?.return_time ?? null
-  } catch (error) {
-    console.error(error)
-    universalReturnTime.value = null
-  }
-}
-
-const isOverdue = (loan: CurrentLoan) => {
-  if (!loan.due_at) return false
-  const normalized = loan.due_at.replace(' ', 'T')
-  const dueAt = /(?:Z|[+-]\d{2}:\d{2})$/.test(normalized)
-    ? new Date(normalized)
-    : new Date(`${normalized}+09:00`)
-  return Number.isFinite(dueAt.getTime()) && dueAt.getTime() < Date.now()
-}
-
-const clearFilters = () => {
-  className.value = null
-  toolId.value = null
-
-  loadLoans()
-}
+const formatDate = (value: string) => new Date(value.replace(' ', 'T') + (value.endsWith('Z') ? '' : '+09:00')).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
 
 const loadLoans = async () => {
   loading.value = true
-
   try {
-    const params = new URLSearchParams()
-
-    const selectedClassName =
-      className.value?.trim() ?? ''
-
-    if (selectedClassName) {
-      params.set('class_name', selectedClassName)
-    }
-
-    if (toolId.value !== null) {
-      params.set('tool_id', String(toolId.value))
-    }
-
-    const query = params.toString()
-
-    const path = query
-      ? `/loans/current?${query}`
-      : '/loans/current'
-
-    loans.value = await request<CurrentLoan[]>(path)
+    loans.value = await request<CurrentLoanItem[]>('/loans/current')
   } catch (error) {
     console.error(error)
-
-    showSnackbar(
-      '貸出情報の取得に失敗しました。',
-      'error',
-    )
   } finally {
     loading.value = false
   }
 }
 
-const openExtendDialog = (
-  loan: CurrentLoan,
-  item: LoanToolItem,
-) => {
-  selectedLoan.value = {
-    ...loan,
-    tool_items: [item],
-  }
-  extendName.value = loan.borrower_name
-  extendDialog.value = true
-}
-
-const closeExtendDialog = () => {
-  if (extending.value) {
-    return
-  }
-
-  extendDialog.value = false
-  selectedLoan.value = null
-  extendName.value = ''
-}
-
-const extendLoan = async () => {
-  if (!selectedLoan.value) {
-    return
-  }
-
-  const name = extendName.value.trim()
-
-  if (!name) {
-    showSnackbar(
-      '延長する方の氏名を入力してください。',
-      'error',
-    )
-    return
-  }
-
-  extending.value = true
-
-  try {
-    await request(
-      `/loans/${selectedLoan.value.id}/extend/${selectedLoan.value.tool_items[0]?.tool_item_id}`,
-      {
-        method: 'POST',
-        body: {
-          name,
-        },
-      },
-    )
-
-    extendDialog.value = false
-    selectedLoan.value = null
-    extendName.value = ''
-
-    showSnackbar(
-      '貸出を延長しました。',
-      'success',
-    )
-
-    await loadLoans()
-  } catch (error) {
-    console.error(error)
-
-    showSnackbar(
-      '貸出の延長に失敗しました。',
-      'error',
-    )
-  } finally {
-    extending.value = false
-  }
-}
-
-const showSnackbar = (
-  text: string,
-  color = 'success',
-) => {
-  snackbarText.value = text
-  snackbarColor.value = color
-  snackbar.value = true
-}
-
-const loadTools = async () => {
-  try {
-    tools.value = await request<Tool[]>('/tools')
-  } catch (error) {
-    console.error(error)
-
-    showSnackbar(
-      '工具・機材一覧の取得に失敗しました。',
-      'error',
-    )
-  }
-}
-
-onMounted(async () => {
-  await loadTools()
-  await loadUniversalReturnTime()
-  await loadLoans()
-})
+onMounted(loadLoans)
 </script>
-
-
-<style scoped>
-.page-table {
-  max-height: calc(100vh - 220px);
-  overflow-y: auto;
-}
-
-:deep(.v-table__wrapper) {
-  overflow: visible;
-}
-
-:deep(thead th) {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  background: rgb(var(--v-theme-surface));
-}
-</style>
-
-<style scoped>
-.current-loan-row-overdue {
-  background: rgba(251, 140, 0, 0.14);
-}
-</style>
-
-<style scoped>
-.page-title {
-  margin: 4px 0 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  line-height: 1.35;
-}
-
-.page-subtitle {
-  margin-top: 4px;
-  color: rgba(var(--v-theme-on-surface), 0.62);
-  font-size: 0.875rem;
-}
-
-.table-empty {
-  padding: 28px 16px;
-  color: rgba(var(--v-theme-on-surface), 0.62);
-  text-align: center;
-}
-</style>
