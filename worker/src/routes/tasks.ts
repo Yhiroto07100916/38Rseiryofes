@@ -25,6 +25,7 @@ interface CreateTaskBody {
   assignee_role_ids?: unknown
   calendar_event_id?: unknown
   file_ids?: unknown
+  links?: unknown
 }
 
 interface UpdateTaskBody {
@@ -38,6 +39,7 @@ interface UpdateTaskBody {
   assignee_role_ids?: unknown
   calendar_event_id?: unknown
   file_ids?: unknown
+  links?: unknown
 }
 
 const VALID_SCOPES = [
@@ -130,6 +132,16 @@ async function getTaskLinks(
         }>()
     : null
 
+  const links = await env.DB
+    .prepare(`
+      SELECT id, title, url
+      FROM task_links
+      WHERE task_id = ?
+      ORDER BY position, created_at
+    `)
+    .bind(taskId)
+    .all<{ id: string; title: string; url: string }>()
+
   const files = await env.DB
     .prepare(`
       SELECT
@@ -159,6 +171,7 @@ async function getTaskLinks(
   return {
     calendar_event: event ?? null,
     files: files.results,
+    links: links.results,
   }
 }
 
@@ -546,6 +559,36 @@ export async function handleTasks(
       )
     }
 
+    if (
+      body.links !== undefined &&
+      (
+        !Array.isArray(body.links) ||
+        body.links.length > 20 ||
+        !body.links.every((item) => {
+          if (
+            !item ||
+            typeof item !== "object" ||
+            typeof item.title !== "string" ||
+            item.title.trim() === "" ||
+            item.title.trim().length > 100 ||
+            typeof item.url !== "string" ||
+            item.url.trim().length > 2048
+          ) return false
+          try {
+            const parsed = new URL(item.url.trim())
+            return parsed.protocol === "http:" || parsed.protocol === "https:"
+          } catch {
+            return false
+          }
+        })
+      )
+    ) {
+      return Response.json(
+        { error: "links must contain up to 20 valid titled HTTP(S) URLs" },
+        { status: 400 },
+      )
+    }
+
     const hasCalendarEventInput =
       body.calendar_event_id !== undefined &&
       body.calendar_event_id !== null &&
@@ -611,6 +654,7 @@ export async function handleTasks(
     const fileIds = [...new Set(
       body.file_ids === undefined ? [] : body.file_ids,
     )]
+    const taskLinks = (body.links ?? []) as { title: string; url: string }[]
 
     try {
       if (userIds.length > 0) {
@@ -758,6 +802,17 @@ export async function handleTasks(
               VALUES (?, ?)
             `)
             .bind(id, fileId),
+        )
+      }
+
+      for (const [position, link] of taskLinks.entries()) {
+        statements.push(
+          env.DB
+            .prepare(`
+              INSERT INTO task_links (id, task_id, title, url, position)
+              VALUES (?, ?, ?, ?, ?)
+            `)
+            .bind(generateId(), id, link.title.trim(), link.url.trim(), position),
         )
       }
 
@@ -980,12 +1035,44 @@ export async function handleTasks(
       )
     }
 
+    if (
+      body.links !== undefined &&
+      (
+        !Array.isArray(body.links) ||
+        body.links.length > 20 ||
+        !body.links.every((item) => {
+          if (
+            !item ||
+            typeof item !== "object" ||
+            typeof item.title !== "string" ||
+            item.title.trim() === "" ||
+            item.title.trim().length > 100 ||
+            typeof item.url !== "string" ||
+            item.url.trim().length > 2048
+          ) return false
+          try {
+            const parsed = new URL(item.url.trim())
+            return parsed.protocol === "http:" || parsed.protocol === "https:"
+          } catch {
+            return false
+          }
+        })
+      )
+    ) {
+      return Response.json(
+        { error: "links must contain up to 20 valid titled HTTP(S) URLs" },
+        { status: 400 },
+      )
+    }
+
     const hasCalendarEventUpdate =
       body.calendar_event_id !== undefined
     const hasFileUpdate =
       body.file_ids !== undefined
+    const hasExternalLinksUpdate =
+      body.links !== undefined
     const hasLinkUpdate =
-      hasCalendarEventUpdate || hasFileUpdate
+      hasCalendarEventUpdate || hasFileUpdate || hasExternalLinksUpdate
 
     const calendarEventId =
       typeof body.calendar_event_id === "string"
@@ -1255,6 +1342,25 @@ export async function handleTasks(
                 VALUES (?, ?)
               `)
               .bind(id, fileId),
+          )
+        }
+      }
+
+      if (hasExternalLinksUpdate) {
+        statements.push(
+          env.DB
+            .prepare("DELETE FROM task_links WHERE task_id = ?")
+            .bind(id),
+        )
+
+        for (const [position, link] of (body.links as { title: string; url: string }[]).entries()) {
+          statements.push(
+            env.DB
+              .prepare(`
+                INSERT INTO task_links (id, task_id, title, url, position)
+                VALUES (?, ?, ?, ?, ?)
+              `)
+              .bind(generateId(), id, link.title.trim(), link.url.trim(), position),
           )
         }
       }

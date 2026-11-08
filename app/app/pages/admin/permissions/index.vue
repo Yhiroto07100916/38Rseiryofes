@@ -52,6 +52,7 @@ const categoryLabels: Record<string, string> = {
   schedule: '予定・カレンダー',
   script: '台本',
   equipment: '備品',
+  tool_rental: '工具貸出管理',
   accounting: '会計',
   members: 'メンバー',
   attendance: '出欠',

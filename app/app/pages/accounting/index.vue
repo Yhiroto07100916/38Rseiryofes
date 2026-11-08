@@ -1765,7 +1765,7 @@ const receiptTotal = computed(() =>
 )
 
 const yen = (value: number | null | undefined) =>
-  `¥${Number(value ?? 0).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`
+  `¥${Number(value ?? 0).toLocaleString('ja-JP')}`
 
 const formatDate = (value: string | null | undefined) => {
   if (!value) return '-'

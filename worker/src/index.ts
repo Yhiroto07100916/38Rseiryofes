@@ -10,6 +10,7 @@ import { handleCalendarCategories } from "./routes/calendar-categories"
 import { handleNews } from "./routes/news"
 import { handleScripts } from "./routes/scripts"
 import { handleEquipment } from "./routes/equipment"
+import { handleToolRental } from "./routes/tool-rental"
 import { handleAccounting } from "./routes/accounting"
 import { handleFiles } from "./routes/files"
 import { handlePublicFiles } from "./routes/public-files"
@@ -171,6 +172,30 @@ export default {
         )
       } catch (error) {
         console.error("Wishlist API error:", error)
+        return withCors(
+          request,
+          Response.json(
+            { error: "Internal Server Error" },
+            { status: 500 },
+          ),
+        )
+      }
+    }
+
+    if (
+      url.pathname === "/api/tool-rental" ||
+      url.pathname.startsWith("/api/tool-rental/")
+    ) {
+      const path = url.pathname.slice("/api/tool-rental".length)
+      const pathParts = path.split("/").filter(Boolean)
+
+      try {
+        return withCors(
+          request,
+          await handleToolRental(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("Tool rental API error:", error)
         return withCors(
           request,
           Response.json(
@@ -789,5 +814,6 @@ export default {
     } catch (error) {
       console.error("Scheduled avatar cleanup failed:", error)
     }
+
   },
 } satisfies ExportedHandler<Env>
