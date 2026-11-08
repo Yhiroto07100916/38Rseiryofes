@@ -59,9 +59,10 @@
 </template>
 
 <script setup lang="ts">
-definePageMeta({ middleware: 'auth' })
 
 import { onMounted, ref } from 'vue'
+
+definePageMeta({ middleware: 'auth' })
 
 const { request } = useToolRentalApi()
 const auth = useToolRentalAuth()
