@@ -85,9 +85,7 @@ export async function handleToolRental(
   if (!permission) return json({ detail: "Not Found" }, 404)
 
   const allowed = await hasPermission(env, auth.user.id, permission)
-  const canManage = permission === "tool_rental.view"
-    ? await hasPermission(env, auth.user.id, "tool_rental.manage")
-    : false
+  const canManage = await hasPermission(env, auth.user.id, "tool_rental.manage")
   const canOperate = permission === "tool_rental.view"
     ? await Promise.all([
       hasPermission(env, auth.user.id, "tool_rental.checkout"),
