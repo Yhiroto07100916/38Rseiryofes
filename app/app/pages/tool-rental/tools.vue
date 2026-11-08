@@ -39,7 +39,7 @@
                   <div v-if="itemLoadingId === tool.id" class="text-center py-3"><v-progress-circular indeterminate size="24" /></div>
                   <div v-else-if="itemsByTool[tool.id]?.length" class="d-flex flex-wrap ga-2">
                     <v-chip v-for="item in itemsByTool[tool.id]" :key="item.id" size="small" :color="item.status === 'available' ? 'success' : item.status === 'borrowed' ? 'warning' : 'grey'" variant="tonal">
-                      {{ item.management_number }} · {{ statusLabel(item.status) }}
+                      ID:{{ item.id }} · {{ item.management_number }} · {{ statusLabel(item.status) }}
                     </v-chip>
                   </div>
                   <div v-else class="text-body-2 text-medium-emphasis">個体情報がありません。</div>
