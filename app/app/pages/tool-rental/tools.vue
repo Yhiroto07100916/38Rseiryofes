@@ -265,18 +265,10 @@
             />
 
             <v-switch
-              v-model="form.dueNoticeEnabled"
-              label="返却期限5分前に通知する"
-              color="primary"
-              hide-details
-              class="mb-4"
-            />
-
-            <v-switch
               v-model="form.universalReturnEnabled"
               label="全体返却の対象にする"
               color="primary"
-              hint="有効にすると、全体返却時刻5分前の通知対象になります。"
+              hint="有効にすると、全体返却時刻が貸出期限に反映されます。"
               persistent-hint
               class="mb-4"
             />
@@ -285,7 +277,7 @@
               v-model="form.universalReturnEnabledForChief"
               label="チーフの全体返却の対象にする"
               color="primary"
-              hint="有効にすると、チーフ用の全体返却時刻5分前の通知対象になります。"
+              hint="有効にすると、チーフ用の全体返却時刻が貸出期限に反映されます。"
               persistent-hint
               class="mb-4"
             />
@@ -465,7 +457,6 @@ const form = reactive<{
   loanDurationMinutes: number | null
   maxQuantityPerChief: number | null
   loanDurationMinutesPerChief: number | null
-  dueNoticeEnabled: boolean
   universalReturnEnabled: boolean
   universalReturnEnabledForChief: boolean
   toolItems: FormToolItem[]
@@ -478,7 +469,6 @@ const form = reactive<{
   loanDurationMinutes: null,
   maxQuantityPerChief: null,
   loanDurationMinutesPerChief: null,
-  dueNoticeEnabled: true,
   universalReturnEnabled: true,
   universalReturnEnabledForChief: true,
   toolItems: [],
@@ -772,7 +762,6 @@ const openEditDialog = async (tool: Tool) => {
     form.maxQuantityPerChief = tool.max_quantity_per_chief
     form.loanDurationMinutesPerChief =
       tool.loan_duration_minutes_per_chief
-    form.dueNoticeEnabled = tool.due_notice_enabled === 1
     form.universalReturnEnabled =
       tool.universal_return_enabled === 1
     form.universalReturnEnabledForChief =
@@ -896,8 +885,6 @@ const saveTool = async () => {
         form.maxQuantityPerChief,
       loan_duration_minutes_per_chief:
         form.loanDurationMinutesPerChief,
-      due_notice_enabled:
-        form.dueNoticeEnabled,
       universal_return_enabled:
         form.universalReturnEnabled,
       universal_return_enabled_for_chief:
