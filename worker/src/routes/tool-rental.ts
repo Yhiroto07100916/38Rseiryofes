@@ -85,7 +85,7 @@ async function getTool(env: Env, id: string): Promise<ToolRow | null> {
 async function getLoan(env: Env, id: string): Promise<LoanRow | null> {
   return env.DB.prepare(`
     SELECT
-      l.id, l.tool_id, t.name AS tool_name, l.borrower_name,
+      l.id, l.tool_id, COALESCE(NULLIF(l.tool_name_snapshot, ''), t.name) AS tool_name, l.borrower_name,
       l.borrower_note, l.quantity, l.status, l.checked_out_by,
       checkout_user.name AS checked_out_by_name, l.checked_out_at,
       l.returned_by, return_user.name AS returned_by_name,
@@ -146,7 +146,7 @@ export async function handleToolRental(
 
     const result = await env.DB.prepare(`
       SELECT
-        l.id, l.tool_id, t.name AS tool_name, l.borrower_name,
+        l.id, l.tool_id, COALESCE(NULLIF(l.tool_name_snapshot, ''), t.name) AS tool_name, l.borrower_name,
         l.borrower_note, l.quantity, l.status, l.checked_out_by,
         checkout_user.name AS checked_out_by_name, l.checked_out_at,
         l.returned_by, return_user.name AS returned_by_name,
@@ -171,7 +171,7 @@ export async function handleToolRental(
     const offset = Math.max(0, Math.floor(Number(url.searchParams.get("offset")) || 0))
     const result = await env.DB.prepare(`
       SELECT
-        l.id, l.tool_id, t.name AS tool_name, l.borrower_name,
+        l.id, l.tool_id, COALESCE(NULLIF(l.tool_name_snapshot, ''), t.name) AS tool_name, l.borrower_name,
         l.borrower_note, l.quantity, l.status, l.checked_out_by,
         checkout_user.name AS checked_out_by_name, l.checked_out_at,
         l.returned_by, return_user.name AS returned_by_name,
@@ -289,10 +289,10 @@ export async function handleToolRental(
     const id = crypto.randomUUID()
     const inserted = await env.DB.prepare(`
       INSERT INTO tool_rental_loans (
-        id, tool_id, borrower_name, borrower_note, quantity,
+        id, tool_id, tool_name_snapshot, borrower_name, borrower_note, quantity,
         checked_out_by, checkout_note
       )
-      SELECT ?, t.id, ?, ?, ?, ?, ?
+      SELECT ?, t.id, t.name, ?, ?, ?, ?, ?
       FROM tool_rental_tools t
       WHERE t.id = ?
         AND t.is_active = 1
