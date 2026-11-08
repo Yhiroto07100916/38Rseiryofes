@@ -1,0 +1,127 @@
+CREATE TABLE tools (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  category TEXT,
+  description TEXT,
+  location TEXT,
+  max_quantity_per_class INTEGER,
+  loan_duration_minutes INTEGER,
+  max_quantity_per_chief INTEGER,
+  loan_duration_minutes_per_chief INTEGER,
+  due_notice_enabled INTEGER NOT NULL DEFAULT 1 CHECK (due_notice_enabled IN (0, 1)),
+  universal_return_enabled INTEGER NOT NULL DEFAULT 1 CHECK (universal_return_enabled IN (0, 1)),
+  universal_return_enabled_for_chief INTEGER NOT NULL DEFAULT 1 CHECK (universal_return_enabled_for_chief IN (0, 1)),
+  is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+  display_order INTEGER,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_tools_active_display_order
+  ON tools(is_active, display_order, id);
+
+CREATE TABLE tool_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tool_id INTEGER NOT NULL,
+  management_number TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'available'
+    CHECK (status IN ('available', 'borrowed', 'unavailable')),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (tool_id) REFERENCES tools(id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_tool_items_tool_status
+  ON tool_items(tool_id, status);
+
+CREATE TABLE borrowers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  class_name TEXT NOT NULL,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (class_name, name)
+);
+
+CREATE TABLE loans (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  borrower_id INTEGER NOT NULL,
+  tool_id INTEGER NOT NULL,
+  quantity INTEGER NOT NULL CHECK (quantity > 0),
+  borrowed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  returned_at TEXT,
+  returned_quantity INTEGER NOT NULL DEFAULT 0 CHECK (returned_quantity >= 0),
+  status TEXT NOT NULL DEFAULT 'borrowed'
+    CHECK (status IN ('borrowed', 'returned')),
+  due_at TEXT,
+  due_notice_sent_at TEXT,
+  due_at_notification_sent_at TEXT,
+  return_notice_sent_at TEXT,
+  FOREIGN KEY (borrower_id) REFERENCES borrowers(id) ON DELETE RESTRICT,
+  FOREIGN KEY (tool_id) REFERENCES tools(id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_loans_status_due_at
+  ON loans(status, due_at);
+
+CREATE INDEX idx_loans_borrowed_at
+  ON loans(borrowed_at DESC);
+
+CREATE TABLE loan_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  loan_id INTEGER NOT NULL,
+  tool_item_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  returned_at TEXT,
+  returned_by_id INTEGER,
+  extended_to_loan_id INTEGER,
+  overdue_minutes INTEGER NOT NULL DEFAULT 0,
+  overdue_seconds INTEGER NOT NULL DEFAULT 0,
+  FOREIGN KEY (loan_id) REFERENCES loans(id) ON DELETE RESTRICT,
+  FOREIGN KEY (tool_item_id) REFERENCES tool_items(id) ON DELETE RESTRICT,
+  FOREIGN KEY (returned_by_id) REFERENCES borrowers(id) ON DELETE RESTRICT,
+  FOREIGN KEY (extended_to_loan_id) REFERENCES loans(id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_loan_items_loan_returned
+  ON loan_items(loan_id, returned_at);
+
+CREATE INDEX idx_loan_items_tool_item
+  ON loan_items(tool_item_id);
+
+CREATE TABLE reservations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tool_id INTEGER NOT NULL,
+  class_name TEXT NOT NULL,
+  name TEXT NOT NULL,
+  quantity INTEGER NOT NULL CHECK (quantity > 0),
+  status TEXT NOT NULL DEFAULT 'waiting'
+    CHECK (status IN ('waiting', 'completed', 'cancelled')),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (tool_id) REFERENCES tools(id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_reservations_tool_status_created
+  ON reservations(tool_id, status, created_at, id);
+
+CREATE TABLE system_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  universal_return_time TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT OR IGNORE INTO system_settings (id, universal_return_time)
+VALUES (1, NULL);
+
+CREATE TABLE universal_return_times (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  return_time TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE universal_return_times_chief (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  return_time TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
