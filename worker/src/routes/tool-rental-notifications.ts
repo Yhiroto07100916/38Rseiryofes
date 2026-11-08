@@ -213,7 +213,7 @@ async function saveLineDestination(
   `).bind(type, id, displayName, now, now, now).run()
 }
 
-export async function handleToolRentalLineWebhook(request: Request, env: Env): Promise<Response> {
+export async function handleToolRentalLineWebhook(request: Request, env: NotificationEnv): Promise<Response> {
   const body = await request.text()
   const signature = request.headers.get("x-line-signature")
   if (!signature) return notificationJson({ detail: "LINE署名がありません" }, 401)
@@ -247,7 +247,7 @@ export async function handleToolRentalLineWebhook(request: Request, env: Env): P
 
 export async function handleToolRentalNotificationRoutes(
   request: Request,
-  env: Env,
+  env: NotificationEnv,
   url: URL,
 ): Promise<Response> {
   if (url.pathname === "/settings/notifications" && request.method === "GET") {
@@ -255,7 +255,7 @@ export async function handleToolRentalNotificationRoutes(
     return notificationJson({
       channel: settings.channel,
       discord_configured: Boolean(settings.discordWebhookUrl),
-      line_configured: Boolean(settings.lineChannelAccessToken && settings.lineChannelSecret),
+      line_configured: Boolean(settings.lineChannelAccessToken && settings.lineChannelSecret && settings.lineDestinationType && settings.lineDestinationId),
       line_destination_type: settings.lineDestinationType,
       line_destination_id: settings.lineDestinationId,
     })
@@ -364,7 +364,7 @@ export async function handleToolRentalNotificationRoutes(
   return notificationJson({ detail: "Not Found" }, 404)
 }
 
-async function sendDueNotifications(env: Env): Promise<void> {
+async function sendDueNotifications(env: NotificationEnv): Promise<void> {
   const settings = await getNotificationSettings(env)
   if (settings.channel === "none") return
   const now = Date.now()
@@ -399,7 +399,7 @@ async function sendDueNotifications(env: Env): Promise<void> {
   for (const loan of result.results) {
     const dueAt = parseNotificationDate(loan.due_at)
     const preNotice = !loan.due_notice_sent_at && now >= dueAt - 5 * 60 * 1000 && now < dueAt
-    const deadlineNotice = !loan.due_at_notification_sent_at && now >= dueAt && now <= dueAt + 60 * 1000
+    const deadlineNotice = !loan.due_at_notification_sent_at && now >= dueAt && now <= dueAt + 5 * 60 * 1000
     if (!preNotice && !deadlineNotice) continue
     const message = [
       preNotice ? "🔔 貸出期限5分前のお知らせ" : "⚠️ 貸出期限のお知らせ",
@@ -419,7 +419,7 @@ async function sendDueNotifications(env: Env): Promise<void> {
   }
 }
 
-async function sendUniversalReturnNotifications(env: Env): Promise<void> {
+async function sendUniversalReturnNotifications(env: NotificationEnv): Promise<void> {
   const settings = await getNotificationSettings(env)
   if (settings.channel === "none") return
   const now = new Date()
@@ -434,7 +434,7 @@ async function sendUniversalReturnNotifications(env: Env): Promise<void> {
     for (const time of times.results) {
       const returnAt = new Date(`${date}T${time.return_time}:00+09:00`).getTime()
       const beforeWindow = now.getTime() >= returnAt - 5 * 60 * 1000 && now.getTime() < returnAt
-      const overdueWindow = now.getTime() >= returnAt && now.getTime() < returnAt + 60 * 1000
+      const overdueWindow = now.getTime() >= returnAt && now.getTime() < returnAt + 5 * 60 * 1000
       if (!beforeWindow && !overdueWindow) continue
 
       const rows = await env.DB.prepare(`
@@ -498,7 +498,7 @@ async function sendUniversalReturnNotifications(env: Env): Promise<void> {
   }
 }
 
-export async function runToolRentalNotifications(env: Env): Promise<void> {
+export async function runToolRentalNotifications(env: NotificationEnv): Promise<void> {
   try {
     const settings = await getNotificationSettings(env)
     if (settings.channel === "none") return
