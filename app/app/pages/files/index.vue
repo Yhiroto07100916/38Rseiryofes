@@ -261,64 +261,64 @@
                   aria-label="閲覧"
                   @click="previewFile(file)"
                 />
-                <v-btn
-                  v-if="canManageFiles || file.uploaded_by === auth.user?.id"
-                  icon="mdi-folder-move-outline"
-                  variant="text"
-                  size="small"
-                  aria-label="フォルダへ移動"
-                  @click="openMoveDialog(file)"
-                />
-                <v-btn
-                  icon="mdi-open-in-new"
-                  variant="text"
-                  size="small"
-                  aria-label="新しいタブで開く"
-                  @click="openFile(file)"
-                />
-                <v-btn
-                  icon="mdi-download"
-                  variant="text"
-                  size="small"
-                  aria-label="ダウンロード"
-                  :loading="downloadingId === file.id"
-                  @click="downloadFile(file)"
-                />
-                <v-btn
-                  v-if="canManageFiles && !showArchived"
-                  icon="mdi-export-variant"
-                  variant="text"
-                  size="small"
-                  aria-label="共有リンク管理"
-                  @click="openShareDialog(file)"
-                />
-                <v-btn
-                  v-if="canManageFiles && !showArchived"
-                  icon="mdi-archive-arrow-down-outline"
-                  variant="text"
-                  size="small"
-                  aria-label="アーカイブ"
-                  :loading="actionFileId === file.id"
-                  @click="changeArchive(file, 'archive')"
-                />
-                <v-btn
-                  v-if="canManageFiles && showArchived"
-                  icon="mdi-archive-arrow-up-outline"
-                  variant="text"
-                  size="small"
-                  aria-label="復元"
-                  :loading="actionFileId === file.id"
-                  @click="changeArchive(file, 'restore')"
-                />
-                <v-btn
-                  v-if="isAdmin && showArchived"
-                  icon="mdi-delete-forever-outline"
-                  color="error"
-                  variant="text"
-                  size="small"
-                  aria-label="完全削除"
-                  @click="confirmPermanentDelete(file)"
-                />
+                <v-menu location="bottom end">
+                  <template #activator="{ props }">
+                    <v-btn
+                      v-bind="props"
+                      icon="mdi-dots-vertical"
+                      variant="text"
+                      size="small"
+                      aria-label="ファイル操作"
+                    />
+                  </template>
+                  <v-list density="compact" min-width="190">
+                    <v-list-item
+                      v-if="canManageFiles || file.uploaded_by === auth.user?.id"
+                      prepend-icon="mdi-folder-move-outline"
+                      title="フォルダへ移動"
+                      @click="openMoveDialog(file)"
+                    />
+                    <v-list-item
+                      prepend-icon="mdi-open-in-new"
+                      title="新しいタブで開く"
+                      @click="openFile(file)"
+                    />
+                    <v-list-item
+                      prepend-icon="mdi-download"
+                      title="ダウンロード"
+                      :disabled="downloadingId === file.id"
+                      @click="downloadFile(file)"
+                    />
+                    <v-divider v-if="canManageFiles" class="my-1" />
+                    <v-list-item
+                      v-if="canManageFiles && !showArchived"
+                      prepend-icon="mdi-export-variant"
+                      title="共有リンク管理"
+                      @click="openShareDialog(file)"
+                    />
+                    <v-list-item
+                      v-if="canManageFiles && !showArchived"
+                      prepend-icon="mdi-archive-arrow-down-outline"
+                      title="アーカイブ"
+                      :disabled="actionFileId === file.id"
+                      @click="changeArchive(file, 'archive')"
+                    />
+                    <v-list-item
+                      v-if="canManageFiles && showArchived"
+                      prepend-icon="mdi-archive-arrow-up-outline"
+                      title="復元"
+                      :disabled="actionFileId === file.id"
+                      @click="changeArchive(file, 'restore')"
+                    />
+                    <v-list-item
+                      v-if="isAdmin && showArchived"
+                      prepend-icon="mdi-delete-forever-outline"
+                      title="完全削除"
+                      base-color="error"
+                      @click="confirmPermanentDelete(file)"
+                    />
+                  </v-list>
+                </v-menu>
               </div>
             </div>
           </v-list-item>
