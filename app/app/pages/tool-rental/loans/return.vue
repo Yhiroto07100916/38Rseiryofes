@@ -1,6 +1,7 @@
 <template>
   <div>
-    <div class="mb-6">
+    <div class="d-flex align-center ga-3 mb-6">
+      <LayoutBackButton />
       <h1 class="text-h5 font-weight-bold">返却を記録</h1>
       <p class="text-body-2 text-medium-emphasis mb-0">返却された個体を選び、返却を記録した人を登録します。</p>
     </div>
