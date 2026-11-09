@@ -1,9 +1,9 @@
 # お知らせプッシュ通知機能 仕様書
 
 - 対象リポジトリ: `Yhiroto07100916/38Rseiryofes`
-- 対象ブランチ: `feature/web-push-notifications`
+- 対象ブランチ: `feature/web-push-notifications-integration`
 - 基準ブランチ: `main`
-- 状態: 実装中（コード追加済み・環境設定と実機検証待ち）
+- 状態: 元ブランチで実装・Workerテスト・iPhone実機検証済み。最新mainへの統合後テストとAndroid実機検証は未完了
 - 作成日: 2026-11-05
 
 ## 1. 概要
@@ -190,7 +190,7 @@
 - 既存のコード・命名・API・DB設計に合わせ、必要最小限の変更にする。
 - 既存の認証・権限・お知らせ機能を不用意に変更しない。
 - 仕様上の曖昧さやCloudflareの制約が見つかった場合、独断で仕様を変えず、実装前に理由と選択肢を説明する。
-- mainブランチには直接コミットしない。作業は`feature/web-push-notifications`で行う。
+- mainブランチには直接コミットしない。作業は`feature/web-push-notifications-integration`で行う。
 - 実装完了後は変更ファイル、DBマイグレーション、環境変数・Secret設定、テスト結果、実機確認が必要な項目を日本語で報告する。
 
 
@@ -202,7 +202,7 @@
 - `worker/src/routes/push.ts`: 登録・解除API、Push送信、再送処理。
 - `worker/src/index.ts`: Push APIルーティングとscheduled handler。
 - `worker/src/routes/news.ts`: 新規お知らせ作成後の通知ジョブ作成・初回送信。
-- `migrations/0034_create_web_push_notifications.sql`: Subscriptionと送信ジョブのテーブル。
+- `migrations/0046_create_web_push_notifications.sql`: Subscriptionと送信ジョブのテーブル。
 - `worker/src/env.d.ts`: VAPID環境変数の型。
 - `worker/wrangler.jsonc` / `worker/wrangler.local.jsonc`: 毎分Cron Trigger。
 - `worker/test/push.spec.ts`: 通知本文の長さとPush endpoint検証のテスト。
