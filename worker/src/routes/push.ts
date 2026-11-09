@@ -77,7 +77,12 @@ function isBase64Url(value: unknown, expectedBytes: number): value is string {
   try {
     const base64 = value.replace(/-/g, "+").replace(/_/g, "/")
     const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4)
-    return atob(padded).length === expectedBytes
+    const decoded = atob(padded)
+    const canonical = btoa(decoded)
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/g, "")
+    return decoded.length === expectedBytes && canonical === value
   } catch {
     return false
   }
