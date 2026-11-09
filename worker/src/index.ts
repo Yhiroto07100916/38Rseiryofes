@@ -81,7 +81,7 @@ export function withCors(
 }
 
 export default {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url)
 
     if (request.method === "OPTIONS") {
@@ -296,7 +296,7 @@ export default {
       try {
         return withCors(
           request,
-          await handleNews(request, env, pathParts),
+          await handleNews(request, env, pathParts, ctx),
         )
       } catch (error) {
         console.error("News API error:", error)
