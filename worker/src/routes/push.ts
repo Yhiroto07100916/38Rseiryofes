@@ -31,6 +31,7 @@ interface SubscriptionBody {
 const RETRY_DELAYS_MINUTES = [1, 5, 15]
 const MAX_ATTEMPTS = 4
 const MAX_BATCH_SIZE = 100
+const MAX_SUBSCRIPTIONS = 1000
 
 export function isAllowedPushEndpoint(value: string): boolean {
   try {
@@ -63,11 +64,23 @@ export function formatPushBody(detail: string): string {
     : detail
 }
 
-function isBase64Url(value: unknown): value is string {
-  return typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 200 &&
-    /^[A-Za-z0-9_-]+$/.test(value)
+function isBase64Url(value: unknown, expectedBytes: number): value is string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > 100 ||
+    !/^[A-Za-z0-9_-]+$/.test(value)
+  ) {
+    return false
+  }
+
+  try {
+    const base64 = value.replace(/-/g, "+").replace(/_/g, "/")
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4)
+    return atob(padded).length === expectedBytes
+  } catch {
+    return false
+  }
 }
 
 function isPushConfigured(env: Env): boolean {
@@ -133,10 +146,25 @@ export async function handlePush(
       if (
         endpoint.length > 2048 ||
         !isAllowedPushEndpoint(endpoint) ||
-        !isBase64Url(p256dh) ||
-        !isBase64Url(authKey)
+        !isBase64Url(p256dh, 65) ||
+        !isBase64Url(authKey, 16)
       ) {
         return jsonError("Invalid push subscription", 400)
+      }
+
+      const existingSubscription = await env.DB
+        .prepare("SELECT id FROM push_subscriptions WHERE endpoint = ?")
+        .bind(endpoint)
+        .first<{ id: string }>()
+
+      if (!existingSubscription) {
+        const subscriptionCount = await env.DB
+          .prepare("SELECT COUNT(*) AS count FROM push_subscriptions")
+          .first<{ count: number }>()
+
+        if ((subscriptionCount?.count ?? 0) >= MAX_SUBSCRIPTIONS) {
+          return jsonError("Push subscription limit reached", 429)
+        }
       }
 
       await env.DB
@@ -217,7 +245,6 @@ export async function enqueueNewsPushDeliveries(
     .bind(news.id)
     .run()
 
-  await processDuePushDeliveries(env)
 }
 
 async function sendPush(
