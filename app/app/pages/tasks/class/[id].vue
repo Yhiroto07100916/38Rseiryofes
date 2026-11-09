@@ -86,15 +86,17 @@
                   <div class="text-subtitle-2 font-weight-medium">関連リンク</div>
                   <v-btn size="small" variant="tonal" prepend-icon="mdi-plus" @click="editForm.links.push({ title: '', url: '' })">追加</v-btn>
                 </div>
-                <template v-for="(link, index) in editForm.links" :key="index">
-                  <div class="d-flex align-start ga-2 mb-2">
+                <div
+                  v-for="(item, index) in editForm.links"
+                  :key="index"
+                  class="d-flex align-start ga-2 mb-2"
+                >
                     <div class="flex-grow-1">
-                      <v-text-field v-model="link.title" label="表示タイトル" placeholder="例：資料・参考ページ" variant="outlined" density="comfortable" hide-details class="mb-2" />
-                      <v-text-field v-model="link.url" label="URL" placeholder="https://example.com" variant="outlined" density="comfortable" hide-details />
+                      <v-text-field v-model="editForm.links[index].title" label="表示タイトル" placeholder="例：資料・参考ページ" variant="outlined" density="comfortable" hide-details class="mb-2" />
+                      <v-text-field v-model="editForm.links[index].url" label="URL" placeholder="https://example.com" variant="outlined" density="comfortable" hide-details />
                     </div>
                     <v-btn icon="mdi-close" variant="text" color="error" aria-label="リンクを削除" @click="editForm.links.splice(index, 1)" />
-                  </div>
-                </template>
+                </div>
                 <div class="text-caption text-medium-emphasis">最大20件。タイトルとURLを両方入力してください。</div>
               </div>
 
@@ -222,36 +224,36 @@
           <div class="d-flex flex-wrap ga-2 mb-4">
             <v-chip
               size="small"
-              :color="statusColor(task.status)"
+              :color="statusColor(taskForDisplay.status)"
               variant="tonal"
             >
-              {{ statusLabel(task.status) }}
+              {{ statusLabel(taskForDisplay.status) }}
             </v-chip>
 
             <v-chip
               size="small"
-              :color="priorityColor(task.priority)"
+              :color="priorityColor(taskForDisplay.priority)"
               variant="tonal"
             >
-              {{ priorityLabel(task.priority) }}
+              {{ priorityLabel(taskForDisplay.priority) }}
             </v-chip>
           </div>
 
           <h2 class="text-h5 font-weight-bold">
-            {{ task.title }}
+            {{ taskForDisplay.title }}
           </h2>
 
           <div
-            v-if="task.description"
+            v-if="taskForDisplay.description"
             class="text-body-1 mt-4 task-description"
           >
-            {{ task.description }}
+            {{ taskForDisplay.description }}
           </div>
 
-          <div v-if="task.links?.length" class="mt-4">
+          <div v-if="taskForDisplay.links?.length" class="mt-4">
             <div class="text-subtitle-2 font-weight-medium mb-2">関連リンク</div>
             <div class="d-flex flex-column align-start ga-2">
-              <a v-for="link in task.links" :key="link.id" :href="link.url" target="_blank" rel="noopener noreferrer" class="d-inline-flex align-center ga-2 text-primary text-decoration-none">
+              <a v-for="link in taskForDisplay.links" :key="link.id" :href="link.url" target="_blank" rel="noopener noreferrer" class="d-inline-flex align-center ga-2 text-primary text-decoration-none">
                 <v-icon icon="mdi-open-in-new" size="small" />
                 <span>{{ link.title }}</span>
               </a>
@@ -262,7 +264,7 @@
 
           <div class="detail-list">
             <div
-              v-if="task.due_at"
+              v-if="taskForDisplay.due_at"
               class="detail-item"
             >
               <v-icon
@@ -275,7 +277,7 @@
               </span>
 
               <span>
-                {{ formatDueDate(task.due_at) }}
+                {{ formatDueDate(taskForDisplay.due_at) }}
               </span>
             </div>
 
@@ -308,9 +310,9 @@
               </span>
 
               <div class="d-flex align-center flex-wrap ga-2">
-                <template v-if="task.assignments.users.length > 0">
+                <template v-if="taskForDisplay.assignments.users.length > 0">
                   <div
-                    v-for="user in task.assignments.users"
+                    v-for="user in taskForDisplay.assignments.users"
                     :key="user.id"
                     class="d-inline-flex align-center ga-1"
                   >
@@ -334,8 +336,8 @@
 
               <span>
                 {{
-                  task.assignments.roles.length > 0
-                    ? task.assignments.roles
+                  taskForDisplay.assignments.roles.length > 0
+                    ? taskForDisplay.assignments.roles
                         .map((role) => role.name)
                         .join('、')
                     : 'なし'
@@ -354,7 +356,7 @@
               </span>
 
               <span>
-                {{ formatDueDate(task.created_at) }}
+                {{ formatDueDate(taskForDisplay.created_at) }}
               </span>
             </div>
 
@@ -369,7 +371,7 @@
               </span>
 
               <span>
-                {{ formatDueDate(task.updated_at) }}
+                {{ formatDueDate(taskForDisplay.updated_at) }}
               </span>
             </div>
           </div>
@@ -386,7 +388,7 @@
               <span>関連する予定</span>
             </div>
             <div class="related-info-value">
-              {{ task.calendar_event?.title || 'なし' }}
+              {{ taskForDisplay.calendar_event?.title || 'なし' }}
             </div>
           </div>
 
@@ -396,9 +398,9 @@
               <span>関連ファイル</span>
             </div>
 
-            <div v-if="task.files?.length" class="related-file-list">
+            <div v-if="taskForDisplay.files?.length" class="related-file-list">
               <div
-                v-for="file in task.files"
+                v-for="file in taskForDisplay.files"
                 :key="file.id"
                 class="related-file"
               >
