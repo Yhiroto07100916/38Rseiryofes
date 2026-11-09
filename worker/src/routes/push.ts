@@ -159,22 +159,8 @@ export async function handlePush(
         return jsonError("Invalid push subscription", 400)
       }
 
-      const existingSubscription = await env.DB
-        .prepare("SELECT id FROM push_subscriptions WHERE endpoint = ?")
-        .bind(endpoint)
-        .first<{ id: string }>()
-
-      if (!existingSubscription) {
-        const subscriptionCount = await env.DB
-          .prepare("SELECT COUNT(*) AS count FROM push_subscriptions")
-          .first<{ count: number }>()
-
-        if ((subscriptionCount?.count ?? 0) >= MAX_SUBSCRIPTIONS) {
-          return jsonError("Push subscription limit reached", 429)
-        }
-      }
-
-      await env.DB
+      // 件数判定とINSERTを1つのSQL文にまとめ、同時登録による上限超過を防ぐ。
+      const registration = await env.DB
         .prepare(`
           INSERT INTO push_subscriptions (
             id,
@@ -182,14 +168,35 @@ export async function handlePush(
             p256dh,
             auth
           )
-          VALUES (?, ?, ?, ?)
+          SELECT ?, ?, ?, ?
+          WHERE
+            EXISTS (
+              SELECT 1
+              FROM push_subscriptions
+              WHERE endpoint = ?
+            )
+            OR (
+              SELECT COUNT(*)
+              FROM push_subscriptions
+            ) < ?
           ON CONFLICT(endpoint) DO UPDATE SET
             p256dh = excluded.p256dh,
             auth = excluded.auth,
             updated_at = CURRENT_TIMESTAMP
         `)
-        .bind(crypto.randomUUID(), endpoint, p256dh, authKey)
+        .bind(
+          crypto.randomUUID(),
+          endpoint,
+          p256dh,
+          authKey,
+          endpoint,
+          MAX_SUBSCRIPTIONS,
+        )
         .run()
+
+      if ((registration.meta?.changes ?? 0) !== 1) {
+        return jsonError("Push subscription limit reached", 429)
+      }
 
       return Response.json({ registered: true })
     }
