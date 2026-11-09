@@ -1,4 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { enqueueNewsPushDeliveries } from "./push"
 
 export interface News {
   id: string
@@ -602,6 +603,15 @@ export async function handleNews(
     )
 
     const news = await getNews(env, newsId)
+
+    // 通知の失敗で、お知らせの保存結果を失敗扱いにしない。
+    try {
+      await enqueueNewsPushDeliveries(env, {
+        id: newsId,
+      })
+    } catch (error) {
+      console.error("Failed to enqueue news push notifications:", error)
+    }
 
     return Response.json(news, { status: 201 })
   }
