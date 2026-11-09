@@ -40,7 +40,7 @@ self.addEventListener('notificationclick', (event) => {
 
       if (
         candidate.origin === self.location.origin &&
-        /^\\/news\\/[A-Za-z0-9-]+$/.test(candidate.pathname)
+        /^\/news\/[A-Za-z0-9-]+$/.test(candidate.pathname)
       ) {
         targetUrl = candidate.pathname + candidate.search + candidate.hash
       }
