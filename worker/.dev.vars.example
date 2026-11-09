@@ -1,0 +1,5 @@
+# Copy this file to .dev.vars and replace the placeholders.
+# Do not commit worker/.dev.vars.
+VAPID_PUBLIC_KEY=replace-with-generated-public-key
+VAPID_PRIVATE_KEY='{"replace":"with-generated-private-jwk"}'
+VAPID_SUBJECT=https://38r-seiryofes.com
