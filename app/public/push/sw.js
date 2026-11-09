@@ -34,12 +34,19 @@ self.addEventListener('notificationclick', (event) => {
   const rawUrl = event.notification.data && event.notification.data.url
   let targetUrl = '/'
 
-  if (
-    typeof rawUrl === 'string' &&
-    rawUrl.startsWith('/') &&
-    !rawUrl.startsWith('//')
-  ) {
-    targetUrl = rawUrl
+  if (typeof rawUrl === 'string') {
+    try {
+      const candidate = new URL(rawUrl, self.location.origin)
+
+      if (
+        candidate.origin === self.location.origin &&
+        /^\\/news\\/[A-Za-z0-9-]+$/.test(candidate.pathname)
+      ) {
+        targetUrl = candidate.pathname + candidate.search + candidate.hash
+      }
+    } catch {
+      targetUrl = '/'
+    }
   }
 
   event.waitUntil((async () => {
