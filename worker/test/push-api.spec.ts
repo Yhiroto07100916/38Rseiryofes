@@ -8,8 +8,9 @@ import { handlePush } from "../src/routes/push";
 const userIds: string[] = [];
 const sessionIds: string[] = [];
 const endpoints: string[] = [];
-const validP256dh = "A".repeat(87);
-const validAuth = "A".repeat(22);
+const validP256dh = "BGsX0fLhLEJH-Lzm5WOkQPJ3A32BLeszoPShOUXYmMKWT-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU";
+const validAuth = "AAAAAAAAAAAAAAAAAAAAAA";
+const updatedAuth = "AQEBAQEBAQEBAQEBAQEBAQ";
 
 const pushEnv = Object.assign(Object.create(env), {
   VAPID_PUBLIC_KEY: "test-vapid-public-key",
@@ -173,7 +174,7 @@ describe("Push subscription API", () => {
 
     for (const keys of [
       { p256dh: validP256dh, auth: validAuth },
-      { p256dh: validP256dh, auth: validAuth },
+      { p256dh: validP256dh, auth: updatedAuth },
     ]) {
       const response = await handlePush(
         createRequest("POST", "", cookie, { endpoint, keys }),
@@ -191,7 +192,7 @@ describe("Push subscription API", () => {
 
     expect(stored).toEqual({
       p256dh: validP256dh,
-      auth: validAuth,
+      auth: updatedAuth,
     });
 
     const count = await env.DB.prepare(
@@ -207,7 +208,7 @@ describe("Push subscription API", () => {
     await env.DB.prepare(`
       INSERT INTO push_subscriptions (id, endpoint, p256dh, auth)
       VALUES (?, ?, ?, ?)
-    `).bind(crypto.randomUUID(), endpoint, "public-key", "auth-key").run();
+    `).bind(crypto.randomUUID(), endpoint, validP256dh, validAuth).run();
 
     const response = await handlePush(
       new Request(
@@ -229,7 +230,7 @@ describe("Push subscription API", () => {
     await env.DB.prepare(`
       INSERT INTO push_subscriptions (id, endpoint, p256dh, auth)
       VALUES (?, ?, ?, ?)
-    `).bind(crypto.randomUUID(), endpoint, "public-key", "auth-key").run();
+    `).bind(crypto.randomUUID(), endpoint, validP256dh, validAuth).run();
 
     const response = await handlePush(
       createRequest("DELETE", "", cookie, { endpoint }),
