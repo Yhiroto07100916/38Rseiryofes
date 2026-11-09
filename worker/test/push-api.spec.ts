@@ -8,6 +8,8 @@ import { handlePush } from "../src/routes/push";
 const userIds: string[] = [];
 const sessionIds: string[] = [];
 const endpoints: string[] = [];
+const validP256dh = "A".repeat(87);
+const validAuth = "A".repeat(22);
 
 const pushEnv = Object.assign(Object.create(env), {
   VAPID_PUBLIC_KEY: "test-vapid-public-key",
@@ -89,7 +91,7 @@ describe("Push subscription API", () => {
     const response = await handlePush(
       createRequest("POST", "", undefined, {
         endpoint: createEndpoint(),
-        keys: { p256dh: "public-key", auth: "auth-key" },
+        keys: { p256dh: validP256dh, auth: validAuth },
       }),
       pushEnv,
       ["subscriptions"],
@@ -104,7 +106,24 @@ describe("Push subscription API", () => {
     const response = await handlePush(
       createRequest("POST", "", cookie, {
         endpoint: "https://example.com/push",
-        keys: { p256dh: "public-key", auth: "auth-key" },
+        keys: { p256dh: validP256dh, auth: validAuth },
+      }),
+      pushEnv,
+      ["subscriptions"],
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Invalid push subscription",
+    });
+  });
+
+  it("rejects push keys with invalid decoded lengths", async () => {
+    const cookie = await createAuthenticatedCookie();
+    const response = await handlePush(
+      createRequest("POST", "", cookie, {
+        endpoint: createEndpoint(),
+        keys: { p256dh: "short", auth: "short" },
       }),
       pushEnv,
       ["subscriptions"],
@@ -122,7 +141,7 @@ describe("Push subscription API", () => {
     const response = await handlePush(
       createRequest("POST", "", cookie, {
         endpoint,
-        keys: { p256dh: "public-key", auth: "auth-key" },
+        keys: { p256dh: validP256dh, auth: validAuth },
       }),
       pushEnv,
       ["subscriptions"],
@@ -143,8 +162,8 @@ describe("Push subscription API", () => {
 
     expect(stored).toEqual({
       endpoint,
-      p256dh: "public-key",
-      auth: "auth-key",
+      p256dh: validP256dh,
+      auth: validAuth,
     });
   });
 
@@ -153,8 +172,8 @@ describe("Push subscription API", () => {
     const endpoint = createEndpoint();
 
     for (const keys of [
-      { p256dh: "old-public-key", auth: "old-auth-key" },
-      { p256dh: "new-public-key", auth: "new-auth-key" },
+      { p256dh: validP256dh, auth: validAuth },
+      { p256dh: validP256dh, auth: validAuth },
     ]) {
       const response = await handlePush(
         createRequest("POST", "", cookie, { endpoint, keys }),
@@ -171,8 +190,8 @@ describe("Push subscription API", () => {
     `).bind(endpoint).first<{ p256dh: string; auth: string }>();
 
     expect(stored).toEqual({
-      p256dh: "new-public-key",
-      auth: "new-auth-key",
+      p256dh: validP256dh,
+      auth: validAuth,
     });
 
     const count = await env.DB.prepare(
