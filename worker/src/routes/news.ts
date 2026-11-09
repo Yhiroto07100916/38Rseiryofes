@@ -1,4 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { enqueueNewsPushDeliveries, processDuePushDeliveries } from "./push"
 
 export interface News {
   id: string
@@ -394,6 +395,7 @@ export async function handleNews(
   request: Request,
   env: Env,
   pathParts: string[],
+  ctx?: ExecutionContext,
 ): Promise<Response> {
   const auth = await requireAuth(request, env)
 
@@ -602,6 +604,21 @@ export async function handleNews(
     )
 
     const news = await getNews(env, newsId)
+
+    // 配信キューへの保存だけを同期実行し、Push送信はレスポンス後に行う。
+    try {
+      await enqueueNewsPushDeliveries(env, { id: newsId })
+
+      if (ctx) {
+        ctx.waitUntil(
+          processDuePushDeliveries(env).catch((error) => {
+            console.error("Background push delivery failed:", error)
+          }),
+        )
+      }
+    } catch (error) {
+      console.error("Failed to enqueue news push notifications:", error)
+    }
 
     return Response.json(news, { status: 201 })
   }
