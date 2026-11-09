@@ -449,10 +449,6 @@
         <v-card
           rounded="xl"
           elevation="1"
-        >
-          <v-card
-          rounded="xl"
-          elevation="1"
           class="mb-4"
         >
           <v-card-title class="px-5 pt-5">
@@ -554,7 +550,11 @@
           </v-card-text>
         </v-card>
 
-        <v-card-title class="px-5 pt-5">
+        <v-card
+          rounded="xl"
+          elevation="1"
+        >
+          <v-card-title class="px-5 pt-5">
             <v-icon
               icon="mdi-cog-outline"
               class="mr-2"
