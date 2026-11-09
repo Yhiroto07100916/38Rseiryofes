@@ -9,7 +9,9 @@ export default defineConfig({
         },
         plugins: [
                 cloudflareTest({
-                        wrangler: { configPath: "./wrangler.jsonc" },
+                        // テストでは本番用の account_id / Preview D1 / AI binding を含まないローカル設定を使う。
+                        // wrangler.jsonc を使うと Cloudflare の Preview session に接続し、認証エラーになる。
+                        wrangler: { configPath: "./wrangler.local.jsonc" },
                 }),
         ],
 });

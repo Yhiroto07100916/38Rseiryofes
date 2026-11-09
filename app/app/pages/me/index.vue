@@ -449,6 +449,110 @@
         <v-card
           rounded="xl"
           elevation="1"
+          class="mb-4"
+        >
+          <v-card-title class="px-5 pt-5">
+            <v-icon
+              icon="mdi-bell-ring-outline"
+              class="mr-2"
+            />
+            お知らせのプッシュ通知
+          </v-card-title>
+
+          <v-card-text class="px-5 pb-5">
+            <div class="d-flex align-center flex-wrap ga-2 mb-3">
+              <span class="text-body-2 text-medium-emphasis">
+                通知の状態
+              </span>
+              <v-chip
+                size="small"
+                :color="pushStatusColor"
+                variant="tonal"
+              >
+                {{ pushStatusLabel }}
+              </v-chip>
+            </div>
+
+            <p class="text-body-2 text-medium-emphasis mb-4">
+              新しいお知らせが追加されたときに、スマートフォンへ通知します。
+              一度登録すると、ログアウト中も通知を受け取れます。
+            </p>
+
+            <v-alert
+              v-if="pushError"
+              type="error"
+              variant="tonal"
+              density="comfortable"
+              class="mb-4"
+            >
+              {{ pushError }}
+            </v-alert>
+
+            <v-alert
+              v-if="pushStatus === 'permission-denied'"
+              type="warning"
+              variant="tonal"
+              density="comfortable"
+              class="mb-4"
+            >
+              スマートフォンの設定で38Rサイトの通知を許可してから、もう一度お試しください。
+            </v-alert>
+
+            <v-btn
+              v-if="pushStatus === 'permission-denied'"
+              variant="outlined"
+              block
+              class="mb-3"
+              :loading="pushBusy"
+              :disabled="pushBusy"
+              @click="refreshPushStatus"
+            >
+              通知の許可状態を再確認
+            </v-btn>
+
+            <v-btn
+              v-if="pushStatus === 'registered'"
+              color="error"
+              variant="outlined"
+              block
+              :loading="pushBusy"
+              :disabled="pushBusy"
+              @click="disablePush"
+            >
+              通知を無効にする
+            </v-btn>
+
+            <v-btn
+              v-else-if="pushSupported && pushStatus !== 'unsupported' && pushStatus !== 'permission-denied'"
+              color="primary"
+              variant="flat"
+              block
+              :loading="pushBusy"
+              :disabled="pushBusy || pushStatus === 'loading'"
+              @click="enablePush"
+            >
+              通知を有効にする
+            </v-btn>
+
+            <v-btn
+              v-else
+              variant="outlined"
+              block
+              disabled
+            >
+              この環境では通知を利用できません
+            </v-btn>
+
+            <div class="text-caption text-medium-emphasis mt-3">
+              ※通知を受け取るには、スマートフォン側でも通知を許可する必要があります。
+              この設定で解除しても、スマートフォン全体の通知許可は変更されません。
+            </div>
+          </v-card-text>
+        </v-card>
+
+        <v-card
+          rounded="xl"
+          elevation="1"
         >
           <v-card-title class="px-5 pt-5">
             <v-icon
@@ -636,6 +740,7 @@ import {
 } from '~/composables/useApi'
 import { jstDateKey, jstDateTimeLocalToIso } from '~/utils/jst'
 import { useAuthStore } from '~/stores/auth'
+import { usePushNotifications } from '~/composables/usePushNotifications'
 
 definePageMeta({
   middleware: 'auth',
@@ -665,6 +770,18 @@ interface RelevantNews extends News {
 
 const auth = useAuthStore()
 const snackbar = useSnackbar()
+
+const {
+  status: pushStatus,
+  busy: pushBusy,
+  error: pushError,
+  supported: pushSupported,
+  statusLabel: pushStatusLabel,
+  statusColor: pushStatusColor,
+  refresh: refreshPushStatus,
+  enable: enablePush,
+  disable: disablePush,
+} = usePushNotifications()
 
 const {
   apiFetch,
@@ -1240,6 +1357,7 @@ onMounted(async () => {
     loadAttendance(),
     loadTasks(),
     loadNews(),
+    refreshPushStatus(),
   ])
 })
 </script>
