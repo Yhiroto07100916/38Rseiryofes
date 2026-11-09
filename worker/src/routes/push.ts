@@ -82,7 +82,9 @@ function isBase64Url(value: unknown, expectedBytes: number): value is string {
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=+$/g, "")
-    return decoded.length === expectedBytes && canonical === value
+    return decoded.length === expectedBytes &&
+      canonical === value &&
+      (expectedBytes !== 65 || decoded.charCodeAt(0) === 4)
   } catch {
     return false
   }
