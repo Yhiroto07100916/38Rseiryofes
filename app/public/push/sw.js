@@ -31,36 +31,42 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
 
-  const rawUrl = event.notification.data && event.notification.data.url
+  const rawUrl = event.notification.data?.url
   let targetUrl = '/'
 
-  if (typeof rawUrl === 'string') {
-    try {
-      const candidate = new URL(rawUrl, self.location.origin)
-
-      if (
-        candidate.origin === self.location.origin &&
-        /^\/news\/[A-Za-z0-9-]+$/.test(candidate.pathname)
-      ) {
-        targetUrl = candidate.pathname + candidate.search + candidate.hash
-      }
-    } catch {
-      targetUrl = '/'
-    }
+  if (
+    typeof rawUrl === 'string' &&
+    rawUrl.startsWith('/') &&
+    !rawUrl.startsWith('//')
+  ) {
+    targetUrl = rawUrl
   }
 
   event.waitUntil((async () => {
     const target = new URL(targetUrl, self.location.origin)
+
     const windows = await self.clients.matchAll({
       type: 'window',
       includeUncontrolled: true,
     })
 
     for (const client of windows) {
-      if (new URL(client.url).origin === self.location.origin) {
-        await client.navigate(target.href)
-        return client.focus()
+      if (new URL(client.url).origin !== self.location.origin) {
+        continue
       }
+
+      try {
+        const focusedClient = await client.focus()
+        const navigatedClient = await focusedClient.navigate(target.href)
+
+        if (navigatedClient) {
+          return navigatedClient.focus()
+        }
+      } catch (error) {
+        console.error('Failed to navigate existing PWA window:', error)
+      }
+
+      return self.clients.openWindow(target.href)
     }
 
     return self.clients.openWindow(target.href)
