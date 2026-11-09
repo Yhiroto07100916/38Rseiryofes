@@ -8,6 +8,7 @@ import { handleTasks } from "./routes/tasks"
 import { handleCalendar } from "./routes/calendar"
 import { handleCalendarCategories } from "./routes/calendar-categories"
 import { handleNews } from "./routes/news"
+import { handlePush, processDuePushDeliveries } from "./routes/push"
 import { handleScripts } from "./routes/scripts"
 import { handleEquipment } from "./routes/equipment"
 import { handleToolRental } from "./routes/tool-rental"
@@ -306,6 +307,27 @@ export default {
             { error: "Internal Server Error" },
             { status: 500 },
           ),
+        )
+      }
+    }
+
+    if (
+      url.pathname === "/api/push" ||
+      url.pathname.startsWith("/api/push/")
+    ) {
+      const path = url.pathname.slice("/api/push".length)
+      const pathParts = path.split("/").filter(Boolean)
+
+      try {
+        return withCors(
+          request,
+          await handlePush(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("Push API error:", error)
+        return withCors(
+          request,
+          Response.json({ error: "Internal Server Error" }, { status: 500 }),
         )
       }
     }
@@ -815,5 +837,10 @@ export default {
       console.error("Scheduled avatar cleanup failed:", error)
     }
 
+    try {
+      await processDuePushDeliveries(env)
+    } catch (error) {
+      console.error("Scheduled push delivery failed:", error)
+    }
   },
 } satisfies ExportedHandler<Env>
