@@ -51,7 +51,7 @@ async function waitUntilActivated(
   const worker = registration.installing || registration.waiting
 
   if (!worker) {
-    throw new Error('騾夂衍逕ｨ繧ｵ繝ｼ繝薙せ繝ｯ繝ｼ繧ｫ繝ｼ繧定ｵｷ蜍輔〒縺阪∪縺帙ｓ縺ｧ縺励◆縲・)
+    throw new Error('通知用サービスワーカーを起動できませんでした。')
   }
 
   await new Promise<void>((resolve, reject) => {
@@ -61,7 +61,7 @@ async function waitUntilActivated(
         resolve()
       } else if (worker.state === 'redundant') {
         worker.removeEventListener('statechange', onStateChange)
-        reject(new Error('騾夂衍逕ｨ繧ｵ繝ｼ繝薙せ繝ｯ繝ｼ繧ｫ繝ｼ縺ｮ襍ｷ蜍輔↓螟ｱ謨励＠縺ｾ縺励◆縲・))
+        reject(new Error('通知用サービスワーカーの起動に失敗しました。'))
       }
     }
 
@@ -90,12 +90,12 @@ export const usePushNotifications = () => {
 
   const statusLabel = computed(() => {
     const labels: Record<PushStatus, string> = {
-      loading: '遒ｺ隱堺ｸｭ',
-      unsupported: '縺薙・迺ｰ蠅・〒縺ｯ蛻ｩ逕ｨ縺ｧ縺阪∪縺帙ｓ',
-      'not-registered': '譛ｪ逋ｻ骭ｲ',
-      registered: '逋ｻ骭ｲ貂医∩',
-      'permission-denied': '繧ｹ繝槭・繝医ヵ繧ｩ繝ｳ蛛ｴ縺ｧ騾夂衍縺梧拠蜷ｦ縺輔ｌ縺ｦ縺・∪縺・,
-      error: '迥ｶ諷九ｒ遒ｺ隱阪〒縺阪∪縺帙ｓ',
+      loading: '確認中',
+      unsupported: 'この環境では利用できません',
+      'not-registered': '未登録',
+      registered: '登録済み',
+      'permission-denied': 'スマートフォン側で通知が拒否されています',
+      error: '状態を確認できません',
     }
 
     return labels[status.value]
@@ -172,14 +172,15 @@ export const usePushNotifications = () => {
         localStorage.setItem(ENDPOINT_STORAGE_KEY, subscription.endpoint)
         status.value = 'registered'
       } else {
-        // 繧ｵ繝ｼ繝舌・蛛ｴ縺ｧ辟｡蜉ｹ謇ｱ縺・↓縺ｪ縺｣縺欖ubscription繧貞・蛻ｩ逕ｨ縺励↑縺・・        await subscription.unsubscribe()
+        // サーバー側で無効扱いになったSubscriptionを再利用しない。
+        await subscription.unsubscribe()
         localStorage.removeItem(ENDPOINT_STORAGE_KEY)
         status.value = 'not-registered'
       }
     } catch (cause) {
       console.error('Failed to refresh push notification status:', cause)
       status.value = 'error'
-      error.value = '騾夂衍縺ｮ逋ｻ骭ｲ迥ｶ諷九ｒ遒ｺ隱阪〒縺阪∪縺帙ｓ縺ｧ縺励◆縲る壻ｿ｡迺ｰ蠅・ｒ遒ｺ隱阪＠縺ｦ蜀崎ｪｭ縺ｿ霎ｼ縺ｿ縺励※縺上□縺輔＞縲・
+      error.value = '通知の登録状態を確認できませんでした。通信環境を確認して再読み込みしてください。'
     }
   }
 
@@ -190,25 +191,26 @@ export const usePushNotifications = () => {
 
     if (!supported.value) {
       status.value = 'unsupported'
-      error.value = '縺薙・繝悶Λ繧ｦ繧ｶ縺ｧ縺ｯ繝励ャ繧ｷ繝･騾夂衍繧貞茜逕ｨ縺ｧ縺阪∪縺帙ｓ縲・
+      error.value = 'このブラウザではプッシュ通知を利用できません。'
       return
     }
 
     if (isIosDevice() && !isStandaloneApp()) {
-      error.value = 'iPhone縺ｧ縺ｯ縲・8R繧ｵ繧､繝医ｒ繝帙・繝逕ｻ髱｢縺ｫ霑ｽ蜉縺励√・繝ｼ繝逕ｻ髱｢縺ｮ繧｢繧､繧ｳ繝ｳ縺九ｉ髢九＞縺ｦ縺上□縺輔＞縲・
+      error.value = 'iPhoneでは、38Rサイトをホーム画面に追加し、ホーム画面のアイコンから開いてください。'
       return
     }
 
     busy.value = true
 
     try {
-      // 騾夂衍險ｱ蜿ｯ縺ｮ隕∵ｱゅ・縲√Θ繝ｼ繧ｶ繝ｼ縺後・繧ｿ繝ｳ繧呈款縺励◆謫堺ｽ懊・荳ｭ縺ｧ陦後≧縲・      const permission = Notification.permission === 'default'
+      // 通知許可の要求は、ユーザーがボタンを押した操作の中で行う。
+      const permission = Notification.permission === 'default'
         ? await Notification.requestPermission()
         : Notification.permission
 
       if (permission !== 'granted') {
         status.value = 'permission-denied'
-        error.value = '繧ｹ繝槭・繝医ヵ繧ｩ繝ｳ蛛ｴ縺ｧ38R繧ｵ繧､繝医・騾夂衍繧定ｨｱ蜿ｯ縺励※縺上□縺輔＞縲・
+        error.value = 'スマートフォン側で38Rサイトの通知を許可してください。'
         return
       }
 
@@ -229,7 +231,7 @@ export const usePushNotifications = () => {
       const json = subscription.toJSON()
 
       if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) {
-        throw new Error('繧ｹ繝槭・繝医ヵ繧ｩ繝ｳ縺九ｉ騾夂衍逋ｻ骭ｲ諠・ｱ繧貞叙蠕励〒縺阪∪縺帙ｓ縺ｧ縺励◆縲・)
+        throw new Error('スマートフォンから通知登録情報を取得できませんでした。')
       }
 
       await apiFetch('/api/push/subscriptions', {
@@ -245,7 +247,7 @@ export const usePushNotifications = () => {
       error.value =
         cause?.data?.error ||
         cause?.message ||
-        '騾夂衍繧呈怏蜉ｹ縺ｫ縺ｧ縺阪∪縺帙ｓ縺ｧ縺励◆縲よ凾髢薙ｒ縺翫＞縺ｦ蜀榊ｺｦ縺願ｩｦ縺励￥縺縺輔＞縲・
+        '通知を有効にできませんでした。時間をおいて再度お試しください。'
     } finally {
       busy.value = false
     }
@@ -285,7 +287,7 @@ export const usePushNotifications = () => {
       error.value =
         cause?.data?.error ||
         cause?.message ||
-        '騾夂衍繧堤┌蜉ｹ縺ｫ縺ｧ縺阪∪縺帙ｓ縺ｧ縺励◆縲よ凾髢薙ｒ縺翫＞縺ｦ蜀榊ｺｦ縺願ｩｦ縺励￥縺縺輔＞縲・
+        '通知を無効にできませんでした。時間をおいて再度お試しください。'
     } finally {
       busy.value = false
     }
