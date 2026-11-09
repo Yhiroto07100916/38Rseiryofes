@@ -175,6 +175,7 @@ describe("Web Push delivery queue", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await enqueueNewsPushDeliveries(pushEnv, { id: newsId });
+    await processDuePushDeliveries(pushEnv);
 
     const deliveries = await env.DB.prepare(`
       SELECT status, attempt_count
@@ -196,8 +197,9 @@ describe("Web Push delivery queue", () => {
     const fetchMock = vi.fn(async () => new Response(null, { status: 503 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    // enqueueNewsPushDeliveries はキュー登録後、初回送信も実行する。
+    // キュー登録と送信処理は分離されているため、初回送信を明示的に実行する。
     await enqueueNewsPushDeliveries(pushEnv, { id: newsId });
+    await processDuePushDeliveries(pushEnv);
 
     let delivery = await getDelivery(newsId);
     expect(delivery?.status).toBe("pending");
@@ -236,6 +238,7 @@ describe("Web Push delivery queue", () => {
       );
 
       await enqueueNewsPushDeliveries(pushEnv, { id: newsId });
+      await processDuePushDeliveries(pushEnv);
 
       const subscription = await env.DB.prepare(
         "SELECT id FROM push_subscriptions WHERE id = ?",
