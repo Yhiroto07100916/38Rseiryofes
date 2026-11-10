@@ -38,12 +38,15 @@ async function readSiteAccessSettings(env: Env): Promise<{
   siteDescription: string
   eventName: string
   eventYear: number
+  timezone: string
+  logoUrl: string
+  faviconUrl: string
 }> {
   try {
     const rows = await env.DB.prepare(`
       SELECT key, value
       FROM site_settings
-      WHERE key IN ('site_visibility', 'maintenance_mode', 'maintenance_message', 'require_login', 'login_enabled', 'site_name', 'site_description', 'event_name', 'event_year')
+      WHERE key IN ('site_visibility', 'maintenance_mode', 'maintenance_message', 'require_login', 'login_enabled', 'site_name', 'site_description', 'event_name', 'event_year', 'timezone', 'logo_url', 'favicon_url')
     `).all<{ key: string; value: string }>()
 
     const settings = new Map(rows.results.map(row => {
@@ -66,6 +69,9 @@ async function readSiteAccessSettings(env: Env): Promise<{
       siteDescription: typeof settings.get("site_description") === "string" ? settings.get("site_description") as string : "38Rの星陵祭準備を管理するサイトです。",
       eventName: typeof settings.get("event_name") === "string" ? settings.get("event_name") as string : "星陵祭",
       eventYear: typeof settings.get("event_year") === "number" ? settings.get("event_year") as number : 2026,
+      timezone: typeof settings.get("timezone") === "string" ? settings.get("timezone") as string : "Asia/Tokyo",
+      logoUrl: typeof settings.get("logo_url") === "string" ? settings.get("logo_url") as string : "",
+      faviconUrl: typeof settings.get("favicon_url") === "string" ? settings.get("favicon_url") as string : "",
     }
   } catch {
     // Keep the existing access behavior until the settings migration is applied.
@@ -79,6 +85,9 @@ async function readSiteAccessSettings(env: Env): Promise<{
       siteDescription: "38Rの星陵祭準備を管理するサイトです。",
       eventName: "星陵祭",
       eventYear: 2026,
+      timezone: "Asia/Tokyo",
+      logoUrl: "",
+      faviconUrl: "",
     }
   }
 }
@@ -115,7 +124,7 @@ async function enforceSiteAccess(
       SELECT 1
       FROM user_account_roles uar
       INNER JOIN account_roles ar ON ar.id = uar.account_role_id
-      WHERE uar.user_id = ? AND ar.name = 'admin'
+      WHERE uar.user_id = ? AND ar.name = 'important_settings_admin'
       LIMIT 1
     `).bind(user.id).first()
 
@@ -219,15 +228,20 @@ export default {
     if (url.pathname === "/api/site-status" && request.method === "GET") {
       const settings = await readSiteAccessSettings(env)
       const user = await getSessionUser(request, env)
-      const isAdmin = user
-        ? Boolean(await env.DB.prepare(`
-            SELECT 1
-            FROM user_account_roles uar
-            INNER JOIN account_roles ar ON ar.id = uar.account_role_id
-            WHERE uar.user_id = ? AND ar.name = 'admin'
-            LIMIT 1
-          `).bind(user.id).first())
-        : false
+      const [isAdmin, isImportantSettingsAdmin] = user
+        ? await Promise.all([
+            env.DB.prepare(`
+              SELECT 1 FROM user_account_roles uar
+              INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+              WHERE uar.user_id = ? AND ar.name = 'admin' LIMIT 1
+            `).bind(user.id).first(),
+            env.DB.prepare(`
+              SELECT 1 FROM user_account_roles uar
+              INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+              WHERE uar.user_id = ? AND ar.name = 'important_settings_admin' LIMIT 1
+            `).bind(user.id).first(),
+          ]).then(([admin, important]) => [Boolean(admin), Boolean(important)] as const)
+        : [false, false]
 
       return withCors(request, Response.json({
         site_visibility: settings.visibility,
@@ -239,8 +253,12 @@ export default {
         site_description: settings.siteDescription,
         event_name: settings.eventName,
         event_year: settings.eventYear,
+        timezone: settings.timezone,
+        logo_url: settings.logoUrl,
+        favicon_url: settings.faviconUrl,
         is_authenticated: Boolean(user),
         is_admin: isAdmin,
+        is_important_settings_admin: isImportantSettingsAdmin,
       }))
     }
 
