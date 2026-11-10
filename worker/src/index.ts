@@ -43,12 +43,13 @@ async function readSiteAccessSettings(env: Env): Promise<{
   logoUrl: string
   faviconUrl: string
   calendarDefaultView: "month" | "list"
+  featureEnabled: Record<string, boolean>
 }> {
   try {
     const rows = await env.DB.prepare(`
       SELECT key, value
       FROM site_settings
-      WHERE key IN ('site_visibility', 'maintenance_mode', 'maintenance_message', 'require_login', 'login_enabled', 'site_name', 'site_description', 'event_name', 'event_year', 'timezone', 'logo_url', 'favicon_url', 'operation_settings')
+      WHERE key IN ('site_visibility', 'maintenance_mode', 'maintenance_message', 'require_login', 'login_enabled', 'site_name', 'site_description', 'event_name', 'event_year', 'timezone', 'logo_url', 'favicon_url', 'operation_settings', 'feature_settings')
     `).all<{ key: string; value: string }>()
 
     const settings = new Map(rows.results.map(row => {
@@ -78,6 +79,10 @@ async function readSiteAccessSettings(env: Env): Promise<{
         const operation = settings.get("operation_settings") as { calendar_default_view?: unknown } | null
         return operation?.calendar_default_view === "list" ? "list" : "month"
       })(),
+      featureEnabled: (() => {
+        const features = settings.get("feature_settings") as Record<string, { enabled?: boolean }> | null
+        return Object.fromEntries(Object.entries(features ?? {}).map(([key, value]) => [key, value?.enabled !== false]))
+      })(),
     }
   } catch {
     // Keep the existing access behavior until the settings migration is applied.
@@ -95,6 +100,7 @@ async function readSiteAccessSettings(env: Env): Promise<{
       logoUrl: "",
       faviconUrl: "",
       calendarDefaultView: "month",
+      featureEnabled: {},
     }
   }
 }
@@ -356,6 +362,7 @@ export default {
         logo_url: settings.logoUrl,
         favicon_url: settings.faviconUrl,
         calendar_default_view: settings.calendarDefaultView,
+        feature_enabled: settings.featureEnabled,
         is_authenticated: Boolean(user),
         is_admin: isAdmin,
         is_important_settings_admin: isImportantSettingsAdmin,
