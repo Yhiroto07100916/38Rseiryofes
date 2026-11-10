@@ -356,8 +356,8 @@ describe("site settings authorization", () => {
 
   it("requires a session when the site is private", async () => {
     await env.DB.prepare(
-      "UPDATE site_settings SET value = '\\"private\\"' WHERE key = 'site_visibility'",
-    ).run()
+      "UPDATE site_settings SET value = ? WHERE key = 'site_visibility'",
+    ).bind(JSON.stringify("private")).run()
 
     try {
       const anonymous = await SELF.fetch("http://example.com/api/not-a-real-route")
@@ -378,9 +378,9 @@ describe("site settings authorization", () => {
         maintenance_mode: false,
       })
     } finally {
-      await env.DB.prepare(
-        "UPDATE site_settings SET value = '\\"public\\"' WHERE key = 'site_visibility'",
-      ).run()
+        await env.DB.prepare(
+        "UPDATE site_settings SET value = ? WHERE key = 'site_visibility'",
+      ).bind(JSON.stringify("public")).run()
     }
   })
 
