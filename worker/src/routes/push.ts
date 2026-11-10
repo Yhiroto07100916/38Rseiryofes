@@ -568,6 +568,7 @@ interface NotificationPushDeliveryRecord {
   recipient_user_id: string
   category: string
   event_key: string
+  dedupe_key: string
   required_permission: string | null
   entity_type: string | null
   entity_id: string | null
@@ -680,9 +681,16 @@ async function canAccessNotificationTarget(
 
   if (delivery.entity_type === "calendar_event" && delivery.entity_id) {
     const event = await env.DB.prepare(
-      "SELECT 1 FROM calendar_events WHERE id = ?",
-    ).bind(delivery.entity_id).first()
+      "SELECT starts_at FROM calendar_events WHERE id = ?",
+    ).bind(delivery.entity_id).first<{ starts_at: string }>()
     if (!event) return false
+    if (
+      delivery.event_key.startsWith("calendar.reminder_") ||
+      delivery.event_key.startsWith("calendar.attendance_reminder_") ||
+      delivery.event_key.startsWith("calendar.all_day_reminder_")
+    ) {
+      if (!delivery.dedupe_key.includes(":" + event.starts_at + ":")) return false
+    }
   }
 
   if (delivery.entity_type === "decision" && delivery.entity_id) {
@@ -708,9 +716,21 @@ async function canAccessNotificationTarget(
 
   if (delivery.entity_type === "submission" && delivery.entity_id) {
     const submission = await env.DB.prepare(
-      "SELECT 1 FROM submissions WHERE id = ?",
-    ).bind(delivery.entity_id).first()
+      "SELECT due_at, status FROM submissions WHERE id = ?",
+    ).bind(delivery.entity_id).first<{ due_at: string | null; status: string }>()
     if (!submission) return false
+    if (delivery.event_key.startsWith("submissions.deadline_reminder_")) {
+      if (
+        submission.status === "completed" || submission.status === "cancelled" ||
+        !submission.due_at || !delivery.dedupe_key.endsWith(":" + submission.due_at)
+      ) return false
+    }
+    if (delivery.event_key === "submissions.deadline_overdue_daily") {
+      if (
+        submission.status === "completed" || submission.status === "cancelled" ||
+        !submission.due_at || Date.parse(submission.due_at) > Date.now()
+      ) return false
+    }
   }
 
   if (delivery.entity_type === "task" && delivery.entity_id) {
@@ -718,8 +738,24 @@ async function canAccessNotificationTarget(
       return hasPermission(env, delivery.recipient_user_id, "tasks.view")
     }
 
+    if (delivery.event_key.startsWith("task.deadline_reminder_")) {
+      const deadline = await env.DB.prepare(
+        "SELECT due_at, status FROM tasks WHERE id = ?",
+      ).bind(delivery.entity_id).first<{ due_at: string | null; status: string }>()
+      if (
+        !deadline || deadline.status === "done" || !deadline.due_at ||
+        !delivery.dedupe_key.endsWith(":" + deadline.due_at)
+      ) return false
+    }
+    if (delivery.event_key === "task.deadline_overdue_daily") {
+      const deadline = await env.DB.prepare(
+        "SELECT due_at, status FROM tasks WHERE id = ?",
+      ).bind(delivery.entity_id).first<{ due_at: string | null; status: string }>()
+      if (!deadline || deadline.status === "done" || !deadline.due_at || Date.parse(deadline.due_at) > Date.now()) return false
+    }
+
     const access = await env.DB.prepare(
-      "SELECT 1 FROM tasks t " +
+      "SELECT 1 FROM tasks t "
       "LEFT JOIN task_assignees ta ON ta.task_id = t.id " +
       "LEFT JOIN task_roles tr ON tr.task_id = t.id " +
       "LEFT JOIN user_roles ur ON ur.role_id = tr.role_id AND ur.user_id = ? " +
@@ -849,6 +885,7 @@ async function canAccessNotificationTarget(
       if (
         survey.status !== "published" ||
         !survey.deadline_at ||
+        !delivery.dedupe_key.endsWith(":" + survey.deadline_at) ||
         Date.parse(survey.deadline_at) <= Date.now()
       ) {
         return false
@@ -999,7 +1036,7 @@ export async function processDueNotificationPushDeliveries(env: Env): Promise<vo
   const result = await env.DB.prepare(
     "SELECT d.id AS delivery_id, d.notification_id, d.subscription_id, " +
     "d.attempt_count, s.endpoint, s.p256dh, s.auth, n.title, n.body, n.target_url, " +
-    "n.recipient_user_id, n.category, n.event_key, n.required_permission, n.entity_type, n.entity_id " +
+    "n.recipient_user_id, n.category, n.event_key, n.dedupe_key, n.required_permission, n.entity_type, n.entity_id " +
     "FROM notification_push_deliveries d " +
     "INNER JOIN notifications n ON n.id = d.notification_id " +
     "INNER JOIN push_subscriptions s ON s.id = d.subscription_id AND s.user_id = n.recipient_user_id " +
