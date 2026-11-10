@@ -203,58 +203,6 @@ export async function saveNotificationCache(
 }
 
 
-export async function updateNotificationCacheReadState(
-  accountId: string,
-  notificationId: string,
-  isRead: boolean,
-  unreadCount: number,
-): Promise<void> {
-  if (!accountId) return
-  const database = await openDatabase()
-  await new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(STORE_NAME, "readwrite")
-    const store = transaction.objectStore(STORE_NAME)
-    const request = store.get(accountId)
-    request.onsuccess = () => {
-      const record = request.result as NotificationCacheRecord | undefined
-      if (!record || record.accountId !== accountId) return
-      record.notifications = record.notifications.map(item =>
-        item.id === notificationId ? { ...item, is_read: isRead ? 1 : 0 } : item,
-      )
-      record.unreadCount = Math.max(0, Math.floor(unreadCount))
-      store.put(record)
-    }
-    request.onerror = () => reject(request.error ?? new Error("Cache read-state update failed"))
-    transaction.oncomplete = () => resolve()
-    transaction.onerror = () => reject(transaction.error ?? new Error("Cache read-state update failed"))
-    transaction.onabort = () => reject(transaction.error ?? new Error("Cache read-state update aborted"))
-  })
-}
-
-export async function markNotificationCacheAllRead(
-  accountId: string,
-  unreadCount: number,
-): Promise<void> {
-  if (!accountId) return
-  const database = await openDatabase()
-  await new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(STORE_NAME, "readwrite")
-    const store = transaction.objectStore(STORE_NAME)
-    const request = store.get(accountId)
-    request.onsuccess = () => {
-      const record = request.result as NotificationCacheRecord | undefined
-      if (!record || record.accountId !== accountId) return
-      record.notifications = record.notifications.map(item => ({ ...item, is_read: 1 }))
-      record.unreadCount = Math.max(0, Math.floor(unreadCount))
-      store.put(record)
-    }
-    request.onerror = () => reject(request.error ?? new Error("Cache mark-all-read failed"))
-    transaction.oncomplete = () => resolve()
-    transaction.onerror = () => reject(transaction.error ?? new Error("Cache mark-all-read failed"))
-    transaction.onabort = () => reject(transaction.error ?? new Error("Cache mark-all-read aborted"))
-  })
-}
-
 export async function validateNotificationCacheClock(
   accountId: string,
   serverTime: string | undefined,
