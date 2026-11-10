@@ -786,7 +786,7 @@ async function canAccessNotificationTarget(
     if (links.has_submission) {
       linkedAccessChecks.push(hasPermission(env, delivery.recipient_user_id, "submissions.view"))
     }
-    if (linkedAccessChecks.length > 0 && !(await Promise.all(linkedAccessChecks)).some(Boolean)) {
+    if (linkedAccessChecks.length === 0 || !(await Promise.all(linkedAccessChecks)).some(Boolean)) {
       return false
     }
   }
