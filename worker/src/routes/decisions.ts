@@ -1,4 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { createNotificationsForUsers } from "../lib/notifications"
 
 interface Decision {
   id: string
@@ -292,6 +293,30 @@ export async function handleDecisions(
     ]
 
     await env.DB.batch(statements)
+
+    try {
+      const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+      const eligible = await Promise.all(users.results.map(async user => ({
+        id: user.id,
+        allowed: user.id !== userId && await hasPermission(env, user.id, "decisions.view"),
+      })))
+      await createNotificationsForUsers(env, {
+        recipientUserIds: eligible.filter(user => user.allowed).map(user => user.id),
+        eventKey: "decisions.created",
+        category: "decisions",
+        title: "新しい意思決定が登録されました",
+        body: newDecision.title,
+        targetUrl: "/decisions/" + newDecision.id,
+        requiredPermission: "decisions.view",
+        actorUserId: userId,
+        entityType: "decision",
+        entityId: newDecision.id,
+        dedupeKey: "decisions.created:" + newDecision.id,
+      })
+    } catch (notificationError) {
+      console.error("Failed to create decision notifications:", notificationError)
+    }
+
     return Response.json({
       decision: await getDecision(env, newDecision.id),
       ...(await getLinks(env, newDecision.id)),
