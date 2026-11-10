@@ -152,6 +152,7 @@ export async function saveNotificationCache(
   }>,
   unreadCount: number,
   serverTime?: string | null,
+  preserveValidity = false,
 ): Promise<void> {
   if (!accountId) return
 
@@ -187,18 +188,38 @@ export async function saveNotificationCache(
 
     await new Promise<void>((resolve, reject) => {
       const transaction = database.transaction(STORE_NAME, "readwrite")
-      const savedAt = Date.now()
-      const serverTimeAtSave = serverTime ? Date.parse(serverTime) : Number.NaN
-      transaction.objectStore(STORE_NAME).put({
-        accountId,
-        version: CACHE_VERSION,
-        savedAt,
-        clientTimeAtSave: savedAt,
-        serverTimeAtSave: Number.isFinite(serverTimeAtSave) ? serverTimeAtSave : null,
-        clockOffsetMs: Number.isFinite(serverTimeAtSave) ? serverTimeAtSave - savedAt : null,
-        unreadCount: Math.max(0, Math.floor(unreadCount)),
-        notifications: cachedNotifications,
-      } satisfies NotificationCacheRecord)
+      const store = transaction.objectStore(STORE_NAME)
+      const writeRecord = (existing?: NotificationCacheRecord) => {
+        const savedAt = preserveValidity && existing && Number.isFinite(existing.savedAt)
+          ? existing.savedAt
+          : Date.now()
+        const serverTimeAtSave = preserveValidity && existing
+          ? existing.serverTimeAtSave ?? null
+          : serverTime ? Date.parse(serverTime) : Number.NaN
+        const clientTimeAtSave = preserveValidity && existing && Number.isFinite(existing.clientTimeAtSave)
+          ? existing.clientTimeAtSave as number
+          : savedAt
+        store.put({
+          accountId,
+          version: CACHE_VERSION,
+          savedAt,
+          clientTimeAtSave,
+          serverTimeAtSave: typeof serverTimeAtSave === "number" && Number.isFinite(serverTimeAtSave)
+            ? serverTimeAtSave
+            : null,
+          clockOffsetMs: typeof serverTimeAtSave === "number" && Number.isFinite(serverTimeAtSave)
+            ? serverTimeAtSave - clientTimeAtSave
+            : null,
+          unreadCount: Math.max(0, Math.floor(unreadCount)),
+          notifications: cachedNotifications,
+        } satisfies NotificationCacheRecord)
+      }
+      if (preserveValidity) {
+        const request = store.get(accountId)
+        request.onsuccess = () => writeRecord(request.result as NotificationCacheRecord | undefined)
+      } else {
+        writeRecord()
+      }
       transaction.oncomplete = () => resolve()
       transaction.onerror = () => reject(transaction.error ?? new Error("Cache write failed"))
       transaction.onabort = () => reject(transaction.error ?? new Error("Cache write aborted"))
