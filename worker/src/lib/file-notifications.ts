@@ -44,7 +44,7 @@ export async function notifyFileLinked(
     category: "files",
     title: "新しいファイルがアップロードされました",
     body: file.original_name,
-    targetUrl: "/files",
+    targetUrl: "/files?open=" + encodeURIComponent(fileId),
     actorUserId,
     entityType: "file",
     entityId: fileId,
