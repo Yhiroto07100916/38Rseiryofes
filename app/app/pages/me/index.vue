@@ -553,6 +553,48 @@
         <v-card
           rounded="xl"
           elevation="1"
+          class="mb-4"
+        >
+          <v-card-title class="px-5 pt-5">
+            <v-icon icon="mdi-tune-variant" class="mr-2" />
+            通知の受信設定
+          </v-card-title>
+          <v-card-text class="px-5 pb-5">
+            <v-progress-linear v-if="notificationSettingsLoading" indeterminate class="mb-3" />
+            <v-switch
+              v-model="globalPushEnabled"
+              color="primary"
+              inset
+              hide-details
+              :loading="notificationSettingsSaving"
+              label="すべてのプッシュ通知を受け取る"
+              @update:model-value="saveGlobalPushEnabled"
+            />
+            <div class="text-caption text-medium-emphasis mt-1 mb-4">
+              OFFにすると、カテゴリ別設定に関係なくプッシュ通知を停止します。アプリ内通知は引き続き届きます。
+            </div>
+            <v-divider class="mb-3" />
+            <div class="text-subtitle-2 font-weight-bold mb-2">カテゴリ別の通知</div>
+            <div
+              v-for="category in notificationCategoryOptions"
+              :key="category.value"
+              class="d-flex align-center justify-space-between py-1"
+            >
+              <span class="text-body-2">{{ category.title }}</span>
+              <v-switch
+                :model-value="notificationCategorySettings[category.value] !== false"
+                color="primary"
+                density="compact"
+                hide-details
+                :disabled="notificationSettingsLoading || notificationSettingsSaving"
+                @update:model-value="value => saveCategoryPushEnabled(category.value, value)"
+              />
+            </div>
+          </v-card-text>
+        </v-card>
+        <v-card
+          rounded="xl"
+          elevation="1"
         >
           <v-card-title class="px-5 pt-5">
             <v-icon
