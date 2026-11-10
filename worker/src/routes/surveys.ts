@@ -250,7 +250,7 @@ export async function processDueSurveyNotifications(env: Env): Promise<void> {
       await notifySurveyRecipients(
         env,
         survey,
-        undefined,
+        survey.created_by,
         "surveys.opened",
         survey.starts_at ?? "scheduled-open",
       )
