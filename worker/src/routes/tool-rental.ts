@@ -1,4 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { notifyUsers } from "./presence-notifications"
 
 type ToolItemRow = {
   id: number
@@ -247,16 +248,16 @@ export async function handleToolRental(
       const loan = await env.DB.prepare(`
         INSERT INTO loans (
           borrower_id, tool_id, quantity, borrowed_at, status,
-          tool_name_snapshot, time_limit_minutes, due_at
+          tool_name_snapshot, time_limit_minutes, due_at, checkout_user_id
         )
         VALUES (
           ?, ?, 1, datetime('now', '+9 hours'), 'borrowed',
           ?, ?, CASE WHEN ? IS NULL THEN NULL
-            ELSE datetime('now', '+9 hours', '+' || (? - 5) || ' minutes') END
+            ELSE datetime('now', '+9 hours', '+' || (? - 5) || ' minutes') END, ?
         )
       `).bind(
         borrowerId, item.tool_id, item.tool_name,
-        timeLimitMinutes, timeLimitMinutes, timeLimitMinutes,
+        timeLimitMinutes, timeLimitMinutes, timeLimitMinutes, auth.user.id,
       ).run()
       const loanId = Number(loan.meta.last_row_id)
       const update = await env.DB.prepare(`
@@ -277,6 +278,15 @@ export async function handleToolRental(
         throw error
       }
       await refreshToolCounts(env.DB, item.tool_id)
+      await notifyUsers(env, {
+        eventKey: `tool-loan:${loanId}:checked-out`,
+        eventType: "tool_loan_checked_out",
+        title: "工具の貸出が完了しました",
+        body: `${item.tool_name}（${item.management_number}）の貸出を記録しました。`,
+        targetUrl: "/tool-rental/loans/current",
+        userIds: [auth.user.id],
+        insideOnly: true,
+      })
       return json({ success: true, loan_id: loanId }, 201)
     }
 
@@ -347,6 +357,29 @@ export async function handleToolRental(
         WHERE id = ?
       `).bind(returnerId, remaining?.count ?? 0, remaining?.count ?? 0, loanItem.loan_id).run()
       await refreshToolCounts(env.DB, loanItem.tool_id)
+      const borrower = await env.DB.prepare(`
+        SELECT b.name FROM borrowers b
+        INNER JOIN loans l ON l.borrower_id = b.id
+        WHERE l.id = ?
+      `).bind(loanItem.loan_id).first<{ name: string }>()
+      if (borrower?.name) {
+        const matchingUsers = await env.DB.prepare(`
+          SELECT id FROM users
+          WHERE name = ? OR nickname = ?
+          LIMIT 2
+        `).bind(borrower.name, borrower.name).all<{ id: string }>()
+        if (matchingUsers.results.length === 1) {
+          await notifyUsers(env, {
+            eventKey: `tool-loan-item:${loanItem.id}:returned`,
+            eventType: "tool_loan_returned",
+            title: "工具の返却が確認されました",
+            body: `${borrower.name}さんが借りた工具の返却が記録されました。`,
+            targetUrl: "/tool-rental/loans/history",
+            userIds: [matchingUsers.results[0].id],
+            insideOnly: true,
+          })
+        }
+      }
       return json({ success: true })
     }
 
