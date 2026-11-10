@@ -43,7 +43,8 @@
         aria-label="リンクを削除"
         @click="removeLink(index)"
       />
-    </div>
+      </div>
+    </template>
 
     <div v-if="helpText" class="text-caption text-medium-emphasis">
       {{ helpText }}
