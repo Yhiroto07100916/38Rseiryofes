@@ -2,6 +2,7 @@ declare const __D1_MIGRATIONS__: string
 
 import { applyD1Migrations, env, SELF } from "cloudflare:test"
 import { afterEach, beforeAll, describe, expect, it } from "vitest"
+import { hashPassword } from "../src/lib/password"
 
 const userIds: string[] = []
 const sessionIds: string[] = []
@@ -331,22 +332,51 @@ describe("site settings authorization", () => {
     expect(restoreResponse.status).toBe(200)
   })
 
-  it("rejects new login sessions when login is disabled in site settings", async () => {
+  it("blocks regular logins but keeps administrator recovery available", async () => {
     await env.DB.prepare(
       "UPDATE site_settings SET value = 'false' WHERE key = 'login_enabled'",
     ).run()
 
     try {
-      const response = await SELF.fetch("http://example.com/api/auth/login", {
+      const regularUserId = await createUser("通常ユーザー")
+      await env.DB.prepare(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+      ).bind(await hashPassword("test-password"), regularUserId).run()
+
+      const regularLogin = await SELF.fetch("http://example.com/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          student_number: `role-test-${regularUserId}`,
+          password: "test-password",
+        }),
       })
+      expect(regularLogin.status).toBe(403)
 
-      expect(response.status).toBe(403)
-      expect(await response.json()).toEqual({
-        error: "Login is currently disabled",
+      const adminCookie = await createAdminSession()
+      const adminSessionId = adminCookie.slice("session_id=".length)
+      const adminSession = await env.DB.prepare(
+        "SELECT user_id FROM sessions WHERE id = ?",
+      ).bind(adminSessionId).first<{ user_id: string }>()
+      if (!adminSession) throw new Error("Admin test session was not found")
+
+      await env.DB.prepare(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+      ).bind(await hashPassword("admin-password"), adminSession.user_id).run()
+
+      const adminUser = await env.DB.prepare(
+        "SELECT student_number FROM users WHERE id = ?",
+      ).bind(adminSession.user_id).first<{ student_number: string }>()
+
+      const adminLogin = await SELF.fetch("http://example.com/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          student_number: adminUser?.student_number,
+          password: "admin-password",
+        }),
       })
+      expect(adminLogin.status).toBe(200)
     } finally {
       await env.DB.prepare(
         "UPDATE site_settings SET value = 'true' WHERE key = 'login_enabled'",
