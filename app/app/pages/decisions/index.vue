@@ -375,7 +375,7 @@
 </template>
 
 <script setup lang="ts">
-import { formatJstDateTimeLocal, jstDateTimeLocalToIso } from '~/utils/jst'
+import { formatJstDateTimeLocal, jstDateTimeLocalToIso , getDefaultTimeZone} from '~/utils/jst'
 import { onMounted, ref } from 'vue'
 import { useApi } from '~/composables/useApi'
 import { useSnackbar } from '~/composables/useSnackbar'
@@ -487,7 +487,7 @@ function formatDate(value: string | null): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: getDefaultTimeZone(),
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -499,7 +499,7 @@ function formatDateTime(value: string | null): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: getDefaultTimeZone(),
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
