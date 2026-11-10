@@ -223,25 +223,13 @@ async function loadSettings() {
 
     if (isImportantSettingsAdmin.value) {
       try {
-        const [userResponse, roleResponse] = await Promise.all([
-          api.apiFetch<{ users: UserOption[] }>('/api/users'),
-          api.apiFetch<{ account_roles: Array<{ id: string; name: string }> }>('/api/account-roles'),
-        ])
-        const adminRole = roleResponse.account_roles.find((role) => role.name === 'admin')
-        if (adminRole) {
-          const memberResponse = await api.apiFetch<{
-            users: Array<UserOption & { assigned: number }>
-          }>(`/api/account-roles/${adminRole.id}/members`)
-          const adminIds = new Set(
-            memberResponse.users
-              .filter((user) => user.assigned === 1)
-              .map((user) => user.id),
-          )
-          users.value = userResponse.users.filter((user) => adminIds.has(user.id))
-        }
+        const candidateResponse = await api.apiFetch<{ users: UserOption[] }>(
+          '/api/admin/settings/roles/candidates',
+        )
+        users.value = candidateResponse.users
       } catch (error) {
         console.error(error)
-        snackbar.error('管理者一覧を取得できませんでした。')
+        snackbar.error('重要設定管理者の候補一覧を取得できませんでした。')
       }
     }
   } catch (error) {
