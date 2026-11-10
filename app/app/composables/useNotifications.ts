@@ -72,6 +72,7 @@ export const useNotifications = () => {
   let successHandle: ReturnType<typeof setTimeout> | undefined
   let unreadSuccessHandle: ReturnType<typeof setTimeout> | undefined
   let requestInProgress = false
+  let pendingLatestPoll = false
   let unreadRequestInProgress = false
   let unreadAbortController: AbortController | undefined
   let pendingUnreadRefresh = false
@@ -518,7 +519,11 @@ export const useNotifications = () => {
       loadingMore.value = false
       if (pendingResetFetch) {
         pendingResetFetch = false
+        pendingLatestPoll = false
         void fetchPage(true)
+      } else if (pendingLatestPoll && listActive) {
+        pendingLatestPoll = false
+        void pollLatest()
       }
     }
   }
@@ -791,7 +796,11 @@ export const useNotifications = () => {
   }
 
   const pollLatest = async () => {
-    if (requestInProgress) return
+    if (!listActive) return
+    if (requestInProgress) {
+      pendingLatestPoll = true
+      return
+    }
     const requestAccountId = auth.user?.id ?? null
     const requestStartedAt = Date.now()
     requestInProgress = true
@@ -900,7 +909,11 @@ export const useNotifications = () => {
       requestInProgress = false
       if (pendingResetFetch) {
         pendingResetFetch = false
+        pendingLatestPoll = false
         void fetchPage(true)
+      } else if (pendingLatestPoll && listActive) {
+        pendingLatestPoll = false
+        void pollLatest()
       }
     }
   }
@@ -909,13 +922,14 @@ export const useNotifications = () => {
     stopPolling()
     listActive = true
     pollHandle = setInterval(() => {
-      if (listFailures === 0 && !listRetryHandle) void pollLatest()
+      if (!manualRetryActive && listFailures === 0 && !listRetryHandle) void pollLatest()
       if (unreadFailures === 0 && !unreadRetryHandle) void refreshUnreadCount()
     }, 10_000)
   }
 
   const stopPolling = () => {
     listActive = false
+    pendingLatestPoll = false
     if (pollHandle) clearInterval(pollHandle)
     pollHandle = undefined
     clearListRetry()
@@ -989,6 +1003,7 @@ export const useNotifications = () => {
       readStateWriteCompletedAt.clear()
       manualRefreshRequested = false
       pendingResetFetch = false
+      pendingLatestPoll = false
       pendingUnreadRefresh = Boolean(accountId && unreadRequestInProgress)
       clearListRetry()
       clearUnreadRetry()
