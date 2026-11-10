@@ -143,6 +143,14 @@ async function handleSiteSettings(
 
   const admin = await requireAdmin(request, env)
   if (admin instanceof Response) return admin
+  const importantRole = await env.DB.prepare(`
+    SELECT 1
+    FROM user_account_roles uar
+    INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+    WHERE uar.user_id = ? AND ar.name = ?
+    LIMIT 1
+  `).bind(admin.userId, IMPORTANT_SETTINGS_ROLE).first()
+  const isImportantSettingsAdmin = Boolean(importantRole)
 
   if (subPath.length === 1 && subPath[0] === "logs" && request.method === "GET") {
     const result = await env.DB.prepare(`
@@ -175,7 +183,7 @@ async function handleSiteSettings(
 
     const settings: Record<string, unknown> = {}
     for (const row of result.results) {
-      if (SETTING_RULES[row.key]?.critical) continue
+      if (SETTING_RULES[row.key]?.critical && !isImportantSettingsAdmin) continue
       try { settings[row.key] = JSON.parse(row.value) } catch { settings[row.key] = null }
     }
     return Response.json({ settings })
@@ -201,7 +209,7 @@ async function handleSiteSettings(
     for (const [key, value] of entries) {
       const rule = SETTING_RULES[key]
       if (!rule) return Response.json({ error: `Unknown setting: ${key}` }, { status: 400 })
-      if (rule.critical) {
+      if (rule.critical && !isImportantSettingsAdmin) {
         return Response.json({ error: `Setting requires important settings administrator: ${key}` }, { status: 403 })
       }
       if (
