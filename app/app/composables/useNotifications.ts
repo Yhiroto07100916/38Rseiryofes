@@ -79,12 +79,13 @@ export const useNotifications = () => {
   let unreadFailures = 0
   let hasSuccessfulApiFetch = false
   const cacheUpdatePromises = new Map<string, Promise<void>>()
+  const cacheDeletionRequests = new Set<string>()
   let cachedClockOffsetMs: number | null = null
   let cacheSnapshot: AppNotification[] = []
   let listActive = true
 
   const saveCacheSnapshot = async (accountId: string | null, serverTime?: string) => {
-    if (!accountId || auth.user?.id !== accountId || cacheSnapshot.length === 0) return
+    if (!accountId || cacheDeletionRequests.has(accountId) || auth.user?.id !== accountId || cacheSnapshot.length === 0) return
     const effectiveServerTime = serverTime ?? (
       cachedClockOffsetMs !== null
         ? new Date(Date.now() + cachedClockOffsetMs).toISOString()
@@ -668,6 +669,15 @@ export const useNotifications = () => {
     () => auth.user?.id,
     (accountId, previousAccountId) => {
       if (accountId === previousAccountId) return
+      if (previousAccountId) {
+        // ログアウト開始時点で削除対象にし、取得済みのキャッシュ保存だけを完了させてから削除する。
+        cacheDeletionRequests.add(previousAccountId)
+        const pendingCacheUpdate = cacheUpdatePromises.get(previousAccountId)
+        void (async () => {
+          if (pendingCacheUpdate) await pendingCacheUpdate
+          await deleteNotificationCache(previousAccountId)
+        })().catch(() => undefined)
+      }
       unreadAbortController?.abort()
       unreadAbortController = undefined
 
