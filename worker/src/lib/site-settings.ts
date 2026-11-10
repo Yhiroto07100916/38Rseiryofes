@@ -35,10 +35,7 @@ export async function isFeaturePermissionEnabled(
   env: Pick<Env, "DB">,
   permissionKey: string,
 ): Promise<boolean> {
-  const [rawFeature, rawOperations] = await Promise.all([
-    getSiteSetting<FeatureSettings>(env, "feature_settings", {}),
-    getSiteSetting<{ upload_max_file_size_mb?: number }>(env, "operation_settings", {}),
-  ])
+  const rawFeature = await getSiteSetting<FeatureSettings>(env, "feature_settings", {})
   const parts = permissionKey.split(".")
   const rawCategory = parts[0] ?? ""
   const category = PERMISSION_FEATURE_ALIASES[rawCategory] ?? rawCategory
