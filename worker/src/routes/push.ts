@@ -689,9 +689,15 @@ export async function canAccessNotificationTarget(
     // 削除通知は対象イベント自体が存在しないことが正しい状態。
     if (delivery.event_key !== "calendar.deleted") {
       const event = await env.DB.prepare(
-        "SELECT starts_at FROM calendar_events WHERE id = ?",
-      ).bind(delivery.entity_id).first<{ starts_at: string }>()
+        "SELECT starts_at, is_all_day FROM calendar_events WHERE id = ?",
+      ).bind(delivery.entity_id).first<{ starts_at: string; is_all_day: number }>()
       if (!event) return false
+      if (
+        delivery.event_key.startsWith("calendar.reminder_") && event.is_all_day === 1
+      ) return false
+      if (
+        delivery.event_key.startsWith("calendar.all_day_reminder_") && event.is_all_day !== 1
+      ) return false
       if (delivery.event_key.startsWith("calendar.attendance_reminder_")) {
         const response = await env.DB.prepare(
           "SELECT 1 FROM calendar_event_attendance WHERE event_id = ? AND user_id = ? " +
