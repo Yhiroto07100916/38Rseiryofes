@@ -668,7 +668,10 @@ export const useNotifications = () => {
       }
       unreadCount.value = response.unread_count
       void saveCacheSnapshot(requestAccountId)
-      return response.updated_count
+      return {
+        updatedCount: response.updated_count,
+        unreadCount: response.unread_count,
+      }
     } catch {
       if (auth.user?.id !== requestAccountId) return null
       error.value = "既読状態を保存できませんでした。"
