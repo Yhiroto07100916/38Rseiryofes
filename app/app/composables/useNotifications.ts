@@ -270,14 +270,13 @@ export const useNotifications = () => {
         ...latest.notifications,
         ...all.filter(item => !latestIds.has(item.id)),
       ]
-      unread = latest.unread_count
       await validateNotificationCacheClock(accountId, latest.server_time)
 
       // 取得済みデータは元アカウントの領域にだけ保存する。
       // アカウント切替後に共有UI用スナップショットを書き換えない。
       const snapshot = merged.slice(0, 100)
       if (auth.user?.id === accountId) cacheSnapshot = snapshot
-      await saveNotificationCache(accountId, snapshot, unread, latest.server_time)
+      await saveNotificationCache(accountId, snapshot, unreadCount.value, latest.server_time)
     })().catch(() => {
       // 不完全な取得結果では既存キャッシュを置き換えない。
     }).finally(() => {
@@ -363,7 +362,6 @@ export const useNotifications = () => {
         ...incoming.filter(item => !existing.has(item.id)),
       ]
     }
-    unreadCount.value = response.unread_count
     cursor.value = response.next_cursor
     hasMore.value = response.next_cursor !== null
   }
@@ -628,7 +626,6 @@ export const useNotifications = () => {
         ...merged,
         ...updatedExisting.filter(item => !incomingIds.has(item.id)),
       ]
-      unreadCount.value = response.unread_count
       const cachedById = new Map(cacheSnapshot.map(item => [item.id, item]))
       for (const item of response.known_notifications ?? []) {
         const cachedItem = cachedById.get(item.id)
