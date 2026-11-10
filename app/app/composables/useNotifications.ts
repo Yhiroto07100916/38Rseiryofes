@@ -667,7 +667,8 @@ export const useNotifications = () => {
           .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.id.localeCompare(a.id))
           .slice(0, 100)
         void saveCacheSnapshot(requestAccountId, response.server_time)
-      } else if (partialCacheUpdates.has(requestAccountId)) {
+      }
+      if (partialCacheUpdates.has(requestAccountId)) {
         void refreshFullCache(requestAccountId)
       }
       listFailures = 0
