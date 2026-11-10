@@ -153,11 +153,11 @@
           density="compact"
           hide-details
           :disabled="uploading"
-          label="アップロードを通知する"
+          label="関連機能に添付した際に通知する"
           class="mt-2"
         />
         <div class="text-caption text-medium-emphasis">
-          ONにすると、書類を閲覧できるユーザーへ通知します。初期設定はOFFです。
+          ONにすると、タスク・提出物・意思決定・会計などの関連機能に添付した際、その機能を閲覧できるユーザーへ通知します。関連付けがない間は通知されません。初期設定はOFFです。
         </div>
       </v-card-text>
     </v-card>
