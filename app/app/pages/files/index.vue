@@ -174,7 +174,11 @@
 
       <v-list v-if="files.length" class="file-list pa-0">
         <template v-for="(file, index) in files" :key="file.id">
-          <v-list-item class="file-list-item">
+          <v-list-item
+            :id="`file-item-${file.id}`"
+            class="file-list-item"
+            :class="{ 'file-list-item-highlight': highlightedFileId === file.id }"
+          >
             <div class="file-entry">
               <div class="file-info">
                 <v-avatar
@@ -472,6 +476,7 @@
 </template>
 
 <script setup lang="ts">
+import { nextTick } from "vue"
 definePageMeta({
   middleware: ['auth'],
 })
@@ -501,6 +506,8 @@ interface ManagedFile {
 }
 
 const { apiFetch } = useApi()
+const route = useRoute()
+const highlightedFileId = ref(typeof route.query.open === "string" ? route.query.open : "")
 const { confirm } = useConfirmDialog()
 const config = useRuntimeConfig()
 const auth = useAuthStore()
@@ -1005,6 +1012,11 @@ onMounted(async () => {
   }
 
   await loadFiles()
+  if (highlightedFileId.value) {
+    await nextTick()
+    document.getElementById(`file-item-${highlightedFileId.value}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" })
+  }
 })
 </script>\n
 <style scoped>
@@ -1089,5 +1101,13 @@ onMounted(async () => {
     flex: 1 1 44px;
     max-width: 64px;
   }
+}
+</style>
+
+<style scoped>
+.file-list-item-highlight {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: -2px;
+  border-radius: 12px;
 }
 </style>
