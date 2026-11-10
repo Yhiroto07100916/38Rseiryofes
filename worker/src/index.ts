@@ -9,6 +9,7 @@ import { handleCalendar } from "./routes/calendar"
 import { handleCalendarCategories } from "./routes/calendar-categories"
 import { handleNews } from "./routes/news"
 import { handlePush, processDuePushDeliveries } from "./routes/push"
+import { handleNotifications } from "./routes/notifications"
 import { handleScripts } from "./routes/scripts"
 import { handleEquipment } from "./routes/equipment"
 import { handleToolRental } from "./routes/tool-rental"
@@ -307,6 +308,27 @@ export default {
             { error: "Internal Server Error" },
             { status: 500 },
           ),
+        )
+      }
+    }
+
+    if (
+      url.pathname === "/api/notifications" ||
+      url.pathname.startsWith("/api/notifications/")
+    ) {
+      const path = url.pathname.slice("/api/notifications".length)
+      const pathParts = path.split("/").filter(Boolean)
+
+      try {
+        return withCors(
+          request,
+          await handleNotifications(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("Notifications API error:", error)
+        return withCors(
+          request,
+          Response.json({ error: "Internal Server Error" }, { status: 500 }),
         )
       }
     }
