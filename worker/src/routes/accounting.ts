@@ -1040,7 +1040,7 @@ export async function handleAccounting(
                 category: "accounting",
                 title: "新しい返金申請があります",
                 body: "返金申請：" + totalAmount.toLocaleString("ja-JP") + "円",
-                targetUrl: "/accounting/reimbursements",
+                targetUrl: "/accounting?tab=reimbursements",
                 requiredPermission: "accounting.approve",
                 actorUserId: createdBy,
                 entityType: "reimbursement",
@@ -2123,7 +2123,7 @@ export async function handleAccounting(
                 ? "返金申請が支払済みになりました"
                 : "返金申請が取り消されました",
               body: "返金申請の状態：" + (status === "paid" ? "支払済み" : "取消"),
-              targetUrl: "/accounting/reimbursements",
+              targetUrl: "/accounting?tab=reimbursements",
               actorUserId: user instanceof Response ? null : user.user.id,
               entityType: "reimbursement",
               entityId: reimbursementId,
