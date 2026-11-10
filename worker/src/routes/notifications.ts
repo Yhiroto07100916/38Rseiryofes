@@ -28,6 +28,7 @@ type NotificationRow = {
   entity_type: string | null
   entity_id: string | null
   is_read: number
+  read_updated_at: string
   created_at: string
   expires_at: string
 }
@@ -120,7 +121,8 @@ export async function handleNotifications(
     }
 
     const rows = await env.DB.prepare(
-      "SELECT id, event_key, category, title, body, target_url, actor_user_id, entity_type, entity_id, is_read, created_at, expires_at " +
+      "SELECT id, event_key, category, title, body, target_url, actor_user_id, entity_type, entity_id, is_read, " +
+      "COALESCE(read_updated_at, created_at) AS read_updated_at, created_at, expires_at " +
       "FROM notifications WHERE " + conditions.join(" AND ") +
       " ORDER BY created_at DESC, id DESC LIMIT ?",
     ).bind(...bindings, limit + 1).all<NotificationRow>()
@@ -133,7 +135,8 @@ export async function handleNotifications(
     ).bind(userId).first<{ count: number }>()
     const knownNotifications = knownIds.length > 0
       ? await env.DB.prepare(
-          "SELECT id, is_read FROM notifications WHERE recipient_user_id = ? AND id IN (" +
+          "SELECT id, is_read, COALESCE(read_updated_at, created_at) AS read_updated_at " +
+          "FROM notifications WHERE recipient_user_id = ? AND id IN (" +
           knownIds.map(() => "?").join(", ") + ")",
         ).bind(userId, ...knownIds).all<{ id: string; is_read: number }>()
       : { results: [] as { id: string; is_read: number }[] }
@@ -157,14 +160,26 @@ export async function handleNotifications(
     return Response.json({ unread_count: result?.count ?? 0, server_time: new Date().toISOString() })
   }
 
+  if (pathParts.length === 1 && method === "GET") {
+    await purgeExpiredNotifications(env, userId)
+    const notification = await env.DB.prepare(
+      "SELECT id, event_key, category, title, body, target_url, actor_user_id, entity_type, entity_id, " +
+      "is_read, COALESCE(read_updated_at, created_at) AS read_updated_at, created_at, expires_at " +
+      "FROM notifications WHERE id = ? AND recipient_user_id = ?",
+    ).bind(pathParts[0], userId).first<NotificationRow>()
+    if (!notification) return jsonError("Notification not found", 404)
+    return Response.json({ notification })
+  }
+
   if (pathParts.length === 1 && pathParts[0] === "read-all" && method === "POST") {
     await purgeExpiredNotifications(env, userId)
 
     // 1つのUPDATEで処理し、実行中に新着通知が割り込む余地と部分更新をなくす。
     const result = await env.DB.prepare(
-      "UPDATE notifications SET is_read = 1 " +
-      "WHERE recipient_user_id = ? AND is_read = 0 RETURNING id",
-    ).bind(userId).all<{ id: string }>()
+      "UPDATE notifications SET is_read = 1, " +
+      "read_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') " +
+      "WHERE recipient_user_id = ? AND is_read = 0 RETURNING id, read_updated_at",
+    ).bind(userId).all<{ id: string; read_updated_at: string }>()
 
     return Response.json({
       updated_count: result.results.length,
@@ -256,14 +271,14 @@ export async function handleNotifications(
     }
 
     const result = await env.DB.prepare(
-      "UPDATE notifications SET is_read = ? WHERE id = ? AND recipient_user_id = ?",
-    ).bind(body.is_read ? 1 : 0, notificationId, userId).run()
+      "UPDATE notifications SET is_read = ?, " +
+      "read_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') " +
+      "WHERE id = ? AND recipient_user_id = ? RETURNING read_updated_at",
+    ).bind(body.is_read ? 1 : 0, notificationId, userId).first<{ read_updated_at: string }>()
 
-    if ((result.meta?.changes ?? 0) !== 1) {
-      return jsonError("Notification not found", 404)
-    }
+    if (!result) return jsonError("Notification not found", 404)
 
-    return Response.json({ success: true, is_read: body.is_read })
+    return Response.json({ success: true, is_read: body.is_read, read_updated_at: result.read_updated_at })
   }
 
   return jsonError("Not Found", 404)
