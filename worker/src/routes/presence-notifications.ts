@@ -161,11 +161,10 @@ export interface NotificationInput {
 }
 
 export async function notifyUsers(env: Env, input: NotificationInput): Promise<number> {
-  const inserted = await env.DB.prepare(`
+  await env.DB.prepare(`
     INSERT OR IGNORE INTO notification_events (id, event_key, event_type, title, body, target_url)
     VALUES (?, ?, ?, ?, ?, ?)
   `).bind(crypto.randomUUID(), input.eventKey, input.eventType, input.title.slice(0, 100), input.body.slice(0, 500), input.targetUrl).run();
-  if ((inserted.meta?.changes ?? 0) === 0) return 0;
   const event = await env.DB.prepare("SELECT id FROM notification_events WHERE event_key = ?")
     .bind(input.eventKey).first<{ id: string }>();
   if (!event) return 0;
@@ -185,16 +184,19 @@ export async function notifyUsers(env: Env, input: NotificationInput): Promise<n
     userIds = inside.results.map(row => row.user_id);
   }
   for (const userId of userIds) {
-    const userNotificationId = crypto.randomUUID();
     await env.DB.prepare(`
       INSERT OR IGNORE INTO user_notifications (id, notification_id, user_id)
       VALUES (?, ?, ?)
-    `).bind(userNotificationId, event.id, userId).run();
+    `).bind(crypto.randomUUID(), event.id, userId).run();
+    const userNotification = await env.DB.prepare(`
+      SELECT id FROM user_notifications WHERE notification_id = ? AND user_id = ?
+    `).bind(event.id, userId).first<{ id: string }>();
+    if (!userNotification) continue;
     await env.DB.prepare(`
       INSERT OR IGNORE INTO notification_push_deliveries
         (id, user_notification_id, subscription_id)
       SELECT ?, ?, id FROM push_subscriptions WHERE user_id = ?
-    `).bind(crypto.randomUUID(), userNotificationId, userId).run();
+    `).bind(crypto.randomUUID(), userNotification.id, userId).run();
   }
   return userIds.length;
 }
