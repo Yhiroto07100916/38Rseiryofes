@@ -42,12 +42,12 @@
             <div class="text-subtitle-1 font-weight-medium">関連リンク</div>
             <v-btn size="small" variant="tonal" prepend-icon="mdi-plus" @click="form.links.push({ title: '', url: '' })">リンクを追加</v-btn>
           </div>
-          <div v-for="link in form.links" :key="link.title + '|' + link.url" class="d-flex align-start ga-2 mb-2">
+          <div v-for="taskLink in form.links" :key="link.title + '|' + link.url" class="d-flex align-start ga-2 mb-2">
             <div class="flex-grow-1">
-              <v-text-field v-model="link.title" label="表示タイトル" placeholder="例：資料・参考ページ" variant="outlined" density="comfortable" hide-details class="mb-2" />
-              <v-text-field v-model="link.url" label="URL" placeholder="https://example.com" variant="outlined" density="comfortable" hide-details />
+              <v-text-field v-model="taskLink.title" label="表示タイトル" placeholder="例：資料・参考ページ" variant="outlined" density="comfortable" hide-details class="mb-2" />
+              <v-text-field v-model="taskLink.url" label="URL" placeholder="https://example.com" variant="outlined" density="comfortable" hide-details />
             </div>
-            <v-btn icon="mdi-close" variant="text" color="error" aria-label="リンクを削除" @click="removeFormLink(link)" />
+            <v-btn icon="mdi-close" variant="text" color="error" aria-label="リンクを削除" @click="removeFormLink(taskLink)" />
           </div>
           <div class="text-caption text-medium-emphasis">タイトルにURLを設定します。最大20件まで登録できます。</div>
         </div>
