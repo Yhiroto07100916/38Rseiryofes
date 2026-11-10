@@ -1,18 +1,48 @@
 <script setup lang="ts">
+import { onBeforeRouteLeave } from 'vue-router'
+
 definePageMeta({
   middleware: ['admin'],
 })
+
+interface FeatureConfig {
+  enabled: boolean
+  view: boolean
+  create: boolean
+  edit: boolean
+  delete: boolean
+}
 
 interface SiteSettings {
   site_name: string
   site_description: string
   event_name: string
   event_year: number
+  timezone: string
+  logo_url: string
+  favicon_url: string
   site_visibility?: 'public' | 'private'
   maintenance_mode?: boolean
   maintenance_message?: string
   login_enabled?: boolean
   require_login?: boolean
+  feature_settings: Record<string, FeatureConfig>
+  notification_settings: {
+    enabled: boolean
+    categories: Record<string, boolean>
+    return_due_all_users: true
+  }
+  operation_settings: {
+    calendar_default_view: 'month' | 'week' | 'day' | 'list'
+    task_default_status: 'todo' | 'in_progress' | 'done'
+    upload_max_file_size_mb: number
+  }
+  security_settings: {
+    session_duration_hours: number
+    login_attempt_limit: number
+    login_lock_minutes: number
+    force_password_change: boolean
+  }
 }
 
 interface UserOption {
@@ -33,12 +63,69 @@ interface SettingLog {
 }
 
 const api = useApi()
-const settings = reactive<SiteSettings>({
+const featureOptions = [
+  { key: 'tasks', title: 'タスク' },
+  { key: 'calendar', title: 'カレンダー' },
+  { key: 'news', title: 'お知らせ' },
+  { key: 'scripts', title: '台本' },
+  { key: 'accounting', title: '会計' },
+  { key: 'equipment', title: '備品・小道具' },
+  { key: 'attendance', title: '出欠' },
+  { key: 'surveys', title: 'アンケート' },
+  { key: 'files', title: 'ファイル' },
+]
+const notificationOptions = [
+  { key: 'news', title: 'お知らせ' },
+  { key: 'tasks', title: 'タスク' },
+  { key: 'calendar', title: 'カレンダー' },
+  { key: 'attendance', title: '出欠関連' },
+  { key: 'submissions', title: '提出期限' },
+  { key: 'tool_rental', title: '返却期限' },
+  { key: 'surveys', title: 'アンケート' },
+  { key: 'decisions', title: '意思決定' },
+  { key: 'equipment', title: '備品' },
+  { key: 'accounting', title: '会計' },
+  { key: 'files', title: 'ファイル' },
+]
+function defaultFeatureSettings(): Record<string, FeatureConfig> {
+  return Object.fromEntries(featureOptions.map(({ key }) => [key, {
+    enabled: true, view: true, create: true, edit: true, delete: true,
+  }]))
+}
+
+const defaultSettings = (): SiteSettings => ({
   site_name: '',
   site_description: '',
   event_name: '',
   event_year: new Date().getFullYear(),
+  timezone: 'Asia/Tokyo',
+  logo_url: '',
+  favicon_url: '',
+  site_visibility: 'public',
+  maintenance_mode: false,
+  maintenance_message: '現在メンテナンス中です。しばらくお待ちください。',
+  login_enabled: true,
+  require_login: true,
+  feature_settings: defaultFeatureSettings(),
+  notification_settings: {
+    enabled: true,
+    categories: Object.fromEntries(notificationOptions.map(({ key }) => [key, true])),
+    return_due_all_users: true,
+  },
+  operation_settings: {
+    calendar_default_view: 'month',
+    task_default_status: 'todo',
+    upload_max_file_size_mb: 25,
+  },
+  security_settings: {
+    session_duration_hours: 168,
+    login_attempt_limit: 5,
+    login_lock_minutes: 15,
+    force_password_change: false,
+  },
 })
+const settings = reactive<SiteSettings>(defaultSettings())
+const initialSnapshot = ref('')
 const importantAdmins = ref<UserOption[]>([])
 const users = ref<UserOption[]>([])
 const settingLogs = ref<SettingLog[]>([])
@@ -49,6 +136,7 @@ const assigning = ref(false)
 const isImportantSettingsAdmin = ref(false)
 const snackbar = useSnackbar()
 
+const hasUnsavedChanges = computed(() => initialSnapshot.value !== JSON.stringify(settings))
 const availableUsers = computed(() => {
   const assigned = new Set(importantAdmins.value.map((user) => user.id))
   return users.value.filter((user) => !assigned.has(user.id))
@@ -67,6 +155,28 @@ async function loadSettings() {
       '/api/account-roles/settings',
     )
     Object.assign(settings, response.settings)
+    settings.feature_settings = {
+      ...defaultFeatureSettings(),
+      ...(response.settings.feature_settings ?? {}),
+    }
+    settings.notification_settings = {
+      ...defaultSettings().notification_settings,
+      ...(response.settings.notification_settings ?? {}),
+      categories: {
+        ...defaultSettings().notification_settings.categories,
+        ...(response.settings.notification_settings?.categories ?? {}),
+      },
+      return_due_all_users: true,
+    }
+    settings.operation_settings = {
+      ...defaultSettings().operation_settings,
+      ...(response.settings.operation_settings ?? {}),
+    }
+    settings.security_settings = {
+      ...defaultSettings().security_settings,
+      ...(response.settings.security_settings ?? {}),
+    }
+    initialSnapshot.value = JSON.stringify(settings)
     const logResponse = await api.apiFetch<{ logs: SettingLog[] }>(
       '/api/account-roles/settings/logs',
     )
@@ -121,6 +231,15 @@ async function saveSettings() {
     site_description: settings.site_description.trim(),
     event_name: settings.event_name.trim(),
     event_year: Number(settings.event_year),
+    timezone: settings.timezone,
+    logo_url: settings.logo_url.trim(),
+    favicon_url: settings.favicon_url.trim(),
+    feature_settings: settings.feature_settings,
+    notification_settings: {
+      ...settings.notification_settings,
+      return_due_all_users: true,
+    },
+    operation_settings: settings.operation_settings,
   }
 
   if (isImportantSettingsAdmin.value) {
@@ -129,6 +248,7 @@ async function saveSettings() {
     payload.maintenance_message = settings.maintenance_message
     payload.login_enabled = settings.login_enabled
     payload.require_login = settings.require_login
+    payload.security_settings = settings.security_settings
   }
 
   try {
@@ -141,6 +261,7 @@ async function saveSettings() {
     } catch (statusError) {
       console.warn('サイト表示設定の再取得に失敗しました。', statusError)
     }
+    initialSnapshot.value = JSON.stringify(settings)
     snackbar.success('サイト設定を保存しました。')
   } catch (error) {
     console.error(error)
@@ -196,12 +317,38 @@ async function removeImportantAdmin(user: UserOption) {
   }
 }
 
+function resetSettings() {
+  if (!initialSnapshot.value) return
+  Object.assign(settings, JSON.parse(initialSnapshot.value) as SiteSettings)
+}
+
+async function forceLogoutAllSessions() {
+  const confirmed = window.confirm('全ユーザーのログインセッションを無効化します。続行しますか？')
+  if (!confirmed) return
+  try {
+    const result = await api.apiFetch<{ invalidated_sessions: number }>(
+      '/api/account-roles/settings/force-logout',
+      { method: 'POST' },
+    )
+    snackbar.success(`${result.invalidated_sessions}件のセッションを無効化しました。`)
+  } catch (error) {
+    console.error(error)
+    snackbar.error('セッションの無効化に失敗しました。')
+  }
+}
+
 async function loadImportantAdmins() {
   const response = await api.apiFetch<{ users: UserOption[] }>(
     '/api/account-roles/settings/important-admins',
   )
   importantAdmins.value = response.users
 }
+
+onBeforeRouteLeave(() => {
+  if (hasUnsavedChanges.value && !window.confirm('未保存の変更があります。ページを移動しますか？')) {
+    return false
+  }
+})
 
 onMounted(loadSettings)
 </script>
@@ -267,6 +414,106 @@ onMounted(loadSettings)
               />
             </v-col>
           </v-row>
+          <v-text-field v-model="settings.timezone" label="タイムゾーン" hint="例: Asia/Tokyo" persistent-hint />
+          <v-text-field v-model="settings.logo_url" label="ロゴ画像URL" placeholder="https://..." />
+          <v-text-field v-model="settings.favicon_url" label="favicon URL" placeholder="https://..." />
+        </v-card-text>
+      </v-card>
+
+      <v-card rounded="xl" variant="outlined" class="mt-5">
+        <v-card-item>
+          <template #prepend><v-icon icon="mdi-puzzle-outline" size="30" color="primary" /></template>
+          <v-card-title>機能管理</v-card-title>
+          <v-card-subtitle>機能自体と操作単位の制御を設定します。既存のユーザー権限を付与するものではありません。</v-card-subtitle>
+        </v-card-item>
+        <v-divider />
+        <v-card-text class="pa-5">
+          <v-row>
+            <v-col v-for="feature in featureOptions" :key="feature.key" cols="12" md="6">
+              <v-card variant="tonal" rounded="lg" class="pa-3 h-100">
+                <div class="d-flex align-center justify-space-between mb-2">
+                  <span class="font-weight-bold">{{ feature.title }}</span>
+                  <v-switch v-model="settings.feature_settings[feature.key].enabled" color="primary" label="有効" hide-details inset />
+                </div>
+                <v-divider class="mb-2" />
+                <div class="d-flex flex-wrap ga-3">
+                  <v-checkbox v-for="action in ['view', 'create', 'edit', 'delete']" :key="action"
+                    v-model="settings.feature_settings[feature.key][action]" :label="{ view: '閲覧', create: '作成', edit: '編集', delete: '削除' }[action]"
+                    density="compact" hide-details :disabled="!settings.feature_settings[feature.key].enabled" />
+                </div>
+              </v-card>
+            </v-col>
+          </v-row>
+          <v-alert type="info" variant="tonal" density="compact" class="mt-3">
+            機能設定は既存のアカウント権限・活動ロールによる認可に追加されます。機能が有効でも、個別のAPI権限がなければ操作できません。
+          </v-alert>
+        </v-card-text>
+      </v-card>
+
+      <v-card rounded="xl" variant="outlined" class="mt-5">
+        <v-card-item>
+          <template #prepend><v-icon icon="mdi-bell-cog-outline" size="30" color="primary" /></template>
+          <v-card-title>通知設定</v-card-title>
+          <v-card-subtitle>サイト全体のプッシュ通知と通知カテゴリを管理します。</v-card-subtitle>
+        </v-card-item>
+        <v-divider />
+        <v-card-text class="pa-5">
+          <v-switch v-model="settings.notification_settings.enabled" color="primary" label="プッシュ通知全体を有効にする" hide-details />
+          <v-row class="mt-2">
+            <v-col v-for="item in notificationOptions" :key="item.key" cols="12" sm="6" md="4">
+              <v-switch v-model="settings.notification_settings.categories[item.key]" :label="item.title"
+                color="primary" hide-details :disabled="!settings.notification_settings.enabled" />
+            </v-col>
+          </v-row>
+          <v-alert type="info" variant="tonal" density="compact" class="mt-3">
+            返却期限通知の送信対象は全員です。この設定から個人単位の対象へ変更することはできません。
+          </v-alert>
+        </v-card-text>
+      </v-card>
+
+      <v-card rounded="xl" variant="outlined" class="mt-5">
+        <v-card-item>
+          <template #prepend><v-icon icon="mdi-tune" size="30" color="primary" /></template>
+          <v-card-title>運用設定</v-card-title>
+          <v-card-subtitle>カレンダー・タスクの初期状態とアップロード制限を管理します。</v-card-subtitle>
+        </v-card-item>
+        <v-divider />
+        <v-card-text class="pa-5">
+          <v-select v-model="settings.operation_settings.calendar_default_view" label="カレンダー初期表示"
+            :items="[{ title: '月', value: 'month' }, { title: '週', value: 'week' }, { title: '日', value: 'day' }, { title: '一覧', value: 'list' }]" />
+          <v-select v-model="settings.operation_settings.task_default_status" label="新規タスクの初期状態"
+            :items="[{ title: '未着手', value: 'todo' }, { title: '進行中', value: 'in_progress' }, { title: '完了', value: 'done' }]" />
+          <v-text-field v-model.number="settings.operation_settings.upload_max_file_size_mb" type="number" min="1" max="100" label="アップロード上限（MB）" />
+          <v-alert type="info" variant="tonal" density="compact">
+            アップロード上限は1〜100MBです。Cloudflare側のリクエスト上限を超えるファイルは別途制限されます。
+          </v-alert>
+        </v-card-text>
+      </v-card>
+
+      <v-card v-if="isImportantSettingsAdmin" rounded="xl" variant="outlined" class="mt-5">
+        <v-card-item>
+          <template #prepend><v-icon icon="mdi-shield-key-outline" size="30" color="primary" /></template>
+          <v-card-title>セキュリティ設定</v-card-title>
+          <v-card-subtitle>認証とセッションに関する重要設定です。</v-card-subtitle>
+        </v-card-item>
+        <v-divider />
+        <v-card-text class="pa-5">
+          <v-select v-model.number="settings.security_settings.session_duration_hours" label="セッション有効期間"
+            :items="[{ title: '1時間', value: 1 }, { title: '12時間', value: 12 }, { title: '1日', value: 24 }, { title: '3日', value: 72 }, { title: '7日', value: 168 }, { title: '14日', value: 336 }, { title: '30日', value: 720 }]" />
+          <v-text-field v-model.number="settings.security_settings.login_attempt_limit" type="number" min="3" max="20" label="ログイン試行上限（回）" />
+          <v-text-field v-model.number="settings.security_settings.login_lock_minutes" type="number" min="1" max="1440" label="一時ロック時間（分）" />
+          <v-switch v-model="settings.security_settings.force_password_change" color="warning" label="全ユーザーに次回ログイン時のパスワード変更を要求" hide-details />
+          <v-divider class="my-4" />
+          <div class="d-flex flex-column flex-sm-row align-sm-center justify-space-between ga-3">
+            <div>
+              <div class="font-weight-bold">全ユーザーのセッション無効化</div>
+              <div class="text-body-2 text-medium-emphasis">全員が次回アクセス時に再ログインする必要があります。</div>
+            </div>
+            <v-btn color="error" variant="tonal" prepend-icon="mdi-logout" @click="forceLogoutAllSessions">全セッションを無効化</v-btn>
+          </div>
+          <v-alert type="warning" variant="tonal" density="compact" class="mt-4">
+            セッション期間は次回ログイン時から適用されます。パスワード変更強制は既存ユーザーの変更状態を確認して適用します。
+          </v-alert>
         </v-card-text>
       </v-card>
 
@@ -451,13 +698,15 @@ onMounted(loadSettings)
         </v-card-item>
       </v-card>
 
-      <div class="d-flex justify-end mt-6">
+      <div class="d-flex justify-end mt-6 ga-2">
+        <v-btn variant="text" :disabled="saving || !hasUnsavedChanges" @click="resetSettings">変更を破棄</v-btn>
         <v-btn
           color="primary"
           size="large"
           rounded="xl"
           prepend-icon="mdi-content-save"
           :loading="saving"
+          :disabled="!hasUnsavedChanges"
           @click="saveSettings"
         >
           設定を保存
