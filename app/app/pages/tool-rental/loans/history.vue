@@ -25,7 +25,12 @@
       <v-table>
         <thead><tr><th>工具</th><th>個体ID</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th><th>時間制限</th><th>タイマー終了予定</th><th>返却を記録した人</th><th>返却日時</th><th>状態</th></tr></thead>
         <tbody>
-          <tr v-for="record in filteredRecords" :key="record.loan_item_id">
+          <tr
+            v-for="record in filteredRecords"
+            :id="`loan-item-${record.loan_item_id}`"
+            :key="record.loan_item_id"
+            :class="{ 'loan-item-highlight': highlightedLoanItemId === String(record.loan_item_id) }"
+          >
             <td>{{ record.tool_name }}</td>
             <td>{{ record.tool_item_id }}</td><td><v-chip size="small" variant="tonal">{{ record.management_number }}</v-chip></td>
             <td>{{ record.class_name }} {{ record.borrower_name }}</td>
@@ -45,11 +50,14 @@
 </template>
 
 <script setup lang="ts">
+import { nextTick } from 'vue'
 import type { LoanHistoryItem } from '~/types/tool-rental'
 
 definePageMeta({ middleware: 'auth' })
 
 const { request } = useToolRentalApi()
+const route = useRoute()
+const highlightedLoanItemId = ref(typeof route.query.open === 'string' ? route.query.open : '')
 const records = ref<LoanHistoryItem[]>([])
 const search = ref('')
 const status = ref('all')
@@ -88,5 +96,18 @@ const loadHistory = async () => {
   }
 }
 
-onMounted(loadHistory)
+onMounted(async () => {
+  await loadHistory()
+  if (!highlightedLoanItemId.value) return
+  await nextTick()
+  document.getElementById(`loan-item-${highlightedLoanItemId.value}`)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+})
 </script>
+
+<style scoped>
+.loan-item-highlight {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: -2px;
+}
+</style>

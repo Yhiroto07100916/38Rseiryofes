@@ -4,25 +4,28 @@ import { handleAdminSetPassword, handleAuth } from "./routes/auth"
 import { handleRoles, handleUserRole, handleUserRoles } from "./routes/roles"
 import { handleAccountRoles, handleUserAccountRoles } from "./routes/account-roles"
 import { handlePermissions } from "./routes/permissions"
-import { handleTasks } from "./routes/tasks"
+import { handleTasks, processDueTaskNotifications } from "./routes/tasks"
 import { handleCalendar } from "./routes/calendar"
 import { handleCalendarCategories } from "./routes/calendar-categories"
 import { handleNews } from "./routes/news"
-import { handlePush, processDuePushDeliveries } from "./routes/push"
+import { handlePush, processDuePushDeliveries, processDueNotificationPushDeliveries } from "./routes/push"
+import { handleNotifications, purgeAllExpiredNotifications } from "./routes/notifications"
+import { handlePresence } from "./routes/presence"
 import { handleScripts } from "./routes/scripts"
 import { handleEquipment } from "./routes/equipment"
-import { handleToolRental } from "./routes/tool-rental"
+import { handleToolRental, processDueToolRentalNotifications } from "./routes/tool-rental"
 import { handleAccounting } from "./routes/accounting"
 import { handleFiles } from "./routes/files"
 import { handlePublicFiles } from "./routes/public-files"
 import { handleReceiptOcr } from "./routes/receipt-ocr"
-import { handleSurveys } from "./routes/surveys"
+import { handleSurveys, processDueSurveyNotifications } from "./routes/surveys"
 import { handleDecisions } from "./routes/decisions"
 import { handleMinutes } from "./routes/minutes"
 import { handleMilkCollection } from "./routes/milk-collection"
 import { handleAvatarImage, handleAvatarMutation, processQueuedAvatarDeletions } from "./routes/avatars"
-import { handleSubmissions } from "./routes/submissions"
+import { handleSubmissions, processDueSubmissionNotifications } from "./routes/submissions"
 import { handleWishlist } from "./routes/wishlist"
+import { processDueCalendarNotifications } from "./routes/calendar-reminders"
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -307,6 +310,36 @@ export default {
             { error: "Internal Server Error" },
             { status: 500 },
           ),
+        )
+      }
+    }
+
+    if (url.pathname === "/api/presence" || url.pathname.startsWith("/api/presence/")) {
+      const pathParts = url.pathname.slice("/api/presence".length).split("/").filter(Boolean)
+      try {
+        return withCors(request, await handlePresence(request, env, pathParts))
+      } catch (error) {
+        console.error("Presence API error:", error)
+        return withCors(request, Response.json({ error: "Internal Server Error" }, { status: 500 }))
+      }
+    }
+    if (
+      url.pathname === "/api/notifications" ||
+      url.pathname.startsWith("/api/notifications/")
+    ) {
+      const path = url.pathname.slice("/api/notifications".length)
+      const pathParts = path.split("/").filter(Boolean)
+
+      try {
+        return withCors(
+          request,
+          await handleNotifications(request, env, pathParts),
+        )
+      } catch (error) {
+        console.error("Notifications API error:", error)
+        return withCors(
+          request,
+          Response.json({ error: "Internal Server Error" }, { status: 500 }),
         )
       }
     }
@@ -841,6 +874,48 @@ export default {
       await processDuePushDeliveries(env)
     } catch (error) {
       console.error("Scheduled push delivery failed:", error)
+    }
+
+    try {
+      await processDueNotificationPushDeliveries(env)
+    } catch (error) {
+      console.error("Scheduled notification push delivery failed:", error)
+    }
+
+    try {
+      await processDueToolRentalNotifications(env)
+    } catch (error) {
+      console.error("Scheduled tool rental notification processing failed:", error)
+    }
+
+    try {
+      await processDueTaskNotifications(env)
+    } catch (error) {
+      console.error("Scheduled task deadline notification processing failed:", error)
+    }
+
+    try {
+      await processDueSubmissionNotifications(env)
+    } catch (error) {
+      console.error("Scheduled submission deadline notification processing failed:", error)
+    }
+
+    try {
+      await processDueSurveyNotifications(env)
+    } catch (error) {
+      console.error("Scheduled survey notification processing failed:", error)
+    }
+
+    try {
+      await processDueCalendarNotifications(env)
+    } catch (error) {
+      console.error("Scheduled calendar notification processing failed:", error)
+    }
+
+    try {
+      await purgeAllExpiredNotifications(env)
+    } catch (error) {
+      console.error("Scheduled expired notification cleanup failed:", error)
     }
   },
 } satisfies ExportedHandler<Env>

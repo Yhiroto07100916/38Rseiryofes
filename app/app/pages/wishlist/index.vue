@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { nextTick } from 'vue'
 import type { WishlistItem } from '../../composables/useApi'
 
 definePageMeta({
@@ -6,6 +7,8 @@ definePageMeta({
 })
 
 const api = useApi()
+const route = useRoute()
+const highlightedWishlistItemId = ref(typeof route.query.open === 'string' ? route.query.open : '')
 const items = ref<WishlistItem[]>([])
 const loading = ref(true)
 const saving = ref(false)
@@ -174,7 +177,13 @@ async function removeItem(item: WishlistItem) {
   }
 }
 
-onMounted(loadItems)
+onMounted(async () => {
+  await loadItems()
+  if (!highlightedWishlistItemId.value) return
+  await nextTick()
+  document.getElementById(`wishlist-item-${highlightedWishlistItemId.value}`)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+})
 </script>
 
 <template>
@@ -249,7 +258,13 @@ onMounted(loadItems)
         cols="12"
         md="6"
       >
-        <v-card height="100%" rounded="xl" variant="outlined">
+        <v-card
+          :id="`wishlist-item-${item.id}`"
+          height="100%"
+          rounded="xl"
+          variant="outlined"
+          :class="{ 'wishlist-item-highlight': highlightedWishlistItemId === item.id }"
+        >
           <v-card-item>
             <template #prepend>
               <v-avatar color="primary" variant="tonal">
@@ -437,3 +452,10 @@ onMounted(loadItems)
     </v-dialog>
   </v-container>
 </template>
+
+<style scoped>
+.wishlist-item-highlight {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+}
+</style>

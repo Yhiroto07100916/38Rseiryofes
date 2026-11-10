@@ -2,6 +2,7 @@ declare const __D1_MIGRATIONS__: string
 
 import { applyD1Migrations, env, SELF } from "cloudflare:test"
 import { beforeAll, describe, expect, it } from "vitest"
+import { processDueToolRentalNotifications } from "../src/routes/tool-rental"
 
 beforeAll(async () => {
   const migrations = JSON.parse(__D1_MIGRATIONS__)
@@ -265,5 +266,147 @@ describe("38R tool inventory and lending ledger", () => {
     expect(reservations.status).toBe(404)
     expect(notifications.status).toBe(404)
     expect(returnTimes.status).toBe(404)
+  })
+  it("notifies only on-campus users for checkout and return, including the operator", async () => {
+    const manager = await createUser("在校中の貸出担当")
+    const onCampus = await createUser("在校ユーザー")
+    const offCampus = await createUser("借用者")
+    await grant(manager.userId, [
+      "tool_rental.view",
+      "tool_rental.manage",
+      "tool_rental.checkout",
+      "tool_rental.return",
+      "tool_rental.history",
+    ])
+
+    const now = new Date()
+    const checkedAt = now.toISOString()
+    const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString()
+    await env.DB.prepare(
+      "INSERT INTO presence_states (user_id, status, method, checked_at, expires_at, local_date) " +
+      "VALUES (?, 'inside', 'manual', ?, ?, date('now', '+9 hours'))",
+    ).bind(onCampus.userId, checkedAt, expiresAt).run()
+    await env.DB.prepare(
+      "INSERT INTO presence_states (user_id, status, method, checked_at, expires_at, local_date) " +
+      "VALUES (?, 'outside', 'gps', ?, ?, date('now', '+9 hours'))",
+    ).bind(offCampus.userId, checkedAt, expiresAt).run()
+
+    const tool = await createTool(manager, "通知テスト用工具", "38R-TOOL-NOTIFY")
+    const itemResponse = await api(manager, "/tools/" + tool.id + "/items")
+    const items = await itemResponse.json() as Array<{ id: number }>
+    const checkout = await api(manager, "/loans", {
+      method: "POST",
+      body: {
+        tool_item_id: items[0].id,
+        class_name: "38R",
+        name: "借用者",
+        borrower_user_id: offCampus.userId,
+      },
+    })
+    expect(checkout.status).toBe(201)
+    const checkoutBody = await checkout.json() as { loan_id: number }
+
+    const borrowerMapping = await env.DB.prepare(
+      "SELECT borrower_user_id FROM loans WHERE id = ?",
+    ).bind(checkoutBody.loan_id).first<{ borrower_user_id: string | null }>()
+    expect(borrowerMapping?.borrower_user_id).toBe(offCampus.userId)
+
+    const checkoutNotifications = await env.DB.prepare(
+      "SELECT recipient_user_id FROM notifications WHERE event_key = ?",
+    ).bind("tool_rental.checked_out:" + checkoutBody.loan_id).all<{ recipient_user_id: string }>()
+    expect(checkoutNotifications.results.map(row => row.recipient_user_id).sort())
+      .toEqual([manager.userId, onCampus.userId].sort())
+
+    const currentResponse = await api(manager, "/loans/current")
+    const current = await currentResponse.json() as Array<{ loan_item_id: number }>
+    const returned = await api(manager, "/loans/return", {
+      method: "POST",
+      body: {
+        loan_item_id: current[0].loan_item_id,
+        returner_class_name: "38R",
+        returner_name: "返却担当",
+      },
+    })
+    expect(returned.status).toBe(200)
+
+    const returnNotifications = await env.DB.prepare(
+      "SELECT recipient_user_id FROM notifications WHERE event_key = ?",
+    ).bind("tool_rental.returned:" + current[0].loan_item_id).all<{ recipient_user_id: string }>()
+    expect(returnNotifications.results.map(row => row.recipient_user_id).sort())
+      .toEqual([manager.userId, onCampus.userId, offCampus.userId].sort())
+  })
+  it("sends due-soon, timer-end, and overdue notifications to everyone", async () => {
+    const manager = await createUser("期限通知担当")
+    const onCampus = await createUser("期限前の在校ユーザー")
+    const offCampus = await createUser("期限前の校外ユーザー")
+    const checkedAt = new Date().toISOString()
+    const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+    await env.DB.prepare(
+      "INSERT INTO presence_states (user_id, status, method, checked_at, expires_at, local_date) " +
+      "VALUES (?, 'inside', 'manual', ?, ?, date('now', '+9 hours'))",
+    ).bind(onCampus.userId, checkedAt, expiresAt).run()
+    await env.DB.prepare(
+      "INSERT INTO presence_states (user_id, status, method, checked_at, expires_at, local_date) " +
+      "VALUES (?, 'outside', 'gps', ?, ?, date('now', '+9 hours'))",
+    ).bind(offCampus.userId, checkedAt, expiresAt).run()
+    await grant(manager.userId, [
+      "tool_rental.view",
+      "tool_rental.manage",
+      "tool_rental.checkout",
+    ])
+    const tool = await createTool(manager, "期限通知用工具", "38R-TOOL-DEADLINE")
+    const itemResponse = await api(manager, "/tools/" + tool.id + "/items")
+    const items = await itemResponse.json() as Array<{ id: number }>
+    const checkout = await api(manager, "/loans", {
+      method: "POST",
+      body: {
+        tool_item_id: items[0].id,
+        class_name: "38R",
+        name: "借用者",
+        time_limit_minutes: 60,
+      },
+    })
+    expect(checkout.status).toBe(201)
+    const checkoutBody = await checkout.json() as { loan_id: number }
+    await env.DB.prepare("UPDATE loans SET due_at = datetime('now', '+9 hours', '+5 minutes') WHERE id = ?")
+      .bind(checkoutBody.loan_id).run()
+    const loan = await env.DB.prepare("SELECT due_at FROM loans WHERE id = ?")
+      .bind(checkoutBody.loan_id).first<{ due_at: string }>()
+    const allUsers = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+
+    await processDueToolRentalNotifications(env)
+
+    const dueSoon = await env.DB.prepare("SELECT recipient_user_id FROM notifications WHERE event_key = ?")
+      .bind("tool_rental.due_soon:" + checkoutBody.loan_id + ":" + loan?.due_at).all<{ recipient_user_id: string }>()
+    expect(dueSoon.results.map(row => row.recipient_user_id).sort())
+      .toEqual(allUsers.results.map(row => row.id).sort())
+    expect(dueSoon.results.map(row => row.recipient_user_id)).toContain(offCampus.userId)
+
+    await env.DB.prepare("UPDATE loans SET due_at = datetime('now', '+9 hours', '-1 minute') WHERE id = ?")
+      .bind(checkoutBody.loan_id).run()
+    const loanItem = await env.DB.prepare("SELECT id FROM loan_items WHERE loan_id = ?")
+      .bind(checkoutBody.loan_id).first<{ id: number }>()
+    await processDueToolRentalNotifications(env)
+
+    const timerEnd = await env.DB.prepare("SELECT recipient_user_id FROM notifications WHERE event_key = ?")
+      .bind("tool_rental.timer_end:" + loanItem?.id).all<{ recipient_user_id: string }>()
+    expect(timerEnd.results.map(row => row.recipient_user_id).sort())
+      .toEqual(allUsers.results.map(row => row.id).sort())
+
+    await env.DB.prepare("UPDATE loans SET due_at = datetime('now', '+9 hours', '-6 minutes') WHERE id = ?")
+      .bind(checkoutBody.loan_id).run()
+    await processDueToolRentalNotifications(env)
+    const overdue = await env.DB.prepare("SELECT recipient_user_id FROM notifications WHERE event_key = ?")
+      .bind("tool_rental.overdue:" + checkoutBody.loan_id).all<{ recipient_user_id: string }>()
+    expect(overdue.results.map(row => row.recipient_user_id).sort())
+      .toEqual(allUsers.results.map(row => row.id).sort())
+
+    await processDueToolRentalNotifications(env)
+    const timerEndCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM notifications WHERE event_key = ?")
+      .bind("tool_rental.timer_end:" + loanItem?.id).first<{ count: number }>()
+    const overdueCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM notifications WHERE event_key = ?")
+      .bind("tool_rental.overdue:" + checkoutBody.loan_id).first<{ count: number }>()
+    expect(timerEndCount?.count).toBe(allUsers.results.length)
+    expect(overdueCount?.count).toBe(allUsers.results.length)
   })
 })

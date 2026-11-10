@@ -1,4 +1,6 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { createNotificationsForUsers } from "../lib/notifications"
+import { notifyFileLinked } from "../lib/file-notifications"
 
 interface Decision {
   id: string
@@ -292,6 +294,36 @@ export async function handleDecisions(
     ]
 
     await env.DB.batch(statements)
+
+    try {
+      for (const fileId of fileIds) await notifyFileLinked(env, fileId, userId)
+    } catch (notificationError) {
+      console.error("Failed to create linked-file notifications:", notificationError)
+    }
+
+    try {
+      const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+      const eligible = await Promise.all(users.results.map(async user => ({
+        id: user.id,
+        allowed: user.id !== userId && await hasPermission(env, user.id, "decisions.view"),
+      })))
+      await createNotificationsForUsers(env, {
+        recipientUserIds: eligible.filter(user => user.allowed).map(user => user.id),
+        eventKey: "decisions.created",
+        category: "decisions",
+        title: "新しい意思決定が登録されました",
+        body: newDecision.title,
+        targetUrl: "/decisions?open=" + encodeURIComponent(newDecision.id),
+        requiredPermission: "decisions.view",
+        actorUserId: userId,
+        entityType: "decision",
+        entityId: newDecision.id,
+        dedupeKey: "decisions.created:" + newDecision.id,
+      })
+    } catch (notificationError) {
+      console.error("Failed to create decision notifications:", notificationError)
+    }
+
     return Response.json({
       decision: await getDecision(env, newDecision.id),
       ...(await getLinks(env, newDecision.id)),
@@ -382,7 +414,7 @@ export async function handleDecisions(
       ).bind(decisionId).all<{ id: string }>()
     ).results.map((row) => row.id)
 
-    const currentFileIds = fileIds ?? (
+    const previousFileIds = (
       await env.DB.prepare(`
         SELECT df.file_id AS id
         FROM decision_files df
@@ -391,6 +423,7 @@ export async function handleDecisions(
           AND f.archived_at IS NULL
       `).bind(decisionId).all<{ id: string }>()
     ).results.map((row) => row.id)
+    const currentFileIds = fileIds ?? previousFileIds
 
     const validationError = await validateLinks(
       env, currentTaskIds, currentFileIds, nextSurveyId,
@@ -451,6 +484,14 @@ export async function handleDecisions(
     )
 
     await env.DB.batch(statements)
+    if (fileIds !== null) {
+      try {
+        const newlyLinkedFileIds = fileIds.filter(fileId => !previousFileIds.includes(fileId))
+        for (const fileId of newlyLinkedFileIds) await notifyFileLinked(env, fileId, userId)
+      } catch (notificationError) {
+        console.error("Failed to create linked-file notifications:", notificationError)
+      }
+    }
     return Response.json({
       decision: await getDecision(env, decisionId),
       ...(await getLinks(env, decisionId)),

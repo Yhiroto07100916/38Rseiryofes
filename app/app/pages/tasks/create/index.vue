@@ -37,20 +37,11 @@
           class="mt-2"
         />
 
-        <div class="mt-4">
-          <div class="d-flex align-center justify-space-between mb-2">
-            <div class="text-subtitle-1 font-weight-medium">関連リンク</div>
-            <v-btn size="small" variant="tonal" prepend-icon="mdi-plus" @click="form.links.push({ title: '', url: '' })">リンクを追加</v-btn>
-          </div>
-          <div v-for="(link, index) in form.links" :key="index" class="d-flex align-start ga-2 mb-2">
-            <div class="flex-grow-1">
-              <v-text-field v-model="link.title" label="表示タイトル" placeholder="例：資料・参考ページ" variant="outlined" density="comfortable" hide-details class="mb-2" />
-              <v-text-field v-model="link.url" label="URL" placeholder="https://example.com" variant="outlined" density="comfortable" hide-details />
-            </div>
-            <v-btn icon="mdi-close" variant="text" color="error" aria-label="リンクを削除" @click="form.links.splice(index, 1)" />
-          </div>
-          <div class="text-caption text-medium-emphasis">タイトルにURLを設定します。最大20件まで登録できます。</div>
-        </div>
+        <TaskLinksEditor
+          v-model="form.links"
+          add-label="リンクを追加"
+          help-text="タイトルにURLを設定します。最大20件まで登録できます。"
+        />
 
         <v-select
           v-model="form.scope"
@@ -186,6 +177,7 @@
 import { jstDateKey, jstDateTimeLocalToIso } from '~/utils/jst'
 import { onMounted, ref } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
+import TaskLinksEditor from '~/components/tasks/TaskLinksEditor.vue'
 import { useSnackbar } from '~/composables/useSnackbar'
 import { useAuthStore } from '~/stores/auth'
 import {

@@ -1,5 +1,7 @@
 import { isFileLinkConflict } from "../lib/file-link-errors"
 import { hasPermission, requireAuth } from "../lib/authz"
+import { createNotificationsForUsers } from "../lib/notifications"
+import { notifyFileLinked } from "../lib/file-notifications"
 
 export interface Task {
   id: string
@@ -12,6 +14,11 @@ export interface Task {
   created_by: string
   created_at: string
   updated_at: string
+}
+
+function taskTargetUrl(scope: Task["scope"], taskId: string): string {
+  const section = scope === "class_representative" ? "class-representative" : "class"
+  return `/tasks/${section}/${taskId}`
 }
 
 interface CreateTaskBody {
@@ -175,6 +182,20 @@ async function getTaskLinks(
   }
 }
 
+async function getTaskNotificationRecipientIds(
+  env: Env,
+  taskId: string,
+): Promise<string[]> {
+  const result = await env.DB.prepare(
+    "SELECT user_id FROM task_assignees WHERE task_id = ? " +
+    "UNION SELECT ur.user_id FROM task_roles tr " +
+    "INNER JOIN user_roles ur ON ur.role_id = tr.role_id " +
+    "WHERE tr.task_id = ?",
+  ).bind(taskId, taskId).all<{ user_id: string }>()
+
+  return [...new Set(result.results.map(row => row.user_id))]
+}
+
 async function getTaskAssignments(
   env: Env,
   taskId: string,
@@ -224,6 +245,65 @@ async function getTaskAssignments(
   return {
     users: assignees.results,
     roles: roles.results,
+  }
+}
+
+export async function processDueTaskNotifications(env: Env): Promise<void> {
+  const result = await env.DB.prepare(
+    "SELECT id, title, due_at, status, scope FROM tasks " +
+    "WHERE due_at IS NOT NULL AND status != 'done'",
+  ).all<{ id: string; title: string; due_at: string; status: Task["status"]; scope: Task["scope"] }>()
+
+  const now = Date.now()
+  const localDay = new Date(now + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+  for (const task of result.results) {
+    const dueAt = Date.parse(task.due_at)
+    if (!Number.isFinite(dueAt)) continue
+    const hoursRemaining = (dueAt - now) / 3_600_000
+    const recipients = await getTaskNotificationRecipientIds(env, task.id)
+    if (recipients.length === 0) continue
+
+    const reminders: Array<{ eventKey: string; title: string; dedupeKey: string }> = []
+    if (hoursRemaining <= 24 && hoursRemaining > 23) {
+      reminders.push({
+        eventKey: "task.deadline_reminder_24h",
+        title: "タスクの期限まで24時間です",
+        dedupeKey: "task.deadline_reminder_24h:" + task.id + ":" + task.due_at,
+      })
+    }
+    if (hoursRemaining <= 1 && hoursRemaining > 0) {
+      reminders.push({
+        eventKey: "task.deadline_reminder_1h",
+        title: "タスクの期限まで1時間です",
+        dedupeKey: "task.deadline_reminder_1h:" + task.id + ":" + task.due_at,
+      })
+    }
+    if (hoursRemaining <= 0) {
+      reminders.push({
+        eventKey: "task.deadline_overdue_daily",
+        title: "タスクの期限を過ぎています",
+        dedupeKey: "task.deadline_overdue_daily:" + task.id + ":" + localDay,
+      })
+    }
+
+    for (const reminder of reminders) {
+      try {
+        await createNotificationsForUsers(env, {
+          recipientUserIds: recipients,
+          eventKey: reminder.eventKey,
+          category: "tasks",
+          title: reminder.title,
+          body: task.title,
+          targetUrl: taskTargetUrl(task.scope, task.id),
+          entityType: "task",
+          entityId: task.id,
+          dedupeKey: reminder.dedupeKey,
+        })
+      } catch (notificationError) {
+        console.error("Failed to create task deadline notifications:", notificationError)
+      }
+    }
   }
 }
 
@@ -817,6 +897,31 @@ export async function handleTasks(
       }
 
       await env.DB.batch(statements)
+
+      try {
+        for (const fileId of fileIds) await notifyFileLinked(env, fileId, auth.user.id)
+      } catch (notificationError) {
+        console.error("Failed to create linked-file notifications:", notificationError)
+      }
+
+      try {
+        const recipientUserIds = await getTaskNotificationRecipientIds(env, id)
+
+        await createNotificationsForUsers(env, {
+          recipientUserIds,
+          eventKey: "task.created",
+          category: "tasks",
+          title: "新しいタスクが割り当てられました",
+          body: title,
+          targetUrl: taskTargetUrl(scope as Task["scope"], id),
+          actorUserId: auth.user.id,
+          entityType: "task",
+          entityId: id,
+          dedupeKey: "task.created:" + id,
+        })
+      } catch (notificationError) {
+        console.error("Failed to create task notifications:", notificationError)
+      }
     } catch (error) {
       if (isFileLinkConflict(error)) {
         return Response.json(
@@ -902,6 +1007,25 @@ export async function handleTasks(
         { status: 403 },
       )
     }
+
+    const previousRecipientIds = await getTaskNotificationRecipientIds(env, id)
+    const [previousCalendarLink, previousFileLinks, previousExternalLinks] = await Promise.all([
+      env.DB.prepare(
+        "SELECT event_id FROM task_calendar_events WHERE task_id = ? LIMIT 1",
+      ).bind(id).first<{ event_id: string }>(),
+      env.DB.prepare(
+        "SELECT file_id FROM task_files WHERE task_id = ? ORDER BY file_id",
+      ).bind(id).all<{ file_id: string }>(),
+      env.DB.prepare(
+        "SELECT title, url FROM task_links WHERE task_id = ? ORDER BY position ASC, id ASC",
+      ).bind(id).all<{ title: string; url: string }>(),
+    ])
+    const previousCalendarEventId = previousCalendarLink?.event_id ?? null
+    const previousFileIds = previousFileLinks.results.map(row => row.file_id).sort()
+    const previousExternalLinkValues = previousExternalLinks.results.map(link => ({
+      title: link.title,
+      url: link.url,
+    }))
 
     let body: UpdateTaskBody
 
@@ -1378,6 +1502,107 @@ export async function handleTasks(
       }
 
       await env.DB.batch(statements)
+
+      if (
+        hasFileUpdate &&
+        JSON.stringify(requestedFileIds.slice().sort()) !== JSON.stringify(previousFileIds)
+      ) {
+        try {
+          const newlyLinkedFileIds = requestedFileIds.filter(fileId => !previousFileIds.includes(fileId))
+          for (const fileId of newlyLinkedFileIds) await notifyFileLinked(env, fileId, auth.user.id)
+        } catch (notificationError) {
+          console.error("Failed to create linked-file notifications:", notificationError)
+        }
+      }
+
+      try {
+        const updatedTask = await getTask(env, id)
+        const currentRecipientIds = await getTaskNotificationRecipientIds(env, id)
+        const previousSet = new Set(previousRecipientIds)
+        const currentSet = new Set(currentRecipientIds)
+        const addedUserIds = currentRecipientIds.filter(userId => !previousSet.has(userId))
+        const removedUserIds = previousRecipientIds.filter(userId => !currentSet.has(userId))
+        const changeId = crypto.randomUUID()
+
+        if (addedUserIds.length > 0) {
+          await createNotificationsForUsers(env, {
+            recipientUserIds: addedUserIds,
+            eventKey: "task.assignee_added",
+            category: "tasks",
+            title: "タスクの担当に追加されました",
+            body: updatedTask?.title ?? existingTask.title,
+            targetUrl: taskTargetUrl(updatedTask?.scope ?? existingTask.scope, id),
+            actorUserId: auth.user.id,
+            entityType: "task",
+            entityId: id,
+            dedupeKey: "task.assignee_added:" + id + ":" + changeId,
+          })
+        }
+
+        if (removedUserIds.length > 0) {
+          await createNotificationsForUsers(env, {
+            recipientUserIds: removedUserIds,
+            eventKey: "task.assignee_removed",
+            category: "tasks",
+            title: "タスクの担当から外されました",
+            body: existingTask.title,
+            targetUrl: taskTargetUrl(existingTask.scope, id),
+            requiredPermission: "tasks.view",
+            actorUserId: auth.user.id,
+            entityType: "task",
+            entityId: id,
+            dedupeKey: "task.assignee_removed:" + id + ":" + changeId,
+          })
+        }
+
+        const statusChanged = body.status !== undefined &&
+          body.status !== existingTask.status
+        const calendarLinkChanged = body.calendar_event_id !== undefined &&
+          calendarEventId !== previousCalendarEventId
+        const fileLinksChanged = body.file_ids !== undefined &&
+          JSON.stringify(requestedFileIds.slice().sort()) !== JSON.stringify(previousFileIds)
+        const externalLinksChanged = body.links !== undefined &&
+          JSON.stringify((body.links as { title: string; url: string }[]).map(link => ({
+            title: link.title.trim(),
+            url: link.url.trim(),
+          }))) !== JSON.stringify(previousExternalLinkValues)
+        const otherFieldsChanged =
+          (body.title !== undefined && body.title.trim() !== existingTask.title) ||
+          (body.description !== undefined &&
+            (typeof body.description === "string" ? body.description.trim() || null : null) !== existingTask.description) ||
+          (body.due_at !== undefined &&
+            (typeof body.due_at === "string" ? body.due_at.trim() || null : null) !== existingTask.due_at) ||
+          (body.priority !== undefined && body.priority !== existingTask.priority) ||
+          calendarLinkChanged || fileLinksChanged || externalLinksChanged
+
+        if (updatedTask && (statusChanged || otherFieldsChanged)) {
+          const recipients = [...new Set([...currentRecipientIds, existingTask.created_by])]
+          const statusLabel: Record<string, string> = {
+            todo: "未着手",
+            in_progress: "進行中",
+            review: "確認待ち",
+            done: "完了",
+          }
+          const statusOnly = statusChanged && !otherFieldsChanged
+
+          await createNotificationsForUsers(env, {
+            recipientUserIds: recipients,
+            eventKey: statusOnly ? "task.status_changed" : "task.updated",
+            category: "tasks",
+            title: statusOnly ? "タスクの状態が変更されました" : "担当タスクが更新されました",
+            body: statusOnly
+              ? updatedTask.title + "：" + (statusLabel[updatedTask.status] ?? updatedTask.status)
+              : updatedTask.title,
+            targetUrl: taskTargetUrl(updatedTask.scope, id),
+            actorUserId: auth.user.id,
+            entityType: "task",
+            entityId: id,
+            dedupeKey: (statusOnly ? "task.status_changed:" : "task.updated:") + id + ":" + changeId,
+          })
+        }
+      } catch (notificationError) {
+        console.error("Failed to create task update notifications:", notificationError)
+      }
     } catch (error) {
       if (isFileLinkConflict(error)) {
         return Response.json(
@@ -1568,6 +1793,24 @@ export async function handleTasks(
         created_at: string
         updated_at: string
       }>()
+
+    try {
+      const recipients = await getTaskNotificationRecipientIds(env, taskId)
+      await createNotificationsForUsers(env, {
+        recipientUserIds: [...new Set([...recipients, task.created_by])],
+        eventKey: "task.commented",
+        category: "tasks",
+        title: "担当タスクにコメントが追加されました",
+        body: content,
+        targetUrl: taskTargetUrl(task.scope, taskId),
+        actorUserId: auth.user.id,
+        entityType: "task",
+        entityId: taskId,
+        dedupeKey: "task.commented:" + id,
+      })
+    } catch (notificationError) {
+      console.error("Failed to create task comment notifications:", notificationError)
+    }
 
     return Response.json(
       comment,

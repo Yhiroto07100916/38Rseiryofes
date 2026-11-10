@@ -22,6 +22,12 @@ self.addEventListener('push', (event) => {
     renotify: false,
     data: {
       url: typeof payload.url === 'string' ? payload.url : '/',
+      notificationId: typeof payload.notificationId === 'string'
+        ? payload.notificationId
+        : null,
+      notificationReadUrl: typeof payload.notificationReadUrl === 'string'
+        ? payload.notificationReadUrl
+        : null,
     },
   }
 
@@ -44,6 +50,44 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil((async () => {
     const target = new URL(targetUrl, self.location.origin)
+    const notificationId = event.notification.data?.notificationId
+    const rawNotificationReadUrl = event.notification.data?.notificationReadUrl
+    let notificationReadUrl = null
+    if (typeof rawNotificationReadUrl === 'string') {
+      try {
+        const candidate = new URL(rawNotificationReadUrl)
+        const allowedOrigin = candidate.origin === self.location.origin ||
+          candidate.origin === 'https://api.38r-seiryofes.com' ||
+          (candidate.hostname === 'localhost' && self.location.hostname === 'localhost')
+        if (allowedOrigin && candidate.protocol !== 'javascript:') {
+          notificationReadUrl = candidate
+        }
+      } catch {
+        notificationReadUrl = null
+      }
+    }
+
+    // APIはサイトと別ドメイン。Push payloadに含まれる正規のAPI URLへ既読を保存する。
+    // 既読APIの応答を待たずに画面遷移を開始し、オフライン時も遷移を遅らせない。
+    const markReadPromise = typeof notificationId === 'string' && notificationId.length <= 64 && notificationReadUrl
+      ? (async () => {
+          const controller = new AbortController()
+          const timeout = setTimeout(() => controller.abort(), 2500)
+          try {
+            await fetch(notificationReadUrl.toString(), {
+              method: 'PATCH',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ is_read: true }),
+              signal: controller.signal,
+            })
+          } catch (error) {
+            console.error('Failed to mark the opened Push notification as read:', error)
+          } finally {
+            clearTimeout(timeout)
+          }
+        })()
+      : Promise.resolve()
 
     const windows = await self.clients.matchAll({
       type: 'window',
@@ -56,19 +100,45 @@ self.addEventListener('notificationclick', (event) => {
       }
 
       try {
-        const focusedClient = await client.focus()
-        const navigatedClient = await focusedClient.navigate(target.href)
+        const handledByApp = await new Promise((resolve) => {
+          const channel = new MessageChannel()
+          const timeout = setTimeout(() => {
+            channel.port1.close()
+            resolve(false)
+          }, 500)
 
+          channel.port1.onmessage = (messageEvent) => {
+            clearTimeout(timeout)
+            channel.port1.close()
+            resolve(messageEvent.data?.handled === true)
+          }
+
+          client.postMessage({ type: '38R_PUSH_NAVIGATE', url: target.href }, [channel.port2])
+        })
+
+        if (handledByApp) {
+          await client.focus()
+          await markReadPromise
+          return client
+        }
+
+        const navigatedClient = await client.navigate(target.href)
         if (navigatedClient) {
-          return navigatedClient.focus()
+          await navigatedClient.focus()
+          await markReadPromise
+          return navigatedClient
         }
       } catch (error) {
         console.error('Failed to navigate existing PWA window:', error)
       }
 
-      return self.clients.openWindow(target.href)
+      const openedClient = await self.clients.openWindow(target.href)
+      await markReadPromise
+      return openedClient
     }
 
-    return self.clients.openWindow(target.href)
+    const openedClient = await self.clients.openWindow(target.href)
+    await markReadPromise
+    return openedClient
   })())
 })

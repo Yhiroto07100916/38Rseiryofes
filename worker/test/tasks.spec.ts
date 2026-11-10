@@ -237,6 +237,31 @@ describe("Task write atomicity", () => {
     expect(role?.role_id).toBe(fixture.roleId);
     expect(event?.event_id).toBe(fixture.eventId);
     expect(file?.file_id).toBe(fixture.fileId);
+
+    const notification = await env.DB.prepare(`
+      SELECT event_key, recipient_user_id, title, target_url
+      FROM notifications
+      WHERE entity_type = 'task' AND entity_id = ?
+    `).bind(task.id).first<{
+      event_key: string;
+      recipient_user_id: string;
+      title: string;
+      target_url: string;
+    }>();
+
+    expect(notification).toMatchObject({
+      event_key: "task.created",
+      recipient_user_id: fixture.assigneeId,
+      title: "新しいタスクが割り当てられました",
+      target_url: "/tasks/class/" + task.id,
+    });
+
+    const actorNotification = await env.DB.prepare(`
+      SELECT id FROM notifications
+      WHERE entity_type = 'task' AND entity_id = ? AND recipient_user_id = ?
+    `).bind(task.id, fixture.actorId).first();
+
+    expect(actorNotification).toBeNull();
   });
 
   it("does not create a task when a linked file is invalid", async () => {
@@ -329,5 +354,66 @@ describe("Task write atomicity", () => {
     expect(task?.title).toBe("更新後タイトル");
     expect(assignee?.user_id).toBe(fixture.assigneeId);
     expect(role?.role_id).toBe(fixture.roleId);
+
+    const notification = await env.DB.prepare(`
+      SELECT event_key, recipient_user_id, title
+      FROM notifications
+      WHERE entity_type = 'task' AND entity_id = ? AND recipient_user_id = ?
+    `).bind(taskId, fixture.assigneeId).first<{
+      event_key: string;
+      recipient_user_id: string;
+      title: string;
+    }>();
+
+    expect(notification).toMatchObject({
+      event_key: "task.updated",
+      recipient_user_id: fixture.assigneeId,
+      title: "担当タスクが更新されました",
+    });
   });
+  it("notifies other task participants when a comment is added", async () => {
+    const fixture = await createFixture();
+    const taskId = fixture.taskIds[0];
+
+    await grantPermissions(fixture.actorId, ["tasks.comment"]);
+    await createTaskDirectly(taskId, fixture.actorId, "コメント通知テスト");
+
+    await env.DB.prepare(`
+      INSERT INTO task_assignees (task_id, user_id)
+      VALUES (?, ?)
+    `).bind(taskId, fixture.assigneeId).run();
+
+    const response = await SELF.fetch(
+      `http://example.com/api/tasks/${taskId}/comments`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: fixture.cookie,
+        },
+        body: JSON.stringify({ content: "確認をお願いします。" }),
+      },
+    );
+
+    expect(response.status).toBe(201);
+
+    const notification = await env.DB.prepare(`
+      SELECT event_key, recipient_user_id, body, target_url
+      FROM notifications
+      WHERE entity_type = 'task' AND entity_id = ? AND recipient_user_id = ?
+    `).bind(taskId, fixture.assigneeId).first<{
+      event_key: string;
+      recipient_user_id: string;
+      body: string;
+      target_url: string;
+    }>();
+
+    expect(notification).toMatchObject({
+      event_key: "task.commented",
+      recipient_user_id: fixture.assigneeId,
+      body: "確認をお願いします。",
+      target_url: "/tasks/class/" + taskId,
+    });
+  });
+
 });

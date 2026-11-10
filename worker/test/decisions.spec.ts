@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const userId = crypto.randomUUID();
 const sessionId = crypto.randomUUID();
+const viewerId = crypto.randomUUID();
 
 async function grantPermissions(keys: string[]) {
   for (const key of keys) {
@@ -47,6 +48,13 @@ beforeAll(async () => {
     INSERT INTO sessions (id, user_id, expires_at)
     VALUES (?, ?, datetime('now', '+1 day'))
   `).bind(sessionId, userId).run();
+  await env.DB.prepare("INSERT INTO users (id, student_number, name, nickname) VALUES (?, ?, ?, NULL)")
+    .bind(viewerId, "decision-viewer-" + viewerId, "閲覧者テストユーザー").run()
+  await env.DB.prepare(
+    "INSERT INTO user_permissions (user_id, permission_id, effect) " +
+    "SELECT ?, id, 'allow' FROM permissions WHERE key = 'decisions.view'"
+  ).bind(viewerId).run()
+
 });
 
 afterAll(async () => {
@@ -67,6 +75,7 @@ afterAll(async () => {
   await env.DB.prepare("DELETE FROM user_permissions WHERE user_id = ?")
     .bind(userId).run();
 
+  await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(viewerId).run();
   await env.DB.prepare("DELETE FROM users WHERE id = ?")
     .bind(userId).run();
 });
@@ -100,6 +109,30 @@ describe("Decision history", () => {
       decision: { id: string };
     };
     const decisionId = createdBody.decision.id;
+
+    const createdNotification = await env.DB.prepare(
+      "SELECT event_key, category, title, body, target_url FROM notifications " +
+      "WHERE recipient_user_id = ? AND entity_type = 'decision' AND entity_id = ?",
+    ).bind(viewerId, decisionId).first<{
+      event_key: string
+      category: string
+      title: string
+      body: string
+      target_url: string
+    }>()
+    expect(createdNotification).toMatchObject({
+      event_key: "decisions.created",
+      category: "decisions",
+      title: "新しい意思決定が登録されました",
+      body: "履歴テスト",
+      target_url: "/decisions?open=" + decisionId,
+    })
+
+    const creatorNotification = await env.DB.prepare(
+      "SELECT id FROM notifications WHERE recipient_user_id = ? " +
+      "AND entity_type = 'decision' AND entity_id = ?",
+    ).bind(userId, decisionId).first()
+    expect(creatorNotification).toBeNull()
 
     const updateResponse = await request(
       `/api/decisions/${decisionId}`,

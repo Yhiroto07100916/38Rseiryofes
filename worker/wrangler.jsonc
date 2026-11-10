@@ -4,6 +4,9 @@
   "account_id": "b075c6dae1350c9fa806b1935c6a5c25",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-16",
+  "vars": {
+    "API_BASE_URL": "https://api.38r-seiryofes.com"
+  },
   "triggers": {
     "crons": ["* * * * *"]
   },

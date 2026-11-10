@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   formatPushBody,
   isAllowedPushEndpoint,
+  parseJstDateTime,
 } from "../src/routes/push"
 
 describe("web push helpers", () => {
@@ -18,6 +19,13 @@ describe("web push helpers", () => {
     expect(isAllowedPushEndpoint("https://fcm.googleapis.com/fcm/send/example")).toBe(true)
     expect(isAllowedPushEndpoint("https://web.push.apple.com/example")).toBe(true)
     expect(isAllowedPushEndpoint("https://updates.push.services.mozilla.com/example")).toBe(true)
+  })
+
+  it("parses timezone-less tool rental deadlines as JST", () => {
+    expect(parseJstDateTime("2026-11-10 20:00:00"))
+      .toBe(Date.parse("2026-11-10T20:00:00+09:00"))
+    expect(parseJstDateTime("2026-11-10T20:00:00Z"))
+      .toBe(Date.parse("2026-11-10T20:00:00Z"))
   })
 
   it("rejects insecure and untrusted endpoints", () => {

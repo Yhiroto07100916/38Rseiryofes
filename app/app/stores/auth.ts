@@ -1,3 +1,4 @@
+import { deleteNotificationCache } from "~/utils/notification-cache"
 import { defineStore } from 'pinia'
 
 interface AuthUser {
@@ -111,6 +112,21 @@ export const useAuthStore = defineStore('auth', () => {
   const logout = async () => {
     authRevision += 1
     fetchMePromise = null
+
+    const accountId = user.value?.id
+    if (accountId) {
+      void deleteNotificationCache(accountId).catch(() => {
+        // キャッシュ削除失敗はログアウト処理を妨げない。
+      })
+    }
+
+    // ログアウト要求の完了を待たずに認証状態を無効化し、
+    // 通知一覧などの進行中リクエストがUIを更新しないようにする。
+    user.value = null
+    permissions.value = []
+    roles.value = []
+    accountRoles.value = []
+    initialized.value = true
 
     try {
       await apiFetch('/api/auth/logout', {

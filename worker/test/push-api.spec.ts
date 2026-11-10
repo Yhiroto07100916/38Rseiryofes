@@ -71,6 +71,16 @@ function createEndpoint(): string {
   return endpoint;
 }
 
+async function getUserId(cookie: string): Promise<string> {
+  const sessionId = cookie.replace(/^session_id=/, "")
+  const session = await env.DB.prepare(
+    "SELECT user_id FROM sessions WHERE id = ?",
+  ).bind(sessionId).first<{ user_id: string }>()
+  if (!session) throw new Error("Test session not found")
+  return session.user_id
+}
+
+
 function createRequest(
   method: string,
   endpoint: string,
@@ -206,9 +216,15 @@ describe("Push subscription API", () => {
     const endpoint = createEndpoint();
 
     await env.DB.prepare(`
-      INSERT INTO push_subscriptions (id, endpoint, p256dh, auth)
-      VALUES (?, ?, ?, ?)
-    `).bind(crypto.randomUUID(), endpoint, validP256dh, validAuth).run();
+      INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(
+      crypto.randomUUID(),
+      await getUserId(cookie),
+      endpoint,
+      validP256dh,
+      validAuth,
+    ).run();
 
     const response = await handlePush(
       new Request(
@@ -228,9 +244,15 @@ describe("Push subscription API", () => {
     const endpoint = createEndpoint();
 
     await env.DB.prepare(`
-      INSERT INTO push_subscriptions (id, endpoint, p256dh, auth)
-      VALUES (?, ?, ?, ?)
-    `).bind(crypto.randomUUID(), endpoint, validP256dh, validAuth).run();
+      INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(
+      crypto.randomUUID(),
+      await getUserId(cookie),
+      endpoint,
+      validP256dh,
+      validAuth,
+    ).run();
 
     const response = await handlePush(
       createRequest("DELETE", "", cookie, { endpoint }),
