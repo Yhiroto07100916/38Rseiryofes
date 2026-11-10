@@ -618,6 +618,7 @@ export const useNotifications = () => {
         if (updatedIds.has(item.id)) {
           item.is_read = 1
           item.read_updated_at = updatedReadStates.get(item.id)?.read_updated_at ?? item.read_updated_at
+          item.read_version = updatedReadStates.get(item.id)?.read_version ?? item.read_version
         }
       }
       if (readFilter.value === "unread") {
