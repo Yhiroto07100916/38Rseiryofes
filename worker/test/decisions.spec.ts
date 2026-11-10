@@ -125,7 +125,7 @@ describe("Decision history", () => {
       category: "decisions",
       title: "新しい意思決定が登録されました",
       body: "履歴テスト",
-      target_url: "/decisions/" + decisionId,
+      target_url: "/decisions?open=" + decisionId,
     })
 
     const creatorNotification = await env.DB.prepare(
