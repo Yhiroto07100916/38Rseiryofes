@@ -123,3 +123,31 @@ test("preserves the original cache freshness when updating cached contents", asy
   assert.equal(cached?.expired, true)
   assert.equal(cached?.unreadCount, 2)
 })
+
+test("records a server clock baseline when the first server time becomes available", async () => {
+  await saveNotificationCache("account-g", [notification("g-1")], 1)
+  const serverTime = new Date(Date.now() + 2 * 60 * 1000).toISOString()
+
+  assert.equal(await validateNotificationCacheClock("account-g", serverTime), true)
+
+  const record = readFakeIndexedDBRecord(DATABASE_NAME, STORE_NAME, "account-g")
+  assert.ok(record)
+  assert.equal(typeof record.clientTimeAtSave, "number")
+  assert.equal(record.serverTimeAtSave, Date.parse(serverTime))
+  assert.ok(Math.abs((record.clockOffsetMs ?? 0) - 2 * 60 * 1000) < 2_000)
+})
+
+test("deletes cache when server and client clocks differ by more than five minutes", async () => {
+  await saveNotificationCache("account-h", [notification("h-1")], 1)
+  const serverTime = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+
+  assert.equal(await validateNotificationCacheClock("account-h", serverTime), false)
+  assert.equal(readFakeIndexedDBRecord(DATABASE_NAME, STORE_NAME, "account-h"), undefined)
+})
+
+test("skips clock validation when the server time is unavailable", async () => {
+  await saveNotificationCache("account-i", [notification("i-1")], 1)
+
+  assert.equal(await validateNotificationCacheClock("account-i", undefined), true)
+  assert.ok(readFakeIndexedDBRecord(DATABASE_NAME, STORE_NAME, "account-i"))
+})
