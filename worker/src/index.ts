@@ -27,6 +27,7 @@ import { handleSubmissions, processDueSubmissionNotifications } from "./routes/s
 import { handleWishlist } from "./routes/wishlist"
 import { processDueCalendarNotifications } from "./routes/calendar-reminders"
 import { getSessionUser } from "./lib/session"
+import { getSecuritySettings } from "./lib/site-settings"
 
 async function readSiteAccessSettings(env: Env): Promise<{
   visibility: "public" | "private"
@@ -111,6 +112,26 @@ async function enforceSiteAccess(
 
   const settings = await readSiteAccessSettings(env)
   const user = await getSessionUser(request, env)
+
+  if (user) {
+    const securitySettings = await getSecuritySettings(env)
+    if (securitySettings.force_password_change) {
+      const passwordState = await env.DB.prepare(
+        "SELECT password_changed_at FROM users WHERE id = ?",
+      ).bind(user.id).first<{ password_changed_at: string | null }>()
+      const allowedDuringPasswordChange = [
+        "/api/auth/me",
+        "/api/auth/password",
+        "/api/auth/logout",
+      ].includes(pathname)
+      if (!passwordState?.password_changed_at && !allowedDuringPasswordChange) {
+        return Response.json(
+          { error: "Password change required", code: "PASSWORD_CHANGE_REQUIRED" },
+          { status: 403 },
+        )
+      }
+    }
+  }
 
   if (settings.maintenanceMode) {
     if (!user) {
