@@ -233,7 +233,7 @@ export async function handleWishlist(
         category: "wishlist",
         title: "ほしい物リストに新しい品目が登録されました",
         body: title,
-        targetUrl: "/wishlist?open=" + encodeURIComponent(itemId),
+        targetUrl: "/wishlist?open=" + encodeURIComponent(id),
         requiredPermission: "wishlist.view",
         actorUserId: auth.user.id,
         entityType: "wishlist_item",
