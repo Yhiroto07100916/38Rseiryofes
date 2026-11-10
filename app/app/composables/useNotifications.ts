@@ -154,6 +154,7 @@ export const useNotifications = () => {
 
   const pollLatest = async () => {
     if (requestInProgress) return
+    requestInProgress = true
     try {
       const response = await apiFetch<NotificationListResponse>(
         "/api/notifications?" + buildQuery(false),
@@ -168,6 +169,8 @@ export const useNotifications = () => {
       unreadCount.value = response.unread_count
     } catch {
       // ポーリング失敗時は現在の一覧を維持する。
+    } finally {
+      requestInProgress = false
     }
   }
 
