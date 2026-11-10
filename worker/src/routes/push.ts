@@ -798,9 +798,11 @@ export async function canAccessNotificationTarget(
         const dueAt = parseJstDateTime(loan.due_at)
         if (
           delivery.event_key !== "tool_rental.due_soon:" + delivery.entity_id + ":" + loan.due_at ||
-          !Number.isFinite(dueAt) || dueAt <= Date.now() || dueAt > Date.now() + 11 * 60_000
+          !Number.isFinite(dueAt) || dueAt <= Date.now() || dueAt > Date.now() + 6 * 60_000
         ) return false
-      } else if (parseJstDateTime(loan.due_at) > Date.now()) {
+      } else if (dueAt + 5 * 60_000 > Date.now()) {
+        // due_atは返却予定時刻の5分前に鳴る既存タイマー時刻。
+        // 超過通知は、その5分後の実際の返却予定時刻を過ぎてから送る。
         return false
       }
     }
@@ -820,7 +822,7 @@ export async function canAccessNotificationTarget(
       const dueAt = loanItem.due_at ? parseJstDateTime(loanItem.due_at) : Number.NaN
       if (
         loanItem.returned_at !== null || loanItem.status !== "borrowed" ||
-        !Number.isFinite(dueAt) || dueAt <= Date.now() || dueAt > Date.now() + 6 * 60_000
+        !Number.isFinite(dueAt) || dueAt > Date.now() || dueAt <= Date.now() - 6 * 60_000
       ) return false
     }
   }
@@ -953,44 +955,6 @@ export async function canAccessNotificationTarget(
     if (linkedAccessChecks.length === 0 || !(await Promise.all(linkedAccessChecks)).some(Boolean)) {
       return false
     }
-  }
-
-  if (
-    delivery.entity_type === "tool_loan" &&
-    delivery.entity_id &&
-    (delivery.event_key.startsWith("tool_rental.due_soon:") ||
-      delivery.event_key.startsWith("tool_rental.overdue:"))
-  ) {
-    const loan = await env.DB.prepare(
-      "SELECT status, due_at FROM loans WHERE id = ?",
-    ).bind(Number(delivery.entity_id)).first<{ status: string; due_at: string | null }>()
-    if (!loan || loan.status !== "borrowed" || !loan.due_at) return false
-    if (delivery.event_key.startsWith("tool_rental.due_soon:")) {
-      const dueAt = Date.parse(loan.due_at)
-      if (
-        delivery.event_key !== "tool_rental.due_soon:" + delivery.entity_id + ":" + loan.due_at ||
-        !Number.isFinite(dueAt) || dueAt <= Date.now() || dueAt > Date.now() + 11 * 60_000
-      ) return false
-    } else if (Date.parse(loan.due_at) > Date.now()) {
-      return false
-    }
-  }
-
-  if (
-    delivery.entity_type === "tool_loan_item" &&
-    delivery.event_key.startsWith("tool_rental.timer_end:") &&
-    delivery.entity_id
-  ) {
-    const item = await env.DB.prepare(
-      "SELECT li.returned_at, l.status, l.due_at FROM loan_items li " +
-      "INNER JOIN loans l ON l.id = li.loan_id WHERE li.id = ?",
-    ).bind(Number(delivery.entity_id)).first<{ returned_at: string | null; status: string; due_at: string | null }>()
-    if (
-      !item || item.returned_at !== null || item.status !== "borrowed" ||
-      !item.due_at || !Number.isFinite(Date.parse(item.due_at)) ||
-      Date.parse(item.due_at) <= Date.now() ||
-      Date.parse(item.due_at) > Date.now() + 6 * 60_000
-    ) return false
   }
 
   if (delivery.entity_type === "survey" && delivery.entity_id) {
