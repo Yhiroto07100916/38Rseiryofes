@@ -96,10 +96,11 @@ export async function processDueToolRentalNotifications(env: Env): Promise<void>
     "AND presence_due_soon_notified_at IS NULL",
   ).all<{ id: number; tool_name_snapshot: string | null; due_at: string }>()
 
+  const onCampusUserIds = await getOnCampusUserIds(env)
   for (const loan of dueSoon.results) {
     try {
       await createNotificationsForUsers(env, {
-        recipientUserIds: allUserIds,
+        recipientUserIds: onCampusUserIds,
         eventKey: "tool_rental.due_soon:" + loan.id + ":" + loan.due_at,
         category: "tool_rental",
         title: "工具の返却期限が近づいています",
