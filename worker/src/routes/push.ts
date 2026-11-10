@@ -922,6 +922,11 @@ async function processOneNotificationDelivery(
       await env.DB.prepare(
         "DELETE FROM push_subscriptions WHERE id = ?",
       ).bind(delivery.subscription_id).run()
+      await updateNotificationDelivery(env, delivery.delivery_id, {
+        status: "failed",
+        attemptCount: attemptNumber,
+        error: "Push subscription is no longer valid",
+      })
       return
     }
 
@@ -979,8 +984,8 @@ export async function processDueNotificationPushDeliveries(env: Env): Promise<vo
     "d.attempt_count, s.endpoint, s.p256dh, s.auth, n.title, n.body, n.target_url, " +
     "n.recipient_user_id, n.category, n.event_key, n.required_permission, n.entity_type, n.entity_id " +
     "FROM notification_push_deliveries d " +
-    "INNER JOIN push_subscriptions s ON s.id = d.subscription_id " +
     "INNER JOIN notifications n ON n.id = d.notification_id " +
+    "INNER JOIN push_subscriptions s ON s.id = d.subscription_id AND s.user_id = n.recipient_user_id " +
     "WHERE (d.status = 'pending' AND d.next_attempt_at <= CURRENT_TIMESTAMP) " +
     "OR (d.status = 'sending' AND d.lease_until <= CURRENT_TIMESTAMP) " +
     "ORDER BY d.created_at ASC LIMIT ?",
