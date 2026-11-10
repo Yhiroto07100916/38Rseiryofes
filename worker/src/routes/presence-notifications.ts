@@ -172,13 +172,16 @@ export async function notifyUsers(env: Env, input: NotificationInput): Promise<n
 
   let userIds = [...new Set(input.userIds.filter(Boolean))];
   if (input.insideOnly) {
-    const placeholders = userIds.length ? userIds.map(() => "?").join(",") : "";
-    if (!userIds.length) return 0;
-    const inside = await env.DB.prepare(`
-      SELECT user_id FROM presence_states
-      WHERE user_id IN (${placeholders}) AND status = 'inside'
-        AND local_date = ? AND expires_at > ?
-    `).bind(...userIds, jstParts().date, new Date().toISOString()).all<{ user_id: string }>();
+    const inside = userIds.length
+      ? await env.DB.prepare(`
+          SELECT user_id FROM presence_states
+          WHERE user_id IN (${userIds.map(() => "?").join(",")}) AND status = 'inside'
+            AND local_date = ? AND expires_at > ?
+        `).bind(...userIds, jstParts().date, new Date().toISOString()).all<{ user_id: string }>()
+      : await env.DB.prepare(`
+          SELECT user_id FROM presence_states
+          WHERE status = 'inside' AND local_date = ? AND expires_at > ?
+        `).bind(jstParts().date, new Date().toISOString()).all<{ user_id: string }>();
     userIds = inside.results.map(row => row.user_id);
   }
   for (const userId of userIds) {
@@ -298,9 +301,10 @@ export async function processScheduledToolRentalNotifications(env: Env) {
   const dueSoon = await env.DB.prepare(`
     SELECT id, tool_name_snapshot, due_at FROM loans
     WHERE status = 'borrowed' AND due_at IS NOT NULL
-      AND due_at > ? AND due_at <= datetime(?, '+' || ? || ' minutes')
+      AND due_at > datetime('now', '+9 hours')
+      AND due_at <= datetime('now', '+9 hours', '+' || ? || ' minutes')
       AND presence_due_soon_notified_at IS NULL
-  `).bind(nowIso, nowIso, dueSoonMinutes).all<{ id: number; tool_name_snapshot: string | null; due_at: string }>();
+  `).bind(dueSoonMinutes).all<{ id: number; tool_name_snapshot: string | null; due_at: string }>();
   for (const loan of dueSoon.results) {
     await notifyUsers(env, {
       eventKey: `tool-loan:${loan.id}:due-soon`, eventType: "tool_loan_due_soon",
@@ -313,9 +317,10 @@ export async function processScheduledToolRentalNotifications(env: Env) {
 
   const overdue = await env.DB.prepare(`
     SELECT id, tool_name_snapshot FROM loans
-    WHERE status = 'borrowed' AND due_at IS NOT NULL AND due_at <= ?
+    WHERE status = 'borrowed' AND due_at IS NOT NULL
+      AND due_at <= datetime('now', '+9 hours')
       AND presence_overdue_notified_at IS NULL
-  `).bind(nowIso).all<{ id: number; tool_name_snapshot: string | null }>();
+  `).all<{ id: number; tool_name_snapshot: string | null }>();
   for (const loan of overdue.results) {
     const inside = await env.DB.prepare(`
       SELECT user_id FROM presence_states
@@ -334,8 +339,9 @@ export async function processScheduledToolRentalNotifications(env: Env) {
     SELECT li.id AS loan_item_id, l.id AS loan_id, l.tool_name_snapshot
     FROM loan_items li INNER JOIN loans l ON l.id = li.loan_id
     WHERE li.returned_at IS NULL AND l.status = 'borrowed' AND l.due_at IS NOT NULL
-      AND l.due_at <= ? AND li.timer_alarm_notified_at IS NULL
-  `).bind(nowIso).all<{ loan_item_id: number; loan_id: number; tool_name_snapshot: string | null }>();
+      AND l.due_at <= datetime('now', '+9 hours')
+      AND li.timer_alarm_notified_at IS NULL
+  `).all<{ loan_item_id: number; loan_id: number; tool_name_snapshot: string | null }>();
   for (const alarm of alarms.results) {
     const inside = await env.DB.prepare(`
       SELECT user_id FROM presence_states
