@@ -478,6 +478,26 @@ describe("Files access permissions", () => {
       "SELECT id FROM notifications WHERE entity_id = ? AND recipient_user_id = ?",
     ).bind(uploaded.id, fixture.userId).first();
     expect(actorNotification).toBeNull();
+
+    const silentFormData = new FormData();
+    silentFormData.set("file", new File(["silent upload"], "silent.txt", { type: "text/plain" }));
+    silentFormData.set("category", category!.slug);
+
+    const silentResponse = await SELF.fetch("http://example.com/api/files", {
+      method: "POST",
+      headers: { Cookie: fixture.cookie },
+      body: silentFormData,
+    });
+
+    expect(silentResponse.status).toBe(201);
+    const silentUpload = await silentResponse.json() as { id: string; object_key: string };
+    fixture.uploadedFileIds.push(silentUpload.id);
+    fixture.objectKeys.push(silentUpload.object_key);
+
+    const silentNotification = await env.DB.prepare(
+      "SELECT id FROM notifications WHERE entity_type = 'file' AND entity_id = ?",
+    ).bind(silentUpload.id).first();
+    expect(silentNotification).toBeNull();
   });
 
 });
