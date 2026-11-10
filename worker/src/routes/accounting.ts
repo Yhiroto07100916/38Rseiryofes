@@ -1,5 +1,6 @@
 import { isFileLinkConflict } from "../lib/file-link-errors"
 import { hasPermission, requireAuth } from "../lib/authz"
+import { createNotificationsForUsers } from "../lib/notifications"
 
 type Env = {
   DB: D1Database
@@ -916,6 +917,9 @@ export async function handleAccounting(
           )
 
           const receiptId = crypto.randomUUID()
+          const reimbursementId = paymentMethod === "advance" && paidByUserId
+            ? crypto.randomUUID()
+            : null
           const createdBy = user instanceof Response ? null : user.user.id
           const now = new Date().toISOString()
 
@@ -1003,7 +1007,7 @@ export async function handleAccounting(
                   VALUES (?, ?, ?, ?, 'pending', ?, ?)
                 `,
               ).bind(
-                crypto.randomUUID(),
+                reimbursementId,
                 receiptId,
                 paidByUserId,
                 totalAmount,
@@ -1014,6 +1018,32 @@ export async function handleAccounting(
           }
 
           await env.DB.batch(statements)
+
+          if (reimbursementId && paidByUserId) {
+            try {
+              const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+              const eligible = await Promise.all(users.results.map(async candidate => ({
+                id: candidate.id,
+                allowed: candidate.id !== createdBy &&
+                  await hasPermission(env, candidate.id, "accounting.approve"),
+              })))
+              await createNotificationsForUsers(env, {
+                recipientUserIds: eligible.filter(candidate => candidate.allowed).map(candidate => candidate.id),
+                eventKey: "accounting.reimbursement_requested",
+                category: "accounting",
+                title: "新しい返金申請があります",
+                body: "返金申請：" + totalAmount.toLocaleString("ja-JP") + "円",
+                targetUrl: "/accounting/reimbursements",
+                requiredPermission: "accounting.approve",
+                actorUserId: createdBy,
+                entityType: "reimbursement",
+                entityId: reimbursementId,
+                dedupeKey: "accounting.reimbursement_requested:" + reimbursementId,
+              })
+            } catch (notificationError) {
+              console.error("Failed to create reimbursement request notifications:", notificationError)
+            }
+          }
 
           return json(
             {
@@ -2031,14 +2061,14 @@ export async function handleAccounting(
 
         const reimbursement = await env.DB.prepare(
           `
-            SELECT id
+            SELECT id, user_id, status, receipt_id
             FROM receipt_reimbursements
             WHERE id = ?
             LIMIT 1
           `,
         )
           .bind(reimbursementId)
-          .first<{ id: string }>()
+          .first<{ id: string; user_id: string; status: string; receipt_id: string }>()
 
         if (!reimbursement) {
           return json({ message: "精算情報が見つかりません" }, 404)
@@ -2070,6 +2100,32 @@ export async function handleAccounting(
             reimbursementId,
           )
           .run()
+
+        if (
+          status !== reimbursement.status &&
+          (status === "paid" || status === "cancelled")
+        ) {
+          try {
+            await createNotificationsForUsers(env, {
+              recipientUserIds: [reimbursement.user_id],
+              eventKey: status === "paid"
+                ? "accounting.reimbursement_paid"
+                : "accounting.reimbursement_cancelled",
+              category: "accounting",
+              title: status === "paid"
+                ? "返金申請が支払済みになりました"
+                : "返金申請が取り消されました",
+              body: "返金申請の状態：" + (status === "paid" ? "支払済み" : "取消"),
+              targetUrl: "/accounting/reimbursements",
+              actorUserId: user instanceof Response ? null : user.user.id,
+              entityType: "reimbursement",
+              entityId: reimbursementId,
+              dedupeKey: "accounting.reimbursement_" + status + ":" + reimbursementId + ":" + crypto.randomUUID(),
+            })
+          } catch (notificationError) {
+            console.error("Failed to create reimbursement status notification:", notificationError)
+          }
+        }
 
         return json({
           reimbursement: await env.DB.prepare(
