@@ -84,10 +84,11 @@ async function createSubscription(): Promise<string> {
   const endpoint = `https://fcm.googleapis.com/fcm/send/${crypto.randomUUID()}`;
 
   await env.DB.prepare(`
-    INSERT INTO push_subscriptions (id, endpoint, p256dh, auth)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth)
+    VALUES (?, ?, ?, ?, ?)
   `).bind(
     id,
+    userId,
     endpoint,
     toBase64Url(publicKey),
     toBase64Url(authKey),
