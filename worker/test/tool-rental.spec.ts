@@ -359,7 +359,7 @@ describe("38R tool inventory and lending ledger", () => {
     expect(dueSoon.results.map(row => row.recipient_user_id).sort())
       .toEqual(allUsers.results.map(row => row.id).sort())
 
-    await env.DB.prepare("UPDATE loans SET due_at = datetime('now', '+9 hours', '-1 minute') WHERE id = ?")
+    await env.DB.prepare("UPDATE loans SET due_at = datetime('now', '+9 hours', '-6 minutes') WHERE id = ?")
       .bind(checkoutBody.loan_id).run()
     const loanItem = await env.DB.prepare("SELECT id FROM loan_items WHERE loan_id = ?")
       .bind(checkoutBody.loan_id).first<{ id: number }>()
