@@ -339,8 +339,8 @@ function formatDate(value: string): string {
 
 async function openNotification(item: AppNotification) {
   if (!item.is_read) {
-    const saved = await setRead(item.id, true)
-    if (!saved) return
+    // 既読保存に失敗しても、通知を開く操作自体は妨げない。
+    await setRead(item.id, true)
   }
   const target = item.target_url
   if (target && target.startsWith("/") && !target.startsWith("//")) {
