@@ -86,7 +86,7 @@ describe("Calendar notification events", () => {
     expect(createdNotification).toMatchObject({
       event_key: "calendar.created",
       recipient_user_id: recipient.id,
-      target_url: "/calendar",
+      target_url: "/calendar/" + event.id,
     })
 
     const actorNotification = await env.DB.prepare(
