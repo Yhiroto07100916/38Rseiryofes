@@ -489,7 +489,7 @@ describe("Files access permissions", () => {
       event_key: "files.uploaded",
       recipient_user_id: fixture.recipientUserId,
       body: "notify.txt",
-      target_url: "/files",
+      target_url: "/files?open=" + uploaded.id,
     });
 
     const actorNotification = await env.DB.prepare(
