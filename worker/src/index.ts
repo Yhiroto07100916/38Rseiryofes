@@ -8,7 +8,7 @@ import { handleTasks } from "./routes/tasks"
 import { handleCalendar } from "./routes/calendar"
 import { handleCalendarCategories } from "./routes/calendar-categories"
 import { handleNews } from "./routes/news"
-import { handlePush, processDuePushDeliveries } from "./routes/push"
+import { handlePush, processDuePushDeliveries, processDueNotificationPushDeliveries } from "./routes/push"
 import { handleNotifications } from "./routes/notifications"
 import { handleScripts } from "./routes/scripts"
 import { handleEquipment } from "./routes/equipment"
@@ -863,6 +863,12 @@ export default {
       await processDuePushDeliveries(env)
     } catch (error) {
       console.error("Scheduled push delivery failed:", error)
+    }
+
+    try {
+      await processDueNotificationPushDeliveries(env)
+    } catch (error) {
+      console.error("Scheduled notification push delivery failed:", error)
     }
   },
 } satisfies ExportedHandler<Env>
