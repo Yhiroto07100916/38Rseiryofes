@@ -623,6 +623,7 @@ export async function handleNews(
         title,
         body: detail,
         targetUrl: `/news/${newsId}`,
+        requiredPermission: "news.view",
         actorUserId: auth.user.id,
         entityType: "news",
         entityId: newsId,
