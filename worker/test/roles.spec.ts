@@ -384,6 +384,48 @@ describe("site settings authorization", () => {
     }
   })
 
+  it("reflects basic site branding settings through the public status endpoint", async () => {
+    const cookie = await createAdminSession()
+    const patch = await SELF.fetch("http://example.com/api/account-roles/settings", {
+      method: "PATCH",
+      headers: {
+        Cookie: cookie,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        settings: {
+          site_name: "38R テストサイト",
+          site_description: "設定反映のテスト説明",
+          event_name: "文化祭テスト",
+          event_year: 2027,
+        },
+      }),
+    })
+    expect(patch.status).toBe(200)
+
+    try {
+      const response = await SELF.fetch("http://example.com/api/site-status")
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        site_name: "38R テストサイト",
+        site_description: "設定反映のテスト説明",
+        event_name: "文化祭テスト",
+        event_year: 2027,
+      })
+    } finally {
+      await env.DB.batch([
+        env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'site_name'")
+          .bind(JSON.stringify("38R星陵祭準備サイト")),
+        env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'site_description'")
+          .bind(JSON.stringify("38Rの星陵祭準備を管理するサイトです。")),
+        env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'event_name'")
+          .bind(JSON.stringify("星陵祭")),
+        env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'event_year'")
+          .bind(JSON.stringify(2026)),
+      ])
+    }
+  })
+
   it("enforces and can disable the global login requirement", async () => {
     const initialStatus = await SELF.fetch("http://example.com/api/site-status")
     expect(await initialStatus.json()).toMatchObject({
