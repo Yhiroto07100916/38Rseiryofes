@@ -293,15 +293,19 @@ export async function handleToolRental(
         throw error
       }
       await refreshToolCounts(env.DB, item.tool_id)
-      await notifyUsers(env, {
-        eventKey: `tool-loan:${loanId}:checked-out`,
-        eventType: "tool_loan_checked_out",
-        title: "工具の貸出が完了しました",
-        body: `${item.tool_name}（${item.management_number}）の貸出を記録しました。`,
-        targetUrl: "/tool-rental/loans/current",
-        userIds: [auth.user.id],
-        insideOnly: true,
-      })
+      try {
+        await notifyUsers(env, {
+          eventKey: `tool-loan:${loanId}:checked-out`,
+          eventType: "tool_loan_checked_out",
+          title: "工具の貸出が完了しました",
+          body: `${item.tool_name}（${item.management_number}）の貸出を記録しました。`,
+          targetUrl: "/tool-rental/loans/current",
+          userIds: [auth.user.id],
+          insideOnly: true,
+        })
+      } catch (error) {
+        console.error("Failed to enqueue tool checkout notification:", error)
+      }
       return json({ success: true, loan_id: loanId }, 201)
     }
 
@@ -386,14 +390,18 @@ export async function handleToolRental(
               LIMIT 2
             `).bind(borrower.name, borrower.name).all<{ id: string }>()
         if (matchingUsers.results.length === 1) {
-          await notifyUsers(env, {
-            eventKey: `tool-loan-item:${loanItem.id}:returned`,
-            eventType: "tool_loan_returned",
-            title: "工具の返却が確認されました",
-            body: `${borrower.name}さんが借りた工具の返却が記録されました。`,
-            targetUrl: "/tool-rental/loans/history",
-            userIds: [matchingUsers.results[0].id],
-            insideOnly: true,
+          try {
+            await notifyUsers(env, {
+              eventKey: `tool-loan-item:${loanItem.id}:returned`,
+              eventType: "tool_loan_returned",
+              title: "工具の返却が確認されました",
+              body: `${borrower.name}さんが借りた工具の返却が記録されました。`,
+              targetUrl: "/tool-rental/loans/history",
+              userIds: [matchingUsers.results[0].id],
+              insideOnly: true,
+            }
+          } catch (error) {
+            console.error("Failed to enqueue tool return notification:", error)
           })
         }
       }
