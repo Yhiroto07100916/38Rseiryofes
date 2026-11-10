@@ -374,7 +374,7 @@ export const useNotifications = () => {
         requestAccountId &&
         readFilter.value === "all" &&
         selectedCategories.value.length === 0 &&
-        !search.value.trim()
+        !String(search.value ?? "").trim()
       ) {
         void refreshFullCache(requestAccountId)
       }
@@ -562,7 +562,7 @@ export const useNotifications = () => {
         if (readFilter.value === "unread" && item.is_read) return false
         if (readFilter.value === "read" && !item.is_read) return false
         if (selectedCategories.value.length > 0 && !selectedCategories.value.includes(item.category)) return false
-        const term = search.value.trim().toLocaleLowerCase()
+        const term = String(search.value ?? "").trim().toLocaleLowerCase()
         if (!term) return true
         const labels: Record<string, string> = {
           tasks: "タスク", calendar: "カレンダー", submissions: "提出物",
