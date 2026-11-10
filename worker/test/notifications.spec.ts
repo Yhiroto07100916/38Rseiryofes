@@ -122,11 +122,11 @@ describe("Notification center API", () => {
     )
     const data = await response.json() as {
       notifications: Array<{ id: string }>
-      known_notifications: Array<{ id: string; is_read: number }>
+      known_notifications: Array<{ id: string; is_read: number; read_updated_at: string; read_version: number }>
     }
 
     expect(data.notifications).toHaveLength(0)
-    expect(data.known_notifications).toEqual(expect.arrayContaining([expect.objectContaining({ id, is_read: 1 })]))
+    expect(data.known_notifications).toEqual(expect.arrayContaining([expect.objectContaining({ id, is_read: 1, read_version: expect.any(Number) })]))
   })
 
   it("returns notifications newest first and limits each page to 20", async () => {
@@ -167,23 +167,26 @@ describe("Notification center API", () => {
       [id, "read"],
     )
     expect(updated.status).toBe(200)
-    const updateBody = await updated.json() as { read_updated_at: string }
+    const updateBody = await updated.json() as { read_updated_at: string; read_version: number }
     expect(updateBody.read_updated_at).toBeTruthy()
 
     const stored = await env.DB.prepare(
-      "SELECT is_read, read_updated_at FROM notifications WHERE id = ?",
-    ).bind(id).first<{ is_read: number; read_updated_at: string }>()
+      "SELECT is_read, read_updated_at, read_version FROM notifications WHERE id = ?",
+    ).bind(id).first<{ is_read: number; read_updated_at: string; read_version: number }>()
     expect(stored?.is_read).toBe(1)
     expect(stored?.read_updated_at).toBe(updateBody.read_updated_at)
+    expect(stored?.read_version).toBe(updateBody.read_version)
+    expect(updateBody.read_version).toBeGreaterThan(1)
 
     const refetched = await handleNotifications(
       request("GET", "/" + id, owner.cookie),
       env,
       [id],
     )
-    const refetchedBody = await refetched.json() as { notification: { is_read: number; read_updated_at: string } }
+    const refetchedBody = await refetched.json() as { notification: { is_read: number; read_updated_at: string; read_version: number } }
     expect(refetchedBody.notification.is_read).toBe(1)
     expect(refetchedBody.notification.read_updated_at).toBe(updateBody.read_updated_at)
+    expect(refetchedBody.notification.read_version).toBe(updateBody.read_version)
   })
 
   it("uses enabled-by-default push preferences and persists category/global changes", async () => {
@@ -239,7 +242,7 @@ describe("Notification center API", () => {
     const data = await response.json() as {
       updated_count: number
       updated_ids: string[]
-      updated_read_states: Array<{ id: string; read_updated_at: string }>
+      updated_read_states: Array<{ id: string; read_updated_at: string; read_version: number }>
     }
 
     expect(response.status).toBe(200)
@@ -248,12 +251,14 @@ describe("Notification center API", () => {
     expect(data.updated_read_states).toHaveLength(1)
     expect(data.updated_read_states[0]?.id).toBe(unreadId)
     expect(data.updated_read_states[0]?.read_updated_at).toBeTruthy()
+    expect(data.updated_read_states[0]?.read_version).toBeGreaterThan(1)
 
     const storedReadState = await env.DB.prepare(
       "SELECT is_read, read_updated_at FROM notifications WHERE id = ?",
     ).bind(unreadId).first<{ is_read: number; read_updated_at: string }>()
     expect(storedReadState?.is_read).toBe(1)
     expect(storedReadState?.read_updated_at).toBe(data.updated_read_states[0]?.read_updated_at)
+    expect(storedReadState?.read_version).toBe(data.updated_read_states[0]?.read_version)
 
     const count = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM notifications WHERE recipient_user_id = ? AND is_read = 0",
