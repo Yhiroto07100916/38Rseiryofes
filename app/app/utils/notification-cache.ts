@@ -14,6 +14,7 @@ export interface NotificationCacheRecord {
   savedAt: number
   clientTimeAtSave?: number
   serverTimeAtSave?: number | null
+  clockOffsetMs?: number | null
   unreadCount: number
   notifications: CachedNotification[]
 }
@@ -114,7 +115,7 @@ export async function loadNotificationCache(
     record.version !== CACHE_VERSION ||
     !Number.isFinite(record.savedAt) ||
     !Number.isFinite(record.unreadCount) ||
-    (record.clockOffsetMs !== null && !Number.isFinite(record.clockOffsetMs)) ||
+    (record.clockOffsetMs !== undefined && record.clockOffsetMs !== null && !Number.isFinite(record.clockOffsetMs)) ||
     !Array.isArray(record.notifications) ||
     !record.notifications.every(validNotification) ||
     record.savedAt > now + 5 * 60 * 1000 ||
@@ -178,12 +179,15 @@ export async function saveNotificationCache(
 
     await new Promise<void>((resolve, reject) => {
       const transaction = database.transaction(STORE_NAME, "readwrite")
+      const savedAt = Date.now()
+      const serverTimeAtSave = serverTime ? Date.parse(serverTime) : Number.NaN
       transaction.objectStore(STORE_NAME).put({
         accountId,
         version: CACHE_VERSION,
-        savedAt: Date.now(),
-        clientTimeAtSave: Date.now(),
-        serverTimeAtSave: serverTime ? Date.parse(serverTime) : null,
+        savedAt,
+        clientTimeAtSave: savedAt,
+        serverTimeAtSave: Number.isFinite(serverTimeAtSave) ? serverTimeAtSave : null,
+        clockOffsetMs: Number.isFinite(serverTimeAtSave) ? serverTimeAtSave - savedAt : null,
         unreadCount: Math.max(0, Math.floor(unreadCount)),
         notifications: cachedNotifications,
       } satisfies NotificationCacheRecord)
