@@ -187,6 +187,7 @@ describe("Notification center API", () => {
     expect(refetchedBody.notification.is_read).toBe(1)
     expect(refetchedBody.notification.read_updated_at).toBe(updateBody.read_updated_at)
     expect(refetchedBody.notification.read_version).toBe(updateBody.read_version)
+    expect(refetchedBody.notification.read_version).toBe(updateBody.read_version)
 
     const secondUpdate = await handleNotifications(
       request("PATCH", "/" + id + "/read", owner.cookie, { is_read: false }),
