@@ -1,4 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { createNotificationsForUsers } from "../lib/notifications"
 
 type Env = {
   DB: D1Database
@@ -56,6 +57,23 @@ async function permitted(
   }
 
   return auth
+}
+
+async function getSubmissionRoleMemberIds(env: Env, roleId: string | null): Promise<string[]> {
+  if (!roleId) return []
+  const result = await env.DB.prepare(
+    "SELECT user_id FROM user_roles WHERE role_id = ?",
+  ).bind(roleId).all<{ user_id: string }>()
+  return result.results.map(row => row.user_id)
+}
+
+async function getUsersWithPermission(env: Env, permission: string): Promise<string[]> {
+  const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+  const allowed = await Promise.all(users.results.map(async user => ({
+    id: user.id,
+    allowed: await hasPermission(env, user.id, permission),
+  })))
+  return allowed.filter(user => user.allowed).map(user => user.id)
 }
 
 async function getSubmission(
@@ -335,6 +353,24 @@ export async function handleSubmissions(
         },
       ),
     ])
+
+    try {
+      const recipients = await getSubmissionRoleMemberIds(env, assignedRoleId)
+      await createNotificationsForUsers(env, {
+        recipientUserIds: recipients,
+        eventKey: "submissions.created",
+        category: "submissions",
+        title: "新しい提出物が作成されました",
+        body: title,
+        targetUrl: "/submissions/" + submissionId,
+        actorUserId: auth.user.id,
+        entityType: "submission",
+        entityId: submissionId,
+        dedupeKey: "submissions.created:" + submissionId,
+      })
+    } catch (notificationError) {
+      console.error("Failed to create submission notifications:", notificationError)
+    }
 
     return json(
       {
@@ -657,6 +693,27 @@ export async function handleSubmissions(
       )
     }
 
+    try {
+      const recipients = [...new Set([
+        ...await getSubmissionRoleMemberIds(env, current.assigned_role_id),
+        current.created_by,
+      ])]
+      await createNotificationsForUsers(env, {
+        recipientUserIds: recipients,
+        eventKey: "submissions.updated",
+        category: "submissions",
+        title: "提出物が更新されました",
+        body: updates.title ?? current.title,
+        targetUrl: "/submissions/" + id,
+        actorUserId: auth.user.id,
+        entityType: "submission",
+        entityId: id,
+        dedupeKey: "submissions.updated:" + id + ":" + (current.version + 1),
+      })
+    } catch (notificationError) {
+      console.error("Failed to create submission update notifications:", notificationError)
+    }
+
     return json({ ok: true, version: current.version + 1 })
   }
 
@@ -840,6 +897,24 @@ export async function handleSubmissions(
       )
     }
 
+    try {
+      const reviewers = await getUsersWithPermission(env, "submissions.review")
+      await createNotificationsForUsers(env, {
+        recipientUserIds: [...new Set([current.created_by, ...reviewers])],
+        eventKey: nextStatus === "resubmitted" ? "submissions.resubmitted" : "submissions.submitted",
+        category: "submissions",
+        title: nextStatus === "resubmitted" ? "提出物が再提出されました" : "提出物が提出されました",
+        body: current.title,
+        targetUrl: "/submissions/" + id,
+        actorUserId: auth.user.id,
+        entityType: "submission",
+        entityId: id,
+        dedupeKey: "submissions." + nextStatus + ":" + recordId,
+      })
+    } catch (notificationError) {
+      console.error("Failed to create submission record notifications:", notificationError)
+    }
+
     return json(
       {
         id: recordId,
@@ -1004,6 +1079,51 @@ export async function handleSubmissions(
         { error: "別のユーザーによって状態が変更されています。再読み込みしてください" },
         409,
       )
+    }
+
+    try {
+      const roleMembers = await getSubmissionRoleMemberIds(env, current.assigned_role_id)
+      const reviewers = action === "start_review"
+        ? await getUsersWithPermission(env, "submissions.review")
+        : []
+      const latestSubmitter = await env.DB.prepare(
+        "SELECT submitted_by FROM submission_records WHERE submission_id = ? ORDER BY attempt_number DESC LIMIT 1",
+      ).bind(id).first<{ submitted_by: string }>()
+      const recipientUserIds = action === "ready_to_submit"
+        ? roleMembers
+        : action === "start_review" || action === "request_changes"
+          ? (latestSubmitter ? [latestSubmitter.submitted_by] : [])
+          : [...new Set([...roleMembers, current.created_by])]
+
+      const eventKeyByAction: Record<string, string> = {
+        ready_to_submit: "submissions.ready_to_submit",
+        start_review: "submissions.review_started",
+        request_changes: "submissions.changes_requested",
+        complete: "submissions.completed",
+        cancel: "submissions.cancelled",
+      }
+      const titleByAction: Record<string, string> = {
+        ready_to_submit: "提出物が提出可能になりました",
+        start_review: "提出物の確認が開始されました",
+        request_changes: "提出物に修正依頼がありました",
+        complete: "提出物が完了しました",
+        cancel: "提出物が取り消されました",
+      }
+
+      await createNotificationsForUsers(env, {
+        recipientUserIds: action === "start_review" ? [...new Set([...recipientUserIds, ...(latestSubmitter ? [latestSubmitter.submitted_by] : [])])] : recipientUserIds,
+        eventKey: eventKeyByAction[action],
+        category: "submissions",
+        title: titleByAction[action],
+        body: action === "request_changes" ? current.title + "：" + note : current.title,
+        targetUrl: "/submissions/" + id,
+        actorUserId: auth.user.id,
+        entityType: "submission",
+        entityId: id,
+        dedupeKey: eventKeyByAction[action] + ":" + id + ":" + (current.version + 1),
+      })
+    } catch (notificationError) {
+      console.error("Failed to create submission status notifications:", notificationError)
     }
 
     return json({
