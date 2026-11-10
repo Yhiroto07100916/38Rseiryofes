@@ -700,7 +700,36 @@ async function canAccessNotificationTarget(
     const file = await env.DB.prepare(
       "SELECT archived_at FROM files WHERE id = ?",
     ).bind(delivery.entity_id).first<{ archived_at: string | null }>()
-    return Boolean(file && file.archived_at === null)
+    if (!file || file.archived_at !== null) return false
+
+    const links = await env.DB.prepare(
+      "SELECT " +
+      "EXISTS (SELECT 1 FROM receipt_files WHERE file_id = ?) AS has_receipt, " +
+      "EXISTS (SELECT 1 FROM task_files WHERE file_id = ?) AS has_task, " +
+      "EXISTS (SELECT 1 FROM decision_files WHERE file_id = ?) AS has_decision, " +
+      "EXISTS (SELECT 1 FROM submission_record_files WHERE file_id = ?) AS has_submission",
+    ).bind(
+      delivery.entity_id,
+      delivery.entity_id,
+      delivery.entity_id,
+      delivery.entity_id,
+    ).first<{
+      has_receipt: number
+      has_task: number
+      has_decision: number
+      has_submission: number
+    }>()
+
+    if (!links || links.has_submission) return false
+    if (links.has_receipt && !(await hasPermission(env, delivery.recipient_user_id, "accounting.view"))) {
+      return false
+    }
+    if (links.has_task && !(await hasPermission(env, delivery.recipient_user_id, "tasks.view"))) {
+      return false
+    }
+    if (links.has_decision && !(await hasPermission(env, delivery.recipient_user_id, "decisions.view"))) {
+      return false
+    }
   }
 
   if (delivery.entity_type === "survey" && delivery.entity_id) {
