@@ -535,6 +535,8 @@ export const useNotifications = () => {
       unreadFailures = 0
       hasSuccessfulApiFetch = false
       manualRefreshRequested = false
+      pendingResetFetch = false
+      pendingUnreadRefresh = Boolean(accountId && unreadRequestInProgress)
       clearListRetry()
       clearUnreadRetry()
 
@@ -542,6 +544,7 @@ export const useNotifications = () => {
         void loadCache(accountId)
         void fetchPage(true)
         void refreshUnreadCount()
+        startPolling()
       } else {
         stopPolling()
       }
