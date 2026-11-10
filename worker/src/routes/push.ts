@@ -838,7 +838,11 @@ async function canAccessNotificationTarget(
     ).bind(Number(delivery.entity_id)).first<{ status: string; due_at: string | null }>()
     if (!loan || loan.status !== "borrowed" || !loan.due_at) return false
     if (delivery.event_key.startsWith("tool_rental.due_soon:")) {
-      if (delivery.event_key !== "tool_rental.due_soon:" + delivery.entity_id + ":" + loan.due_at) return false
+      const dueAt = Date.parse(loan.due_at)
+      if (
+        delivery.event_key !== "tool_rental.due_soon:" + delivery.entity_id + ":" + loan.due_at ||
+        !Number.isFinite(dueAt) || dueAt <= Date.now() || dueAt > Date.now() + 11 * 60_000
+      ) return false
     } else if (Date.parse(loan.due_at) > Date.now()) {
       return false
     }
@@ -855,7 +859,9 @@ async function canAccessNotificationTarget(
     ).bind(Number(delivery.entity_id)).first<{ returned_at: string | null; status: string; due_at: string | null }>()
     if (
       !item || item.returned_at !== null || item.status !== "borrowed" ||
-      !item.due_at || Date.parse(item.due_at) > Date.now()
+      !item.due_at || !Number.isFinite(Date.parse(item.due_at)) ||
+      Date.parse(item.due_at) <= Date.now() ||
+      Date.parse(item.due_at) > Date.now() + 6 * 60_000
     ) return false
   }
 
