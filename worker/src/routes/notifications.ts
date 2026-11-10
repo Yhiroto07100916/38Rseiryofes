@@ -87,9 +87,23 @@ export async function handleNotifications(
     if (readState === "read") conditions.push("is_read = 1")
 
     if (search) {
-      conditions.push("(LOWER(title) LIKE ? OR LOWER(body) LIKE ? OR LOWER(category) LIKE ?)")
+      const categoryLabel = "CASE category " +
+        "WHEN 'tasks' THEN 'タスク' " +
+        "WHEN 'calendar' THEN 'カレンダー' " +
+        "WHEN 'submissions' THEN '提出物' " +
+        "WHEN 'news' THEN 'お知らせ' " +
+        "WHEN 'surveys' THEN 'アンケート' " +
+        "WHEN 'decisions' THEN '意思決定' " +
+        "WHEN 'equipment' THEN '備品' " +
+        "WHEN 'tool_rental' THEN '工具貸出' " +
+        "WHEN 'accounting' THEN '会計' " +
+        "WHEN 'files' THEN 'ファイル' " +
+        "WHEN 'milk_collection' THEN '牛乳パック' " +
+        "WHEN 'wishlist' THEN 'ほしい物リスト' " +
+        "WHEN 'account_admin' THEN 'アカウント' ELSE category END"
+      conditions.push("(LOWER(title) LIKE ? OR LOWER(body) LIKE ? OR LOWER(category) LIKE ? OR " + categoryLabel + " LIKE ?)")
       const pattern = "%" + search.toLocaleLowerCase() + "%"
-      bindings.push(pattern, pattern, pattern)
+      bindings.push(pattern, pattern, pattern, pattern)
     }
 
     if (beforeCreatedAt && beforeId) {
@@ -134,10 +148,13 @@ export async function handleNotifications(
     // 1つのUPDATEで処理し、実行中に新着通知が割り込む余地と部分更新をなくす。
     const result = await env.DB.prepare(
       "UPDATE notifications SET is_read = 1 " +
-      "WHERE recipient_user_id = ? AND is_read = 0",
-    ).bind(userId).run()
+      "WHERE recipient_user_id = ? AND is_read = 0 RETURNING id",
+    ).bind(userId).all<{ id: string }>()
 
-    return Response.json({ updated_count: result.meta?.changes ?? 0 })
+    return Response.json({
+      updated_count: result.results.length,
+      updated_ids: result.results.map(row => row.id),
+    })
   }
 
   if (pathParts.length === 1 && pathParts[0] === "settings" && method === "GET") {
