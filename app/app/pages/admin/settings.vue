@@ -74,6 +74,13 @@ const featureOptions = [
   { key: 'attendance', title: '出欠' },
   { key: 'surveys', title: 'アンケート' },
   { key: 'files', title: 'ファイル' },
+  { key: 'submissions', title: '提出物' },
+  { key: 'decisions', title: '意思決定' },
+  { key: 'minutes', title: '議事録' },
+  { key: 'tool_rental', title: '工具貸出' },
+  { key: 'wishlist', title: 'ほしい物リスト' },
+  { key: 'milk_collection', title: '牛乳パック回収' },
+  { key: 'members', title: 'メンバー管理' },
 ]
 const notificationOptions = [
   { key: 'news', title: 'お知らせ' },
