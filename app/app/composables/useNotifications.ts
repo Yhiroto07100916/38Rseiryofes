@@ -639,19 +639,24 @@ export const useNotifications = () => {
     const listed = new Map(response.notifications.map(item => [item.id, item]))
     const local = new Map(cacheSnapshot.map(item => [item.id, item]))
     for (const item of notifications.value) local.set(item.id, item)
+    const isNewerThan = (
+      candidate: { read_version: number; read_updated_at: string },
+      current: AppNotification,
+    ) => {
+      if (candidate.read_version !== current.read_version) {
+        return candidate.read_version > current.read_version
+      }
+      const candidateTime = Date.parse(candidate.read_updated_at)
+      const currentTime = Date.parse(current.read_updated_at ?? current.created_at)
+      // 同一バージョン・同時刻で矛盾した場合は、後から実行されたknown_notifications取得結果を優先する。
+      return Number.isFinite(candidateTime) && Number.isFinite(currentTime) && candidateTime >= currentTime
+    }
     const conflicts = (response.known_notifications ?? []).filter(known => {
-      const knownTime = Date.parse(known.read_updated_at)
       const listedItem = listed.get(known.id)
       const localItem = local.get(known.id)
-      const listedTime = listedItem
-        ? Date.parse(listedItem.read_updated_at ?? listedItem.created_at)
-        : Number.NaN
-      const localTime = localItem
-        ? Date.parse(localItem.read_updated_at ?? localItem.created_at)
-        : Number.NaN
       return Boolean(
-        (listedItem && listedItem.is_read !== known.is_read && knownTime >= listedTime) ||
-        (localItem && localItem.is_read !== known.is_read && knownTime >= localTime),
+        (listedItem && listedItem.is_read !== known.is_read && isNewerThan(known, listedItem)) ||
+        (localItem && localItem.is_read !== known.is_read && isNewerThan(known, localItem)),
       )
     })
 
@@ -739,13 +744,15 @@ export const useNotifications = () => {
           if (!latestReadState) return item
           const localReadAt = Date.parse(item.read_updated_at ?? item.created_at)
           const serverReadAt = Date.parse(latestReadState.read_updated_at)
-          if (Number.isFinite(localReadAt) && Number.isFinite(serverReadAt) && localReadAt > serverReadAt) {
-            return item
-          }
+          const serverIsNewer = latestReadState.read_version > item.read_version ||
+            (latestReadState.read_version === item.read_version &&
+              Number.isFinite(localReadAt) && Number.isFinite(serverReadAt) && serverReadAt >= localReadAt)
+          if (!serverIsNewer) return item
           return {
             ...item,
             is_read: latestReadState.is_read,
             read_updated_at: latestReadState.read_updated_at,
+            read_version: latestReadState.read_version,
           }
         })
         .filter(matchesCurrentFilters)
