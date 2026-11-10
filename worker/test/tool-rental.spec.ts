@@ -325,8 +325,15 @@ describe("38R tool inventory and lending ledger", () => {
     expect(returnNotifications.results.map(row => row.recipient_user_id).sort())
       .toEqual([manager.userId, onCampus.userId].sort())
   })
-  it("sends due-soon, timer-end, and overdue notifications to all users", async () => {
+  it("sends due-soon notifications to on-campus users and timer-end/overdue notifications to everyone", async () => {
     const manager = await createUser("期限通知担当")
+    const onCampus = await createUser("期限前の在校ユーザー")
+    const checkedAt = new Date().toISOString()
+    const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+    await env.DB.prepare(
+      "INSERT INTO presence_states (user_id, status, method, checked_at, expires_at, local_date) " +
+      "VALUES (?, 'inside', 'manual', ?, ?, date('now', '+9 hours'))",
+    ).bind(onCampus.userId, checkedAt, expiresAt).run()
     await grant(manager.userId, [
       "tool_rental.view",
       "tool_rental.manage",
@@ -356,8 +363,8 @@ describe("38R tool inventory and lending ledger", () => {
 
     const dueSoon = await env.DB.prepare("SELECT recipient_user_id FROM notifications WHERE event_key = ?")
       .bind("tool_rental.due_soon:" + checkoutBody.loan_id + ":" + loan?.due_at).all<{ recipient_user_id: string }>()
-    expect(dueSoon.results.map(row => row.recipient_user_id).sort())
-      .toEqual(allUsers.results.map(row => row.id).sort())
+    expect(dueSoon.results.map(row => row.recipient_user_id))
+      .toEqual([onCampus.userId])
 
     await env.DB.prepare("UPDATE loans SET due_at = datetime('now', '+9 hours', '-6 minutes') WHERE id = ?")
       .bind(checkoutBody.loan_id).run()
