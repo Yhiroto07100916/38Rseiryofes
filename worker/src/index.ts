@@ -147,10 +147,26 @@ async function enforceSiteAccess(
       "feature_settings",
       {},
     )
-    if (featureSettings[matchedFeature[1]]?.enabled === false) {
+    const feature = featureSettings[matchedFeature[1]]
+    if (feature?.enabled === false) {
       return Response.json(
         { error: "This feature is currently disabled", feature: matchedFeature[1] },
         { status: 503 },
+      )
+    }
+    const action = request.method === "GET" || request.method === "HEAD"
+      ? "view"
+      : request.method === "PATCH" || request.method === "PUT"
+        ? "edit"
+        : request.method === "DELETE"
+          ? "delete"
+          : request.method === "POST" && pathname === matchedFeature[0]
+            ? "create"
+            : null
+    if (action && feature?.[action] === false) {
+      return Response.json(
+        { error: "This operation is disabled by site settings", feature: matchedFeature[1], action },
+        { status: 403 },
       )
     }
   }
