@@ -363,8 +363,13 @@ describe("38R tool inventory and lending ledger", () => {
 
     const dueSoon = await env.DB.prepare("SELECT recipient_user_id FROM notifications WHERE event_key = ?")
       .bind("tool_rental.due_soon:" + checkoutBody.loan_id + ":" + loan?.due_at).all<{ recipient_user_id: string }>()
-    expect(dueSoon.results.map(row => row.recipient_user_id))
-      .toEqual([onCampus.userId])
+    const expectedOnCampus = await env.DB.prepare(
+      "SELECT user_id FROM presence_states WHERE status = 'inside' " +
+      "AND local_date = date('now', '+9 hours') AND expires_at > ?",
+    ).bind(new Date().toISOString()).all<{ user_id: string }>()
+    expect(dueSoon.results.map(row => row.recipient_user_id).sort())
+      .toEqual(expectedOnCampus.results.map(row => row.user_id).sort())
+    expect(dueSoon.results.map(row => row.recipient_user_id)).not.toContain(offCampus.userId)
 
     await env.DB.prepare("UPDATE loans SET due_at = datetime('now', '+9 hours', '-6 minutes') WHERE id = ?")
       .bind(checkoutBody.loan_id).run()
