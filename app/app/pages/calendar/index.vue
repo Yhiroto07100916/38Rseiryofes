@@ -8,6 +8,16 @@
       <div class="calendar-header d-flex align-center justify-space-between flex-grow-1">
         <h1 class="text-h5 font-weight-bold">カレンダー</h1>
 
+        <v-select
+          v-model="calendarView"
+          :items="[{ title: '月表示', value: 'month' }, { title: '予定一覧', value: 'list' }]"
+          density="compact"
+          hide-details
+          variant="outlined"
+          aria-label="カレンダー表示"
+          style="max-width: 130px"
+        />
+
         <v-btn
           icon="mdi-plus"
           color="primary"
@@ -58,18 +68,19 @@
         height="2"
       />
 
-      <div class="calendar-weekdays">
-        <div
-          v-for="day in weekDays"
-          :key="day.label"
-          class="weekday"
-          :class="day.class"
-        >
-          {{ day.label }}
+      <template v-if="calendarView === 'month'">
+        <div class="calendar-weekdays">
+          <div
+            v-for="day in weekDays"
+            :key="day.label"
+            class="weekday"
+            :class="day.class"
+          >
+            {{ day.label }}
+          </div>
         </div>
-      </div>
 
-      <div class="calendar-grid">
+        <div class="calendar-grid">
         <button
           v-for="day in calendarDays"
           :key="day.key"
@@ -127,6 +138,20 @@
             </div>
           </div>
         </button>
+        </div>
+      </template>
+      <v-list v-else-if="events.length > 0" lines="two" class="py-0">
+        <v-list-item
+          v-for="event in events"
+          :key="event.id"
+          :title="event.title"
+          :subtitle="`${formatEventDate(event.starts_at)} ・ ${formatEventRange(event)}`"
+          prepend-icon="mdi-calendar-clock"
+          @click="openEvent(event)"
+        />
+      </v-list>
+      <div v-else class="empty-events py-8 text-center text-medium-emphasis">
+        予定はありません。
       </div>
     </v-card>
 
@@ -411,6 +436,8 @@ const {
 
 const { mobile } = useDisplay()
 const router = useRouter()
+const siteStatus = useSiteStatus()
+const calendarView = ref<"month" | "list">(siteStatus.value?.calendar_default_view ?? "month")
 
 const now = parseDateKey(jstDateKey(new Date()))
 
@@ -495,7 +522,7 @@ const formatSelectedDate = computed(() => {
   const date = parseDateKey(selectedDate.value)
 
   return new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
+    timeZone: siteStatus.value?.timezone || 'Asia/Tokyo',
     month: 'long',
     day: 'numeric',
     weekday: 'long',
@@ -607,7 +634,7 @@ function getTaskDeadlinesForDate(dateKey: string): Task[] {
 
 function formatTaskDeadline(value: string): string {
   return new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
+    timeZone: siteStatus.value?.timezone || 'Asia/Tokyo',
     hour: 'numeric',
     minute: '2-digit',
   }).format(new Date(value))
@@ -791,9 +818,19 @@ async function deleteEvent() {
   }
 }
 
+function formatEventDate(value: string): string {
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: siteStatus.value?.timezone || "Asia/Tokyo",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    weekday: "short",
+  }).format(new Date(value))
+}
+
 function formatEventTime(event: CalendarEvent): string {
   return new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
+    timeZone: siteStatus.value?.timezone || 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(event.starts_at))
@@ -807,7 +844,7 @@ function formatEventRange(event: CalendarEvent): string {
   const start = new Date(event.starts_at)
 
   const startText = new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
+    timeZone: siteStatus.value?.timezone || 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(start)
@@ -817,7 +854,7 @@ function formatEventRange(event: CalendarEvent): string {
   }
 
   const endText = new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
+    timeZone: siteStatus.value?.timezone || 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(event.ends_at))
