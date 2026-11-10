@@ -215,7 +215,10 @@ async function handleLogin(
     !user.password_hash ||
     !(await verifyPassword(body.password, user.password_hash))
   ) {
-    const failedAttempts = (lock?.failed_attempts ?? 0) + 1
+    const lockExpired = lock?.locked_until
+      ? Date.parse(lock.locked_until + (lock.locked_until.endsWith("Z") ? "" : "Z")) <= Date.now()
+      : false
+    const failedAttempts = (lockExpired ? 0 : lock?.failed_attempts ?? 0) + 1
     const lockedUntil = failedAttempts >= securitySettings.login_attempt_limit
       ? new Date(Date.now() + securitySettings.login_lock_minutes * 60_000).toISOString()
       : null
