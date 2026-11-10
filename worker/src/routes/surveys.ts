@@ -134,7 +134,7 @@ async function getSurveyRecipientUserIds(env: Env): Promise<string[]> {
 async function notifySurveyRecipients(
   env: Env,
   survey: Survey,
-  actorUserId: string,
+  actorUserId: string | undefined,
   eventKey: "surveys.published" | "surveys.opened" | "surveys.closed",
   operationId: string,
 ): Promise<void> {
@@ -219,7 +219,7 @@ export async function processDueSurveyNotifications(env: Env): Promise<void> {
       await notifySurveyRecipients(
         env,
         { ...survey, status: "closed", updated_at: closedAt },
-        survey.created_by,
+        undefined,
         "surveys.closed",
         closedAt,
       )
@@ -243,7 +243,7 @@ export async function processDueSurveyNotifications(env: Env): Promise<void> {
       await notifySurveyRecipients(
         env,
         survey,
-        survey.created_by,
+        undefined,
         "surveys.opened",
         survey.starts_at ?? "scheduled-open",
       )
