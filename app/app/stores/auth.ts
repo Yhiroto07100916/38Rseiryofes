@@ -120,6 +120,14 @@ export const useAuthStore = defineStore('auth', () => {
       })
     }
 
+    // ログアウト要求の完了を待たずに認証状態を無効化し、
+    // 通知一覧などの進行中リクエストがUIを更新しないようにする。
+    user.value = null
+    permissions.value = []
+    roles.value = []
+    accountRoles.value = []
+    initialized.value = true
+
     try {
       await apiFetch('/api/auth/logout', {
         method: 'POST',
