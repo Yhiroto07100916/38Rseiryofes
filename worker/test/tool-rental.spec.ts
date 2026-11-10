@@ -358,7 +358,7 @@ describe("38R tool inventory and lending ledger", () => {
     })
     expect(checkout.status).toBe(201)
     const checkoutBody = await checkout.json() as { loan_id: number }
-    await env.DB.prepare("UPDATE loans SET due_at = datetime('now', '+9 hours', '+5 minutes') WHERE id = ?")
+    await env.DB.prepare("UPDATE loans SET due_at = datetime('now', '+9 hours', '+10 minutes') WHERE id = ?")
       .bind(checkoutBody.loan_id).run()
     const loan = await env.DB.prepare("SELECT due_at FROM loans WHERE id = ?")
       .bind(checkoutBody.loan_id).first<{ due_at: string }>()
@@ -376,7 +376,7 @@ describe("38R tool inventory and lending ledger", () => {
       .toEqual(expectedOnCampus.results.map(row => row.user_id).sort())
     expect(dueSoon.results.map(row => row.recipient_user_id)).not.toContain(offCampus.userId)
 
-    await env.DB.prepare("UPDATE loans SET due_at = datetime('now', '+9 hours', '-6 minutes') WHERE id = ?")
+    await env.DB.prepare("UPDATE loans SET due_at = datetime('now', '+9 hours', '+5 minutes') WHERE id = ?")
       .bind(checkoutBody.loan_id).run()
     const loanItem = await env.DB.prepare("SELECT id FROM loan_items WHERE loan_id = ?")
       .bind(checkoutBody.loan_id).first<{ id: number }>()
@@ -384,10 +384,14 @@ describe("38R tool inventory and lending ledger", () => {
 
     const timerEnd = await env.DB.prepare("SELECT recipient_user_id FROM notifications WHERE event_key = ?")
       .bind("tool_rental.timer_end:" + loanItem?.id).all<{ recipient_user_id: string }>()
-    const overdue = await env.DB.prepare("SELECT recipient_user_id FROM notifications WHERE event_key = ?")
-      .bind("tool_rental.overdue:" + checkoutBody.loan_id).all<{ recipient_user_id: string }>()
     expect(timerEnd.results.map(row => row.recipient_user_id).sort())
       .toEqual(allUsers.results.map(row => row.id).sort())
+
+    await env.DB.prepare("UPDATE loans SET due_at = datetime('now', '+9 hours', '-1 minute') WHERE id = ?")
+      .bind(checkoutBody.loan_id).run()
+    await processDueToolRentalNotifications(env)
+    const overdue = await env.DB.prepare("SELECT recipient_user_id FROM notifications WHERE event_key = ?")
+      .bind("tool_rental.overdue:" + checkoutBody.loan_id).all<{ recipient_user_id: string }>()
     expect(overdue.results.map(row => row.recipient_user_id).sort())
       .toEqual(allUsers.results.map(row => row.id).sort())
 
