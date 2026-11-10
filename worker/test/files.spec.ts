@@ -18,6 +18,7 @@ type Fixture = {
     decision: string;
     submission: string;
   };
+  uploadedFileIds: string[];
   objectKeys: string[];
   cookie: string;
 };
@@ -59,6 +60,7 @@ async function createFixture(): Promise<Fixture> {
       decision: crypto.randomUUID(),
       submission: crypto.randomUUID(),
     },
+    uploadedFileIds: [],
     objectKeys: [],
     cookie: `session_id=${sessionId}`,
   };
@@ -209,7 +211,7 @@ afterEach(async () => {
     await env.DB.prepare("DELETE FROM sessions WHERE id = ?")
       .bind(fixture.sessionId).run();
 
-    for (const fileId of Object.values(fixture.fileIds)) {
+    for (const fileId of [...Object.values(fixture.fileIds), ...fixture.uploadedFileIds]) {
       await env.DB.prepare("DELETE FROM files WHERE id = ?")
         .bind(fileId).run();
     }
@@ -451,6 +453,7 @@ describe("Files access permissions", () => {
 
     expect(response.status).toBe(201);
     const uploaded = await response.json() as { id: string; object_key: string };
+    fixture.uploadedFileIds.push(uploaded.id);
     fixture.objectKeys.push(uploaded.object_key);
 
     const notification = await env.DB.prepare(`
