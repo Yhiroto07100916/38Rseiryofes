@@ -308,7 +308,7 @@
         <v-card-text class="px-5">
           <v-text-field v-model="editForm.title" label="提出物名" variant="outlined" />
           <v-text-field v-model="editForm.destination" label="提出先" variant="outlined" />
-          <v-text-field v-model="editForm.dueAt" label="提出期限" type="datetime-local" variant="outlined" clearable />
+          <CommonJstDateTimePicker v-model="editForm.dueAt" label="提出期限" clearable />
           <v-textarea v-model="editForm.description" label="説明・注意事項" variant="outlined" rows="4" />
         </v-card-text>
         <v-card-actions class="px-5 pb-5">
