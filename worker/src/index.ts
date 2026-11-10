@@ -382,6 +382,8 @@ export default {
         logo_url: settings.logoUrl,
         favicon_url: settings.faviconUrl,
         calendar_default_view: settings.calendarDefaultView,
+        task_default_status: settings.taskDefaultStatus,
+        upload_max_file_size_mb: settings.uploadMaxFileSizeMb,
         feature_enabled: settings.featureEnabled,
         is_authenticated: Boolean(user),
         is_admin: isAdmin,
