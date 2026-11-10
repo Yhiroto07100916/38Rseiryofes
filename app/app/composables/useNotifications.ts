@@ -76,6 +76,7 @@ export const useNotifications = () => {
   let unreadFailures = 0
   let hasSuccessfulApiFetch = false
   const cacheUpdatePromises = new Map<string, Promise<void>>()
+  let cachedClockOffsetMs: number | null = null
 
   const buildQuery = (includeCursor: boolean) => {
     const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
@@ -120,6 +121,7 @@ export const useNotifications = () => {
     try {
       const cached = await loadNotificationCache(accountId)
       if (!cached || hasSuccessfulApiFetch || auth.user?.id !== accountId) return
+      cachedClockOffsetMs = cached.clockOffsetMs
 
       const term = String(search.value ?? "").trim().toLocaleLowerCase()
       const categoryLabels: Record<string, string> = {
@@ -164,6 +166,27 @@ export const useNotifications = () => {
       hasMore.value = filtered.length > PAGE_SIZE || cached.notifications.length >= 100
     } catch {
       // キャッシュ障害時はAPI取得を継続する。
+    }
+  }
+
+  const validateServerClock = async (accountId: string | null, serverTime?: string) => {
+    if (!accountId || !serverTime) return
+    const serverTimestamp = Date.parse(serverTime)
+    if (!Number.isFinite(serverTimestamp)) return
+
+    const currentOffset = serverTimestamp - Date.now()
+    if (
+      cachedClockOffsetMs !== null &&
+      Math.abs(currentOffset - cachedClockOffsetMs) > 5 * 60 * 1000
+    ) {
+      await deleteNotificationCache(accountId).catch(() => undefined)
+      cachedClockOffsetMs = null
+      if (!hasSuccessfulApiFetch) {
+        notifications.value = []
+        unreadCount.value = 0
+        cursor.value = null
+        hasMore.value = false
+      }
     }
   }
 
@@ -317,6 +340,7 @@ export const useNotifications = () => {
         "/api/notifications?" + buildQuery(!reset),
       )
       if (auth.user?.id !== requestAccountId) return
+      await validateServerClock(requestAccountId, response.server_time)
       hasSuccessfulApiFetch = true
       applyResponse(response, reset)
       if (
@@ -388,8 +412,9 @@ export const useNotifications = () => {
     unreadRequestInProgress = true
     unreadCountLoading.value = true
     try {
-      const response = await apiFetch<{ unread_count: number }>("/api/notifications/unread-count")
+      const response = await apiFetch<{ unread_count: number; server_time?: string }>("/api/notifications/unread-count")
       if (auth.user?.id !== requestAccountId) return
+      await validateServerClock(requestAccountId, response.server_time)
       unreadCount.value = response.unread_count
       const recovered = unreadFailures > 0 || Boolean(unreadCountError.value)
       unreadFailures = 0
@@ -473,6 +498,7 @@ export const useNotifications = () => {
         "/api/notifications?" + buildQuery(false),
       )
       if (auth.user?.id !== requestAccountId) return
+      await validateServerClock(requestAccountId, response.server_time)
       hasSuccessfulApiFetch = true
       const merged = response.notifications
       const incomingIds = new Set(merged.map(item => item.id))
@@ -560,6 +586,7 @@ export const useNotifications = () => {
       listFailures = 0
       unreadFailures = 0
       hasSuccessfulApiFetch = false
+      cachedClockOffsetMs = null
       manualRefreshRequested = false
       pendingResetFetch = false
       pendingUnreadRefresh = Boolean(accountId && unreadRequestInProgress)
