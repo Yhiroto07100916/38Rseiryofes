@@ -719,13 +719,20 @@ async function canAccessNotificationTarget(
       "SELECT 1 FROM loans WHERE id = ?",
     ).bind(Number(delivery.entity_id)).first()
     if (!loan) return false
+    if (delivery.event_key.startsWith("tool_rental.due_soon") || delivery.event_key.startsWith("tool_rental.overdue")) {
+      const outstanding = await env.DB.prepare(
+        "SELECT 1 FROM loan_items WHERE loan_id = ? AND returned_at IS NULL LIMIT 1",
+      ).bind(Number(delivery.entity_id)).first()
+      if (!outstanding) return false
+    }
   }
 
   if (delivery.entity_type === "tool_loan_item" && delivery.entity_id) {
     const loanItem = await env.DB.prepare(
-      "SELECT 1 FROM loan_items WHERE id = ?",
-    ).bind(Number(delivery.entity_id)).first()
+      "SELECT returned_at FROM loan_items WHERE id = ?",
+    ).bind(Number(delivery.entity_id)).first<{ returned_at: string | null }>()
     if (!loanItem) return false
+    if (delivery.event_key.startsWith("tool_rental.timer_end") && loanItem.returned_at) return false
   }
 
   if (delivery.entity_type === "wishlist_item" && delivery.entity_id) {
