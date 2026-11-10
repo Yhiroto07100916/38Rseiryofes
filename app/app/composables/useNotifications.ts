@@ -587,7 +587,12 @@ export const useNotifications = () => {
     item.is_read = isRead ? 1 : 0
 
     try {
-      const saved = await apiFetch<{ read_updated_at: string; read_version: number }>(
+      const saved = await apiFetch<{
+        is_read: boolean
+        read_updated_at: string
+        read_version: number
+        unread_count: number
+      }>(
         "/api/notifications/" + encodeURIComponent(id) + "/read",
         {
           method: "PATCH",
@@ -600,18 +605,17 @@ export const useNotifications = () => {
       readStateWriteCompletedAt.set(id, Date.now())
       const currentItem = notifications.value.find(notification => notification.id === id)
       if (currentItem) {
-        currentItem.is_read = isRead ? 1 : 0
+        currentItem.is_read = saved.is_read ? 1 : 0
         currentItem.read_updated_at = saved.read_updated_at
         currentItem.read_version = saved.read_version
       }
       const cachedItem = cacheSnapshot.find(notification => notification.id === id)
       if (cachedItem) {
-        cachedItem.is_read = isRead ? 1 : 0
+        cachedItem.is_read = saved.is_read ? 1 : 0
         cachedItem.read_updated_at = saved.read_updated_at
         cachedItem.read_version = saved.read_version
       }
-      unreadCount.value = Math.max(0, unreadCount.value + (isRead ? -1 : 1))
-      await refreshUnreadCount()
+      unreadCount.value = saved.unread_count
       void saveCacheSnapshot(requestAccountId)
       return true
     } catch {
