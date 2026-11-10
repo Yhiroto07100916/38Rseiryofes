@@ -53,15 +53,20 @@ self.addEventListener('notificationclick', (event) => {
 
     // Push通知から開いた場合も、ログイン中なら正本の既読状態を先に更新する。
     if (typeof notificationId === 'string' && notificationId.length <= 64) {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 2500)
       try {
         await fetch(new URL('/api/notifications/' + encodeURIComponent(notificationId) + '/read', self.location.origin), {
           method: 'PATCH',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ is_read: true }),
+          signal: controller.signal,
         })
       } catch (error) {
         console.error('Failed to mark the opened Push notification as read:', error)
+      } finally {
+        clearTimeout(timeout)
       }
     }
 
