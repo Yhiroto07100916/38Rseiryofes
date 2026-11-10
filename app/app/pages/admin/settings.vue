@@ -481,7 +481,7 @@ onMounted(loadSettings)
         <v-divider />
         <v-card-text class="pa-5">
           <v-select v-model="settings.operation_settings.calendar_default_view" label="カレンダー初期表示"
-            :items="[{ title: '月', value: 'month' }, { title: '週', value: 'week' }, { title: '日', value: 'day' }, { title: '一覧', value: 'list' }]" />
+            :items="[{ title: '月表示', value: 'month' }, { title: '予定一覧', value: 'list' }]" />
           <v-select v-model="settings.operation_settings.task_default_status" label="新規タスクの初期状態"
             :items="[{ title: '未着手', value: 'todo' }, { title: '進行中', value: 'in_progress' }, { title: '完了', value: 'done' }]" />
           <v-text-field v-model.number="settings.operation_settings.upload_max_file_size_mb" type="number" min="1" max="100" label="アップロード上限（MB）" />
