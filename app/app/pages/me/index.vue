@@ -956,6 +956,9 @@ const changingNickname = ref(false)
 const nickname = ref('')
 
 const passwordDialog = ref(false)
+watch(() => auth.user?.must_change_password, (required) => {
+  if (required) passwordDialog.value = true
+}, { immediate: true })
 const changingPassword = ref(false)
 
 const passwordForm = ref({
@@ -1287,6 +1290,7 @@ const changePassword = async () => {
       body: passwordForm.value,
     })
 
+    await auth.fetchMe()
     snackbar.success('パスワードを変更しました。')
 
     passwordForm.value = {
