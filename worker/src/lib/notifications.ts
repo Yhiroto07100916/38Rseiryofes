@@ -27,8 +27,8 @@ export async function createNotificationsForUsers(
   const results = await env.DB.batch(
     recipientIds.map(userId => env.DB.prepare(
       "INSERT OR IGNORE INTO notifications (" +
-      "id, recipient_user_id, event_key, category, title, body, target_url, required_permission, actor_user_id, entity_type, entity_id, dedupe_key, expires_at" +
-      ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+90 days'))",
+      "id, recipient_user_id, event_key, category, title, body, target_url, required_permission, actor_user_id, entity_type, entity_id, dedupe_key, expires_at, read_updated_at" +
+      ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+90 days'), CURRENT_TIMESTAMP)",
     ).bind(
       crypto.randomUUID(),
       userId,
