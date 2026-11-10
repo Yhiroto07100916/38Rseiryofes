@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
 const CONSENT_KEY = "38r-presence-location-enabled";
 
@@ -6,6 +6,8 @@ export type PresenceStatus = "inside" | "outside" | "unknown";
 
 export function usePresence() {
   const { apiFetch } = useApi();
+  const auth = useAuthStore();
+  const consentKey = computed(() => `${CONSENT_KEY}:${auth.user?.id ?? "anonymous"}`);
   const status = useState<PresenceStatus>("presence-status", () => "unknown");
   const method = useState<string | null>("presence-method", () => null);
   const busy = ref(false);
@@ -14,7 +16,11 @@ export function usePresence() {
 
   const refresh = async () => {
     if (!import.meta.client) return;
-    enabled.value = localStorage.getItem(CONSENT_KEY) === "true";
+    if (!auth.user?.id) {
+      enabled.value = false;
+      return;
+    }
+    enabled.value = localStorage.getItem(consentKey.value) === "true";
     try {
       const result = await apiFetch<{ status: PresenceStatus; method?: string | null }>("/api/presence/me");
       status.value = result.status;
@@ -25,7 +31,7 @@ export function usePresence() {
   };
 
   const checkLocation = async () => {
-    if (!import.meta.client || !enabled.value || busy.value || !navigator.geolocation) return;
+    if (!import.meta.client || !auth.user?.id || !enabled.value || busy.value || !navigator.geolocation) return;
     busy.value = true;
     error.value = "";
     try {
@@ -56,8 +62,8 @@ export function usePresence() {
   };
 
   const enable = async () => {
-    if (!import.meta.client) return;
-    localStorage.setItem(CONSENT_KEY, "true");
+    if (!import.meta.client || !auth.user?.id) return;
+    localStorage.setItem(consentKey.value, "true");
     enabled.value = true;
     await checkLocation();
   };
@@ -79,8 +85,8 @@ export function usePresence() {
   };
 
   const disable = async () => {
-    if (!import.meta.client) return;
-    localStorage.removeItem(CONSENT_KEY);
+    if (!import.meta.client || !auth.user?.id) return;
+    localStorage.removeItem(consentKey.value);
     enabled.value = false;
     busy.value = true;
     try {
@@ -95,8 +101,8 @@ export function usePresence() {
     }
   };
 
-  if (import.meta.client) {
-    enabled.value = localStorage.getItem(CONSENT_KEY) === "true";
+  if (import.meta.client && auth.user?.id) {
+    enabled.value = localStorage.getItem(consentKey.value) === "true";
   }
 
   return { status, method, busy, error, enabled, refresh, checkLocation, enable, manualRegister, disable };
