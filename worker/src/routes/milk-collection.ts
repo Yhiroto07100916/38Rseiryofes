@@ -17,7 +17,7 @@ async function usersWithPermission(env: Env, permission: string): Promise<string
 async function notifyProposer(env: Env, requestId: string, proposerId: string, actorId: string, operationId: string, eventKey: string, title: string, body: string) {
  await createNotificationsForUsers(env,{
   recipientUserIds:[proposerId],eventKey,category:"milk_collection",title,body,
-  targetUrl:"/milk-collection/"+requestId,requiredPermission:"milk_collection.view",
+  targetUrl:"/milk-collection?open="+encodeURIComponent(requestId),requiredPermission:"milk_collection.view",
   actorUserId:actorId,entityType:"milk_collection_request",entityId:requestId,
   dedupeKey:eventKey+":"+requestId+":"+operationId
  })
@@ -47,7 +47,7 @@ export async function handleMilkCollection(request: Request, env: Env, path: str
     recipientUserIds:await usersWithPermission(env,"milk_collection.review"),
     eventKey:"milk_collection.candidate_submitted",category:"milk_collection",
     title:"新しい牛乳パック候補が提出されました",body:b.store_name.trim(),
-    targetUrl:"/milk-collection/"+rid,requiredPermission:"milk_collection.view",
+    targetUrl:"/milk-collection?open="+encodeURIComponent(rid),requiredPermission:"milk_collection.view",
     actorUserId:auth.user.id,entityType:"milk_collection_request",entityId:rid,
     dedupeKey:"milk_collection.candidate_submitted:"+rid
    })
@@ -78,7 +78,7 @@ export async function handleMilkCollection(request: Request, env: Env, path: str
     recipientUserIds:[current.created_by,...await usersWithPermission(env,"milk_collection.review")],
     eventKey:"milk_collection.comment_added",category:"milk_collection",
     title:"牛乳パック候補にコメントが追加されました",body:b.body.trim(),
-    targetUrl:"/milk-collection/"+id,requiredPermission:"milk_collection.view",
+    targetUrl:"/milk-collection?open="+encodeURIComponent(id),requiredPermission:"milk_collection.view",
     actorUserId:auth.user.id,entityType:"milk_collection_request",entityId:id,
     dedupeKey:"milk_collection.comment_added:"+cid
    })
@@ -104,7 +104,7 @@ export async function handleMilkCollection(request: Request, env: Env, path: str
      recipientUserIds:await usersWithPermission(env,"milk_collection.review"),
      eventKey:"milk_collection.candidate_resubmitted",category:"milk_collection",
      title:"牛乳パック候補が再提出されました",body:b.store_name.trim(),
-     targetUrl:"/milk-collection/"+id,requiredPermission:"milk_collection.view",
+     targetUrl:"/milk-collection?open="+encodeURIComponent(id),requiredPermission:"milk_collection.view",
      actorUserId:auth.user.id,entityType:"milk_collection_request",entityId:id,
      dedupeKey:"milk_collection.candidate_resubmitted:"+id+":"+historyId
     })
