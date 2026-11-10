@@ -261,6 +261,7 @@ export const useNotifications = () => {
   }
 
   const refreshFullCache = (accountId: string) => {
+    if (cacheDeletionRequests.has(accountId)) return Promise.resolve()
     const existing = cacheUpdatePromises.get(accountId)
     if (existing) return existing
 
@@ -302,7 +303,7 @@ export const useNotifications = () => {
       // 取得済みデータは元アカウントの領域にだけ保存する。
       // アカウント切替後に共有UI用スナップショットを書き換えない。
       const snapshot = merged.slice(0, 100)
-      await saveNotificationCache(accountId, snapshot, unreadCount.value, latest.server_time)
+      await saveNotificationCache(accountId, snapshot, latest.unread_count, latest.server_time)
       if (auth.user?.id === accountId) {
         cacheSnapshot = snapshot
         cacheInitialized = true
@@ -755,9 +756,6 @@ export const useNotifications = () => {
           } finally {
             partialCacheUpdates.delete(previousAccountId)
             cacheDeletionRequests.delete(previousAccountId)
-            if (auth.user?.id === previousAccountId) {
-              void refreshFullCache(previousAccountId)
-            }
           }
         })().catch(() => undefined)
       }
