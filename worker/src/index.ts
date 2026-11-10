@@ -43,6 +43,8 @@ async function readSiteAccessSettings(env: Env): Promise<{
   logoUrl: string
   faviconUrl: string
   calendarDefaultView: "month" | "list"
+  taskDefaultStatus: "todo" | "in_progress" | "review" | "done"
+  uploadMaxFileSizeMb: number
   featureEnabled: Record<string, boolean>
 }> {
   try {
@@ -79,6 +81,16 @@ async function readSiteAccessSettings(env: Env): Promise<{
         const operation = settings.get("operation_settings") as { calendar_default_view?: unknown } | null
         return operation?.calendar_default_view === "list" ? "list" : "month"
       })(),
+      taskDefaultStatus: (() => {
+        const operation = settings.get("operation_settings") as { task_default_status?: unknown } | null
+        const status = operation?.task_default_status
+        return status === "in_progress" || status === "review" || status === "done" ? status : "todo"
+      })(),
+      uploadMaxFileSizeMb: (() => {
+        const operation = settings.get("operation_settings") as { upload_max_file_size_mb?: unknown } | null
+        const value = Number(operation?.upload_max_file_size_mb)
+        return Number.isFinite(value) ? Math.max(1, Math.min(100, value)) : 25
+      })(),
       featureEnabled: (() => {
         const features = settings.get("feature_settings") as Record<string, { enabled?: boolean }> | null
         return Object.fromEntries(Object.entries(features ?? {}).map(([key, value]) => [key, value?.enabled !== false]))
@@ -100,6 +112,8 @@ async function readSiteAccessSettings(env: Env): Promise<{
       logoUrl: "",
       faviconUrl: "",
       calendarDefaultView: "month",
+      taskDefaultStatus: "todo",
+      uploadMaxFileSizeMb: 25,
       featureEnabled: {},
     }
   }
@@ -330,6 +344,8 @@ export default {
         logo_url: settings.logoUrl,
         favicon_url: settings.faviconUrl,
         calendar_default_view: settings.calendarDefaultView,
+        task_default_status: settings.taskDefaultStatus,
+        upload_max_file_size_mb: settings.uploadMaxFileSizeMb,
         feature_enabled: settings.featureEnabled,
       }))
     }
