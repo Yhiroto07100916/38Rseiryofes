@@ -115,10 +115,31 @@ async function getAuthData(env: Env, userId: string) {
   }
 }
 
+async function isLoginEnabled(env: Env): Promise<boolean> {
+  try {
+    const setting = await env.DB.prepare(
+      "SELECT value FROM site_settings WHERE key = 'login_enabled'",
+    ).first<{ value: string }>()
+
+    if (!setting) return true
+    return JSON.parse(setting.value) !== false
+  } catch {
+    // The setting migration may not be applied yet; preserve the legacy behavior.
+    return true
+  }
+}
+
 async function handleLogin(
   request: Request,
   env: Env,
 ): Promise<Response> {
+  if (!(await isLoginEnabled(env))) {
+    return Response.json(
+      { error: "Login is currently disabled" },
+      { status: 403 },
+    )
+  }
+
   let body: LoginBody
 
   try {
