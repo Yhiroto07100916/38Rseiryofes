@@ -704,6 +704,7 @@ async function sendNotificationPush(
         icon: "/pwa-192x192.png",
         badge: "/pwa-64x64.png",
         tag: delivery.notification_id,
+        notificationId: delivery.notification_id,
         url: targetUrl,
       },
       adminContact: env.VAPID_SUBJECT || "https://38r-seiryofes.com",
