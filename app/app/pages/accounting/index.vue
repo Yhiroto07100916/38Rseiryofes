@@ -1028,7 +1028,7 @@
 
 <script setup lang="ts">
 import { useConfirmDialog } from '~/composables/useConfirmDialog'
-import { jstDateKey } from '~/utils/jst'
+import { jstDateKey , getDefaultTimeZone} from '~/utils/jst'
 
 const siteStatus = useSiteStatus()
 
@@ -1446,7 +1446,7 @@ const printAccountingReport = () => {
     )
     .join('')
 
-  const printedAt = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+  const printedAt = new Date().toLocaleString('ja-JP', { timeZone: getDefaultTimeZone() })
 
   const printWindow = window.open('', '_blank', 'width=900,height=1200')
 
@@ -1777,7 +1777,7 @@ const formatDate = (value: string | null | undefined) => {
     return value
   }
 
-  return date.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })
+  return date.toLocaleDateString('ja-JP', { timeZone: getDefaultTimeZone() })
 }
 
 const calculateItemAmount = (item: ReceiptItem) => {
