@@ -55,7 +55,21 @@ async function createPushEnvironment(): Promise<Env> {
   }) as Env;
 }
 
+async function createViewer(): Promise<string> {
+  const userId = crypto.randomUUID()
+  userIds.push(userId)
+  await env.DB.prepare(
+    "INSERT INTO users (id, student_number, name, nickname) VALUES (?, ?, ?, NULL)",
+  ).bind(userId, "push-viewer-" + userId, "Push購読者").run()
+  await env.DB.prepare(
+    "INSERT INTO user_permissions (user_id, permission_id, effect) " +
+    "SELECT ?, id, 'allow' FROM permissions WHERE key = 'news.view'",
+  ).bind(userId).run()
+  return userId
+}
+
 async function createSubscription(): Promise<string> {
+  const userId = await createViewer()
   // Pushサービスに渡す購読者側のECDH公開鍵と認証用秘密情報。
   const keys = await crypto.subtle.generateKey(
     { name: "ECDH", namedCurve: "P-256" },
