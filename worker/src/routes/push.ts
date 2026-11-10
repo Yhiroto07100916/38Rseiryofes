@@ -126,8 +126,8 @@ export async function handlePush(
       }
 
       const subscription = await env.DB
-        .prepare("SELECT id FROM push_subscriptions WHERE endpoint = ?")
-        .bind(endpoint)
+        .prepare("SELECT id FROM push_subscriptions WHERE endpoint = ? AND user_id = ?")
+        .bind(endpoint, auth.user.id)
         .first<{ id: string }>()
 
       return Response.json({ registered: Boolean(subscription) })
@@ -166,9 +166,10 @@ export async function handlePush(
             id,
             endpoint,
             p256dh,
-            auth
+            auth,
+            user_id
           )
-          SELECT ?, ?, ?, ?
+          SELECT ?, ?, ?, ?, ?
           WHERE
             EXISTS (
               SELECT 1
@@ -182,6 +183,7 @@ export async function handlePush(
           ON CONFLICT(endpoint) DO UPDATE SET
             p256dh = excluded.p256dh,
             auth = excluded.auth,
+            user_id = excluded.user_id,
             updated_at = CURRENT_TIMESTAMP
         `)
         .bind(
@@ -189,6 +191,7 @@ export async function handlePush(
           endpoint,
           p256dh,
           authKey,
+          auth.user.id,
           endpoint,
           MAX_SUBSCRIPTIONS,
         )
@@ -217,8 +220,8 @@ export async function handlePush(
       }
 
       await env.DB
-        .prepare("DELETE FROM push_subscriptions WHERE endpoint = ?")
-        .bind(endpoint)
+        .prepare("DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?")
+        .bind(endpoint, auth.user.id)
         .run()
 
       return Response.json({ registered: false })
