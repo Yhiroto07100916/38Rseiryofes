@@ -142,7 +142,13 @@ async function enforceSiteAccess(
     pathname === prefix || pathname.startsWith(prefix + "/"),
   )
   if (matchedFeature) {
-    const featureSettings = await getSiteSetting<Record<string, { enabled?: boolean }>>(
+    const featureSettings = await getSiteSetting<Record<string, {
+      enabled?: boolean
+      view?: boolean
+      create?: boolean
+      edit?: boolean
+      delete?: boolean
+    }>>(
       env,
       "feature_settings",
       {},
