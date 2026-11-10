@@ -283,11 +283,18 @@ describe("site settings authorization", () => {
     }
     expect(getBody.settings.site_visibility).toBe("private")
 
-    const genericRoleRemoval = await SELF.fetch(
-      `http://example.com/api/users/${userId}/account-roles/${roleId}`,
-      { method: "DELETE", headers: { Cookie: cookie } },
+    const genericRoleAssignment = await SELF.fetch(
+      `http://example.com/api/users/${userId}/account-roles`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: cookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ account_role_id: roleId }),
+      },
     )
-    expect(genericRoleRemoval.status).toBe(403)
+    expect(genericRoleAssignment.status).toBe(403)
 
     const finalAdminRemoval = await SELF.fetch(
       `http://example.com/api/account-roles/settings/important-admins/${userId}`,
