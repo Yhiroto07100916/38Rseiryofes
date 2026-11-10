@@ -3,6 +3,7 @@ import {
   requireAccountRole,
 } from "../lib/authz"
 import { hashPassword, verifyPassword } from "../lib/password"
+import { getSecuritySettings } from "../lib/site-settings"
 import {
   createLoginSessionHeaders,
   createLogoutSessionHeaders,
@@ -166,6 +167,25 @@ async function handleLogin(
 
   const studentNumber = body.student_number.trim()
 
+  const securitySettings = await getSecuritySettings(env)
+  const clientIp = request.headers.get("CF-Connecting-IP") ?? "unknown"
+  const identifierDigest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(studentNumber + "|" + clientIp),
+  )
+  const identifierHash = Array.from(new Uint8Array(identifierDigest))
+    .map(byte => byte.toString(16).padStart(2, "0"))
+    .join("")
+  const lock = await env.DB.prepare(
+    "SELECT failed_attempts, locked_until FROM login_attempt_locks WHERE identifier_hash = ?",
+  ).bind(identifierHash).first<{ failed_attempts: number; locked_until: string | null }>()
+  if (lock?.locked_until && Date.parse(lock.locked_until + (lock.locked_until.endsWith("Z") ? "" : "Z")) > Date.now()) {
+    return Response.json(
+      { error: "Too many failed login attempts. Try again later." },
+      { status: 429, headers: { "Retry-After": String(Math.max(1, Math.ceil((Date.parse(lock.locked_until + (lock.locked_until.endsWith("Z") ? "" : "Z")) - Date.now()) / 1000))) } },
+    )
+  }
+
   const user = await env.DB
     .prepare(`
       SELECT
@@ -174,7 +194,8 @@ async function handleLogin(
         name,
         nickname,
         avatar_key,
-        password_hash
+        password_hash,
+        password_changed_at
       FROM users
       WHERE student_number = ?
     `)
@@ -186,6 +207,7 @@ async function handleLogin(
       nickname: string | null
       avatar_key: string | null
       password_hash: string | null
+      password_changed_at: string | null
     }>()
 
   if (
@@ -193,18 +215,29 @@ async function handleLogin(
     !user.password_hash ||
     !(await verifyPassword(body.password, user.password_hash))
   ) {
+    const failedAttempts = (lock?.failed_attempts ?? 0) + 1
+    const lockedUntil = failedAttempts >= securitySettings.login_attempt_limit
+      ? new Date(Date.now() + securitySettings.login_lock_minutes * 60_000).toISOString()
+      : null
+    await env.DB.prepare(
+      "INSERT INTO login_attempt_locks (identifier_hash, failed_attempts, locked_until, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP) " +
+      "ON CONFLICT(identifier_hash) DO UPDATE SET failed_attempts = excluded.failed_attempts, locked_until = excluded.locked_until, updated_at = CURRENT_TIMESTAMP",
+    ).bind(identifierHash, failedAttempts, lockedUntil).run()
     return Response.json(
       { error: "Invalid student number or password" },
       { status: 401 },
     )
   }
 
+  await env.DB.prepare("DELETE FROM login_attempt_locks WHERE identifier_hash = ?")
+    .bind(identifierHash).run()
+
   if (!(await isLoginEnabled(env))) {
     const isAdmin = await env.DB.prepare(`
       SELECT 1
       FROM user_account_roles uar
       INNER JOIN account_roles ar ON ar.id = uar.account_role_id
-      WHERE uar.user_id = ? AND ar.name = 'admin'
+      WHERE uar.user_id = ? AND ar.name = 'important_settings_admin'
       LIMIT 1
     `).bind(user.id).first()
 
@@ -216,9 +249,11 @@ async function handleLogin(
     }
   }
 
+  const sessionDurationMs = securitySettings.session_duration_hours * 60 * 60 * 1000
   const sessionId = await createSession(
     env,
     user.id,
+    sessionDurationMs,
   )
 
   const access = await getAuthData(env, user.id)
@@ -228,6 +263,7 @@ async function handleLogin(
     sessionId,
     secure,
     getSessionCookieDomain(request),
+    sessionDurationMs,
   )
 
   return Response.json(
@@ -238,6 +274,7 @@ async function handleLogin(
         name: user.name,
         nickname: user.nickname,
         avatar_key: user.avatar_key,
+        must_change_password: securitySettings.force_password_change && !user.password_changed_at,
       },
       ...access,
     },
@@ -509,6 +546,7 @@ async function handleChangePassword(
       UPDATE users
       SET
         password_hash = ?,
+        password_changed_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `)
@@ -579,6 +617,7 @@ export async function handleAdminSetPassword(
       `
         UPDATE users
         SET password_hash = ?,
+            password_changed_at = NULL,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `,
