@@ -182,7 +182,7 @@ describe("notification Push delivery account isolation", () => {
 
   it("still delivers assignment removal notices after task access is lost", async () => {
     const creatorId = await createUser("タスク作成者")
-    const removedAssigneeId = await createUser("担当解除されたユーザー")
+    const removedAssigneeId = await createUser("担当解除されたユーザー", ["tasks.view"])
     const taskId = crypto.randomUUID()
     taskIds.push(taskId)
     await env.DB.prepare(
