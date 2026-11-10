@@ -313,7 +313,7 @@ export async function handleDecisions(
         category: "decisions",
         title: "新しい意思決定が登録されました",
         body: newDecision.title,
-        targetUrl: "/decisions/" + newDecision.id,
+        targetUrl: "/decisions?open=" + encodeURIComponent(newDecision.id),
         requiredPermission: "decisions.view",
         actorUserId: userId,
         entityType: "decision",
