@@ -127,7 +127,7 @@
       <nav class="drawer-navigation">
         <template v-for="item in items" :key="item.title">
           <NuxtLink
-            v-if="(item.to !== '/notifications' || auth.isLoggedIn) && (!item.permission || auth.hasPermission(item.permission)) && (!item.permissions || item.permissions.some(permission => auth.hasPermission(permission)))"
+            v-if="(item.to !== '/notifications' || auth.isLoggedIn) && (!item.permission || auth.hasPermission(item.permission)) && (!item.permissions || item.permissions.some(permission => auth.hasPermission(permission))) && (!item.feature || siteStatus?.feature_enabled?.[item.feature] !== false)"
             :to="item.to"
             class="drawer-item"
             :class="{ 'is-active': route.path === item.to }"
@@ -153,6 +153,7 @@ interface NavigationItem {
   to: string
   permission?: string
   permissions?: string[]
+  feature?: string
 }
 
 const isOpen = defineModel<boolean>({
@@ -176,15 +177,15 @@ const isclassrepresentative = computed(() =>
 )
 
 const items: NavigationItem[] = [
-{ icon: "mdi-bullhorn", title: "NEWS", to: "/news" },
-{ icon: "mdi-clipboard-check-outline", title: "提出物管理", to: "/submissions", permission: "submissions.view" },
-{ icon: "mdi-cart-outline", title: "ほしい物リスト", to: "/wishlist" },
-{ icon: "mdi-toolbox-outline", title: "工具・機材の貸出記録", to: "/tool-rental", permissions: ["tool_rental.view", "tool_rental.checkout", "tool_rental.return", "tool_rental.history", "tool_rental.manage"] },
-{ title: "投票", icon: "mdi-vote-outline", to: "/surveys" },
-{ title: "議事録", icon: "mdi-clipboard-text-multiple", to: "/minutes" },
-{ title: "決定事項", icon: "mdi-notebook-check-outline", to: "/decisions" },
-{ icon: "mdi-file-document", title: "書類", to: "/files" },
-{ title: "牛乳パック外部受け取り", icon: "mdi-recycle", to: "/milk-collection" },
+{ icon: "mdi-bullhorn", title: "NEWS", to: "/news", feature: "news" },
+{ icon: "mdi-clipboard-check-outline", title: "提出物管理", to: "/submissions", permission: "submissions.view", feature: "submissions" },
+{ icon: "mdi-cart-outline", title: "ほしい物リスト", to: "/wishlist", feature: "wishlist" },
+{ icon: "mdi-toolbox-outline", title: "工具・機材の貸出記録", to: "/tool-rental", permissions: ["tool_rental.view", "tool_rental.checkout", "tool_rental.return", "tool_rental.history", "tool_rental.manage"], feature: "tool_rental" },
+{ title: "投票", icon: "mdi-vote-outline", to: "/surveys", feature: "surveys" },
+{ title: "議事録", icon: "mdi-clipboard-text-multiple", to: "/minutes", feature: "minutes" },
+{ title: "決定事項", icon: "mdi-notebook-check-outline", to: "/decisions", feature: "decisions" },
+{ icon: "mdi-file-document", title: "書類", to: "/files", feature: "files" },
+{ title: "牛乳パック外部受け取り", icon: "mdi-recycle", to: "/milk-collection", feature: "milk_collection" },
 ]
 
 const handleLogout = async () => {
