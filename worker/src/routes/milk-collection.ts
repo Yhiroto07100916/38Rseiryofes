@@ -1,4 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { createNotificationsForUsers } from "../lib/notifications"
 
 type Status = "submitted" | "changes_requested" | "representative_reviewed" | "chief_review_pending" | "chief_approved" | "chief_rejected" | "contact_pending" | "contacted" | "store_approved" | "store_rejected" | "scheduling" | "collecting" | "completed" | "cancelled"
 const json = (body: unknown, status = 200) => Response.json(body, { status })
@@ -7,6 +8,19 @@ async function permitted(request: Request, env: Env, key: string) {
  if (auth instanceof Response) return auth
  if (!(await hasPermission(env, auth.user.id, key))) return json({ error: "Forbidden", permission: key }, 403)
  return auth
+}
+async function usersWithPermission(env: Env, permission: string): Promise<string[]> {
+ const users=await env.DB.prepare("SELECT id FROM users").all<{id:string}>()
+ const allowed=await Promise.all(users.results.map(async u=>({id:u.id,ok:await hasPermission(env,u.id,permission)})))
+ return allowed.filter(u=>u.ok).map(u=>u.id)
+}
+async function notifyProposer(env: Env, requestId: string, proposerId: string, actorId: string, eventKey: string, title: string, body: string) {
+ await createNotificationsForUsers(env,{
+  recipientUserIds:[proposerId],eventKey,category:"milk_collection",title,body,
+  targetUrl:"/milk-collection/"+requestId,requiredPermission:"milk_collection.view",
+  actorUserId:actorId,entityType:"milk_collection_request",entityId:requestId,
+  dedupeKey:eventKey+":"+requestId+":"+crypto.randomUUID()
+ })
 }
 async function history(env: Env, requestId: string, actorId: string, action: string, from: string|null, to: string|null, details: unknown = null) {
  await env.DB.prepare("INSERT INTO milk_collection_history(id,request_id,actor_id,action,from_status,to_status,details) VALUES(?,?,?,?,?,?,?)")
@@ -26,10 +40,20 @@ export async function handleMilkCollection(request: Request, env: Env, path: str
   const rid=crypto.randomUUID()
   await env.DB.prepare("INSERT INTO milk_collection_requests(id,title,store_name,address,contact_info,expected_quantity,proposal_reason,created_by) VALUES(?,?,?,?,?,?,?,?)").bind(rid,b.store_name.trim(),b.store_name.trim(),b.address.trim(),b.contact_info.trim(),Number.isInteger(b.expected_quantity)&&Number(b.expected_quantity)>=0?Number(b.expected_quantity):null,(typeof b.proposal_reason==="string"?b.proposal_reason.trim():""),auth.user.id).run()
   await history(env,rid,auth.user.id,"submitted",null,"submitted")
+  try {
+   await createNotificationsForUsers(env,{
+    recipientUserIds:await usersWithPermission(env,"milk_collection.review"),
+    eventKey:"milk_collection.candidate_submitted",category:"milk_collection",
+    title:"新しい牛乳パック候補が提出されました",body:b.store_name.trim(),
+    targetUrl:"/milk-collection/"+rid,requiredPermission:"milk_collection.view",
+    actorUserId:auth.user.id,entityType:"milk_collection_request",entityId:rid,
+    dedupeKey:"milk_collection.candidate_submitted:"+rid
+   })
+  } catch(e) { console.error("Failed to create milk collection submission notifications:",e) }
   return json({id:rid},201)
  }
  if(!id)return json({error:"Not Found"},404)
- const current=await env.DB.prepare("SELECT id,status FROM milk_collection_requests WHERE id=?").bind(id).first<{id:string;status:Status}>()
+ const current=await env.DB.prepare("SELECT id,status,created_by FROM milk_collection_requests WHERE id=?").bind(id).first<{id:string;status:Status;created_by:string}>()
  if(!current)return json({error:"Not Found"},404)
  if(method==="GET"&&!sub){
   const auth=await permitted(request,env,"milk_collection.view"); if(auth instanceof Response)return auth
@@ -47,6 +71,16 @@ export async function handleMilkCollection(request: Request, env: Env, path: str
   const cid=crypto.randomUUID()
   await env.DB.prepare("INSERT INTO milk_collection_comments(id,request_id,author_id,body) VALUES(?,?,?,?)").bind(cid,id,auth.user.id,b.body.trim()).run()
   await history(env,id,auth.user.id,"commented",current.status,current.status,{comment_id:cid})
+  try {
+   await createNotificationsForUsers(env,{
+    recipientUserIds:[current.created_by,...await usersWithPermission(env,"milk_collection.view")],
+    eventKey:"milk_collection.comment_added",category:"milk_collection",
+    title:"牛乳パック候補にコメントが追加されました",body:b.body.trim(),
+    targetUrl:"/milk-collection/"+id,requiredPermission:"milk_collection.view",
+    actorUserId:auth.user.id,entityType:"milk_collection_request",entityId:id,
+    dedupeKey:"milk_collection.comment_added:"+cid
+   })
+  } catch(e) { console.error("Failed to create milk collection comment notifications:",e) }
   return json({id:cid},201)
  }
  if(method==="PATCH"&&!sub){
@@ -63,6 +97,16 @@ export async function handleMilkCollection(request: Request, env: Env, path: str
    await env.DB.prepare("UPDATE milk_collection_requests SET title=?,store_name=?,address=?,contact_info=?,expected_quantity=?,proposal_reason=?,status='submitted',updated_at=CURRENT_TIMESTAMP WHERE id=?")
     .bind(b.store_name.trim(),b.store_name.trim(),b.address.trim(),b.contact_info.trim(),quantity,reason,id).run()
    await history(env,id,auth.user.id,"resubmitted","changes_requested","submitted",{store_name:b.store_name.trim(),address:b.address.trim(),contact_info:b.contact_info.trim(),expected_quantity:quantity,proposal_reason:reason})
+   try {
+    await createNotificationsForUsers(env,{
+     recipientUserIds:await usersWithPermission(env,"milk_collection.review"),
+     eventKey:"milk_collection.candidate_resubmitted",category:"milk_collection",
+     title:"牛乳パック候補が再提出されました",body:b.store_name.trim(),
+     targetUrl:"/milk-collection/"+id,requiredPermission:"milk_collection.view",
+     actorUserId:auth.user.id,entityType:"milk_collection_request",entityId:id,
+     dedupeKey:"milk_collection.candidate_resubmitted:"+id+":"+new Date().toISOString()
+    })
+   } catch(e) { console.error("Failed to create milk collection resubmission notifications:",e) }
    return json({ok:true,status:"submitted"})
   }
   const from=current.status; let to:Status=from, permission="", action=""; const updates:Record<string,unknown>={}
@@ -93,6 +137,19 @@ export async function handleMilkCollection(request: Request, env: Env, path: str
   const cols=Object.keys(updates), clause=["status=?","updated_at=CURRENT_TIMESTAMP",...cols.map(k=>k+"=?")].join(",")
   await env.DB.prepare("UPDATE milk_collection_requests SET "+clause+" WHERE id=?").bind(to,...cols.map(k=>updates[k]),id).run()
   await history(env,id,auth.user.id,action,from,to,updates)
+  try {
+   const proposer=current.created_by
+   if(action==="changes_requested") {
+    await notifyProposer(env,id,proposer,auth.user.id,"milk_collection.revision_requested","牛乳パック候補に修正依頼がありました",String(updates.representative_note??""))
+   } else if(action==="chief_approved"||action==="chief_rejected") {
+    await notifyProposer(env,id,proposer,auth.user.id,"milk_collection.committee_decided","牛乳パック候補の審議結果が登録されました",action==="chief_approved"?"承認されました":"否決されました")
+   } else if(action==="contacted"||action==="store_approved"||action==="store_rejected") {
+    await notifyProposer(env,id,proposer,auth.user.id,"milk_collection.store_contact_result","牛乳パック候補の店舗連絡結果が登録されました",String(updates.store_contact_note??action))
+   } else if(action==="scheduling"||action==="collecting"||action==="completed") {
+    const titles:Record<string,string>={scheduling:"牛乳パック回収の日程調整が始まりました",collecting:"牛乳パックの回収が始まりました",completed:"牛乳パックの回収が完了しました"}
+    await notifyProposer(env,id,proposer,auth.user.id,"milk_collection."+action,titles[action],String(updates.scheduled_at??""))
+   }
+  } catch(e) { console.error("Failed to create milk collection status notifications:",e) }
   return json({ok:true,status:to})
  }
  return json({error:"Not Found"},404)
