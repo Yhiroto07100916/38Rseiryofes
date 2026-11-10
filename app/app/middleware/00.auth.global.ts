@@ -12,6 +12,12 @@ export default defineNuxtRouteMiddleware(async (to) => {
     // Keep login required when the settings endpoint is unavailable.
   }
 
+  // Legal documents must remain readable without an account, including while
+  // the site is private or in maintenance mode.
+  if (to.path === "/privacy-policy" || to.path === "/terms") {
+    return
+  }
+
   const requiresLogin =
     !siteStatus ||
     siteStatus.require_login ||
