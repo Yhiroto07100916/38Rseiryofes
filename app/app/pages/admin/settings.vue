@@ -94,6 +94,12 @@ function defaultFeatureSettings(): Record<string, FeatureConfig> {
   }]))
 }
 
+function featureConfig(key: string): FeatureConfig {
+  return settings.feature_settings[key] ?? (settings.feature_settings[key] = {
+    enabled: true, view: true, create: true, edit: true, delete: true,
+  })
+}
+
 const defaultSettings = (): SiteSettings => ({
   site_name: '',
   site_description: '',
@@ -434,13 +440,13 @@ onMounted(loadSettings)
               <v-card variant="tonal" rounded="lg" class="pa-3 h-100">
                 <div class="d-flex align-center justify-space-between mb-2">
                   <span class="font-weight-bold">{{ feature.title }}</span>
-                  <v-switch v-model="settings.feature_settings[feature.key].enabled" color="primary" label="有効" hide-details inset />
+                  <v-switch v-model="featureConfig(feature.key).enabled" color="primary" label="有効" hide-details inset />
                 </div>
                 <v-divider class="mb-2" />
                 <div class="d-flex flex-wrap ga-3">
                   <v-checkbox v-for="action in ['view', 'create', 'edit', 'delete']" :key="action"
-                    v-model="settings.feature_settings[feature.key][action]" :label="{ view: '閲覧', create: '作成', edit: '編集', delete: '削除' }[action]"
-                    density="compact" hide-details :disabled="!settings.feature_settings[feature.key].enabled" />
+                    v-model="featureConfig(feature.key)[action]" :label="{ view: '閲覧', create: '作成', edit: '編集', delete: '削除' }[action]"
+                    density="compact" hide-details :disabled="!featureConfig(feature.key).enabled" />
                 </div>
               </v-card>
             </v-col>
