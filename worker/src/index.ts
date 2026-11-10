@@ -71,6 +71,7 @@ async function enforceSiteAccess(
   pathname: string,
 ): Promise<Response | null> {
   if (
+    request.method === "OPTIONS" ||
     pathname === "/health" ||
     pathname === "/health/db" ||
     pathname === "/api/site-status" ||
