@@ -136,6 +136,7 @@ const initialSnapshot = ref('')
 const importantAdmins = ref<UserOption[]>([])
 const users = ref<UserOption[]>([])
 const settingLogs = ref<SettingLog[]>([])
+const systemInfo = ref<{ api_status: string; database_status: string; version: string; checked_at: string } | null>(null)
 const selectedUserId = ref('')
 const loading = ref(true)
 const saving = ref(false)
@@ -159,7 +160,7 @@ async function loadSettings() {
 
   try {
     const response = await api.apiFetch<{ settings: Partial<SiteSettings> }>(
-      '/api/account-roles/settings',
+      '/api/admin/settings',
     )
     Object.assign(settings, response.settings)
     settings.feature_settings = {
@@ -185,13 +186,19 @@ async function loadSettings() {
     }
     initialSnapshot.value = JSON.stringify(settings)
     const logResponse = await api.apiFetch<{ logs: SettingLog[] }>(
-      '/api/account-roles/settings/logs',
+      '/api/admin/settings/logs',
     )
     settingLogs.value = logResponse.logs
+    try {
+      systemInfo.value = await api.apiFetch('/api/admin/settings/system-info')
+    } catch (systemError) {
+      console.warn('システム情報を取得できませんでした。', systemError)
+      systemInfo.value = null
+    }
 
     try {
       const adminResponse = await api.apiFetch<{ users: UserOption[] }>(
-        '/api/account-roles/settings/important-admins',
+        '/api/admin/settings/roles',
       )
       isImportantSettingsAdmin.value = true
       importantAdmins.value = adminResponse.users
@@ -259,7 +266,7 @@ async function saveSettings() {
   }
 
   try {
-    await api.apiFetch('/api/account-roles/settings', {
+    await api.apiFetch('/api/admin/settings', {
       method: 'PATCH',
       body: { settings: payload },
     })
@@ -283,7 +290,7 @@ async function addImportantAdmin() {
   assigning.value = true
 
   try {
-    await api.apiFetch('/api/account-roles/settings/important-admins', {
+    await api.apiFetch('/api/admin/settings/roles', {
       method: 'POST',
       body: { user_id: selectedUserId.value },
     })
@@ -311,7 +318,7 @@ async function removeImportantAdmin(user: UserOption) {
 
   try {
     await api.apiFetch(
-      `/api/account-roles/settings/important-admins/${user.id}`,
+      `/api/admin/settings/roles/${user.id}`,
       { method: 'DELETE' },
     )
     await loadImportantAdmins()
@@ -334,7 +341,7 @@ async function forceLogoutAllSessions() {
   if (!confirmed) return
   try {
     const result = await api.apiFetch<{ invalidated_sessions: number }>(
-      '/api/account-roles/settings/force-logout',
+      '/api/admin/settings/force-logout',
       { method: 'POST' },
     )
     snackbar.success(`${result.invalidated_sessions}件のセッションを無効化しました。`)
@@ -346,7 +353,7 @@ async function forceLogoutAllSessions() {
 
 async function loadImportantAdmins() {
   const response = await api.apiFetch<{ users: UserOption[] }>(
-    '/api/account-roles/settings/important-admins',
+    '/api/admin/settings/roles',
   )
   importantAdmins.value = response.users
 }
@@ -646,6 +653,30 @@ onMounted(loadSettings)
               </template>
             </v-list-item>
           </v-list>
+        </v-card-text>
+      </v-card>
+
+      <v-card rounded="xl" variant="outlined" class="mt-5">
+        <v-card-item>
+          <template #prepend><v-icon icon="mdi-server-network" size="30" color="primary" /></template>
+          <v-card-title>システム情報</v-card-title>
+          <v-card-subtitle>API・データベースの稼働状況とバージョンを表示します。</v-card-subtitle>
+        </v-card-item>
+        <v-divider />
+        <v-card-text class="pa-5">
+          <div v-if="systemInfo" class="d-flex flex-wrap ga-4">
+            <v-chip :color="systemInfo.api_status === 'ok' ? 'success' : 'error'" variant="tonal">
+              API: {{ systemInfo.api_status === 'ok' ? '正常' : '異常' }}
+            </v-chip>
+            <v-chip :color="systemInfo.database_status === 'ok' ? 'success' : 'error'" variant="tonal">
+              DB: {{ systemInfo.database_status === 'ok' ? '正常' : '異常' }}
+            </v-chip>
+            <span class="text-body-2 align-self-center">バージョン: {{ systemInfo.version }}</span>
+          </div>
+          <div v-else class="text-body-2 text-medium-emphasis">システム情報を取得できませんでした。</div>
+          <div v-if="systemInfo" class="text-caption text-medium-emphasis mt-3">
+            確認日時: {{ new Date(systemInfo.checked_at).toLocaleString('ja-JP') }}
+          </div>
         </v-card-text>
       </v-card>
 
