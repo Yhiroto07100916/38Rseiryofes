@@ -32,12 +32,14 @@ async function readSiteAccessSettings(env: Env): Promise<{
   visibility: "public" | "private"
   maintenanceMode: boolean
   maintenanceMessage: string
+  requireLogin: boolean
+  loginEnabled: boolean
 }> {
   try {
     const rows = await env.DB.prepare(`
       SELECT key, value
       FROM site_settings
-      WHERE key IN ('site_visibility', 'maintenance_mode', 'maintenance_message')
+      WHERE key IN ('site_visibility', 'maintenance_mode', 'maintenance_message', 'require_login', 'login_enabled')
     `).all<{ key: string; value: string }>()
 
     const settings = new Map(rows.results.map(row => {
@@ -54,6 +56,8 @@ async function readSiteAccessSettings(env: Env): Promise<{
       maintenanceMessage: typeof settings.get("maintenance_message") === "string"
         ? settings.get("maintenance_message") as string
         : "現在メンテナンス中です。しばらくお待ちください。",
+      requireLogin: settings.get("require_login") !== false,
+      loginEnabled: settings.get("login_enabled") !== false,
     }
   } catch {
     // Keep the existing access behavior until the settings migration is applied.
@@ -61,6 +65,8 @@ async function readSiteAccessSettings(env: Env): Promise<{
       visibility: "public",
       maintenanceMode: false,
       maintenanceMessage: "現在メンテナンス中です。しばらくお待ちください。",
+      requireLogin: true,
+      loginEnabled: true,
     }
   }
 }
@@ -109,7 +115,7 @@ async function enforceSiteAccess(
     }
   }
 
-  if (settings.visibility === "private" && !user) {
+  if ((settings.visibility === "private" || settings.requireLogin) && !user) {
     return Response.json(
       { error: "Authentication required", message: "このサイトは非公開です。ログインしてください。" },
       { status: 401 },
@@ -215,6 +221,8 @@ export default {
         site_visibility: settings.visibility,
         maintenance_mode: settings.maintenanceMode,
         maintenance_message: settings.maintenanceMessage,
+        require_login: settings.requireLogin,
+        login_enabled: settings.loginEnabled,
         is_authenticated: Boolean(user),
         is_admin: isAdmin,
       }))
