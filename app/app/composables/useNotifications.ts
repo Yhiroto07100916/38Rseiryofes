@@ -30,6 +30,7 @@ export interface AppNotification {
   entity_id: string | null
   is_read: number
   read_updated_at: string | null
+  read_version: number
   created_at: string
   expires_at: string
 }
@@ -39,7 +40,7 @@ interface NotificationListResponse {
   next_cursor: { created_at: string; id: string } | null
   unread_count: number
   server_time?: string
-  known_notifications?: Array<{ id: string; is_read: number; read_updated_at: string }>
+  known_notifications?: Array<{ id: string; is_read: number; read_updated_at: string; read_version: number }>
 }
 
 const PAGE_SIZE = 20
@@ -144,6 +145,7 @@ export const useNotifications = () => {
     entity_id: null,
     is_read: item.is_read,
     read_updated_at: null,
+    read_version: 0,
     created_at: item.created_at,
     expires_at: new Date(Date.parse(item.created_at) + 90 * 24 * 60 * 60 * 1000).toISOString(),
   })
@@ -543,7 +545,7 @@ export const useNotifications = () => {
     item.is_read = isRead ? 1 : 0
 
     try {
-      const saved = await apiFetch<{ read_updated_at: string }>(
+      const saved = await apiFetch<{ read_updated_at: string; read_version: number }>(
         "/api/notifications/" + encodeURIComponent(id) + "/read",
         {
           method: "PATCH",
@@ -558,11 +560,13 @@ export const useNotifications = () => {
       if (currentItem) {
         currentItem.is_read = isRead ? 1 : 0
         currentItem.read_updated_at = saved.read_updated_at
+        currentItem.read_version = saved.read_version
       }
       const cachedItem = cacheSnapshot.find(notification => notification.id === id)
       if (cachedItem) {
         cachedItem.is_read = isRead ? 1 : 0
         cachedItem.read_updated_at = saved.read_updated_at
+        cachedItem.read_version = saved.read_version
       }
       unreadCount.value = Math.max(0, unreadCount.value + (isRead ? -1 : 1))
       await refreshUnreadCount()
@@ -586,19 +590,20 @@ export const useNotifications = () => {
       const response = await apiFetch<{
         updated_count: number
         updated_ids: string[]
-        updated_read_states: Array<{ id: string; read_updated_at: string }>
+        updated_read_states: Array<{ id: string; read_updated_at: string; read_version: number }>
       }>("/api/notifications/read-all", {
         method: "POST",
       })
       if (auth.user?.id !== requestAccountId) return null
       const updatedIds = new Set(response.updated_ids)
-      const updatedReadStates = new Map(response.updated_read_states.map(item => [item.id, item.read_updated_at]))
+      const updatedReadStates = new Map(response.updated_read_states.map(item => [item.id, item]))
       const completedAt = Date.now()
       for (const id of updatedIds) readStateWriteCompletedAt.set(id, completedAt)
       for (const item of notifications.value) {
         if (updatedIds.has(item.id)) {
           item.is_read = 1
-          item.read_updated_at = updatedReadStates.get(item.id) ?? item.read_updated_at
+          item.read_updated_at = updatedReadStates.get(item.id)?.read_updated_at ?? item.read_updated_at
+          item.read_version = updatedReadStates.get(item.id)?.read_version ?? item.read_version
         }
       }
       for (const item of cacheSnapshot) {
@@ -655,6 +660,7 @@ export const useNotifications = () => {
           id: known.id,
           is_read: known.is_read,
           read_updated_at: known.read_updated_at,
+          read_version: known.read_version,
         }
       }
     }))
@@ -665,13 +671,13 @@ export const useNotifications = () => {
       notifications: response.notifications.map(item => {
         const latest = resolvedById.get(item.id)
         return latest
-          ? { ...item, is_read: latest.is_read, read_updated_at: latest.read_updated_at }
+          ? { ...item, is_read: latest.is_read, read_updated_at: latest.read_updated_at, read_version: latest.read_version }
           : item
       }),
       known_notifications: (response.known_notifications ?? []).map(item => {
         const latest = resolvedById.get(item.id)
         return latest
-          ? { id: item.id, is_read: latest.is_read, read_updated_at: latest.read_updated_at ?? item.read_updated_at }
+          ? { id: item.id, is_read: latest.is_read, read_updated_at: latest.read_updated_at ?? item.read_updated_at, read_version: latest.read_version ?? item.read_version }
           : item
       }),
     }
@@ -744,7 +750,7 @@ export const useNotifications = () => {
         const cachedById = new Map(cacheSnapshot.map(item => [item.id, item]))
         for (const item of response.known_notifications ?? []) {
           const cachedItem = cachedById.get(item.id)
-          if (cachedItem) cachedById.set(item.id, { ...cachedItem, is_read: item.is_read, read_updated_at: item.read_updated_at })
+          if (cachedItem) cachedById.set(item.id, { ...cachedItem, is_read: item.is_read, read_updated_at: item.read_updated_at, read_version: item.read_version })
         }
         for (const item of response.notifications) {
           cachedById.set(item.id, item)
