@@ -81,6 +81,7 @@ export async function handleNotifications(
     const search = (url.searchParams.get("search") || "").trim().slice(0, 100)
     const beforeCreatedAt = url.searchParams.get("before_created_at")
     const beforeId = url.searchParams.get("before_id")
+    const knownIds = [...new Set((url.searchParams.get("known_ids") ?? "").split(",").filter(id => id.length > 0 && id.length <= 64))].slice(0, 100)
 
     const conditions = ["recipient_user_id = ?"]
     const bindings: (string | number)[] = [userId]
@@ -130,6 +131,12 @@ export async function handleNotifications(
     const unread = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM notifications WHERE recipient_user_id = ? AND is_read = 0",
     ).bind(userId).first<{ count: number }>()
+    const knownNotifications = knownIds.length > 0
+      ? await env.DB.prepare(
+          "SELECT id, is_read FROM notifications WHERE recipient_user_id = ? AND id IN (" +
+          knownIds.map(() => "?").join(", ") + ")",
+        ).bind(userId, ...knownIds).all<{ id: string; is_read: number }>()
+      : { results: [] as { id: string; is_read: number }[] }
 
     return Response.json({
       notifications,
@@ -138,6 +145,7 @@ export async function handleNotifications(
         : null,
       unread_count: unread?.count ?? 0,
       server_time: new Date().toISOString(),
+      known_notifications: knownNotifications.results,
     })
   }
 
