@@ -140,6 +140,11 @@ async function saveSettings() {
       method: 'PATCH',
       body: { settings: payload },
     })
+    try {
+      await refreshSiteStatus()
+    } catch (statusError) {
+      console.warn('サイト表示設定の再取得に失敗しました。', statusError)
+    }
     successMessage.value = 'サイト設定を保存しました。'
   } catch (error) {
     console.error(error)
