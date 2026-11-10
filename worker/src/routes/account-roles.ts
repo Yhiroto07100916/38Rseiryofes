@@ -534,6 +534,10 @@ export async function handleAccountRoles(
           ? body.name.trim()
           : null
 
+    if (existing.name === IMPORTANT_SETTINGS_ROLE && name !== IMPORTANT_SETTINGS_ROLE) {
+      return Response.json({ error: "Important settings administrator role cannot be renamed" }, { status: 403 })
+    }
+
     if (name === null) {
       return Response.json(
         { error: "name must be a non-empty string" },
@@ -624,6 +628,11 @@ export async function handleAccountRoles(
         { error: "Account role not found" },
         { status: 404 },
       )
+    }
+    const protectedRole = await env.DB.prepare("SELECT name FROM account_roles WHERE id = ?")
+      .bind(pathParts[0]).first<{ name: string }>()
+    if (protectedRole?.name === IMPORTANT_SETTINGS_ROLE) {
+      return Response.json({ error: "Important settings administrator role cannot be deleted" }, { status: 403 })
     }
 
     const assignmentCount = await env.DB
@@ -751,6 +760,19 @@ export async function handleUserAccountRoles(
       )
     }
 
+    if (accountRole.name === IMPORTANT_SETTINGS_ROLE) {
+      const actorIsImportantAdmin = await env.DB.prepare(`
+        SELECT 1
+        FROM user_account_roles uar
+        INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+        WHERE uar.user_id = ? AND ar.name = ?
+        LIMIT 1
+      `).bind(authError.userId, IMPORTANT_SETTINGS_ROLE).first()
+      if (!actorIsImportantAdmin) {
+        return Response.json({ error: "Forbidden" }, { status: 403 })
+      }
+    }
+
     const existing = await env.DB
       .prepare(`
         SELECT 1
@@ -830,6 +852,27 @@ export async function handleUserAccountRoles(
     const accountRole = await env.DB.prepare(
       "SELECT id, name FROM account_roles WHERE id = ?",
     ).bind(accountRoleId).first<{ id: string; name: string }>()
+
+    if (accountRole?.name === IMPORTANT_SETTINGS_ROLE) {
+      const actorIsImportantAdmin = await env.DB.prepare(`
+        SELECT 1
+        FROM user_account_roles uar
+        INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+        WHERE uar.user_id = ? AND ar.name = ?
+        LIMIT 1
+      `).bind(authError.userId, IMPORTANT_SETTINGS_ROLE).first()
+      if (!actorIsImportantAdmin) {
+        return Response.json({ error: "Forbidden" }, { status: 403 })
+      }
+      const count = await env.DB.prepare(`
+        SELECT COUNT(*) AS count
+        FROM user_account_roles
+        WHERE account_role_id = ?
+      `).bind(accountRoleId).first<{ count: number }>()
+      if ((count?.count ?? 0) <= 1) {
+        return Response.json({ error: "At least one important settings administrator must remain" }, { status: 409 })
+      }
+    }
 
     await env.DB
       .prepare(`
