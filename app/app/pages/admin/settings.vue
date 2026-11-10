@@ -34,8 +34,8 @@ interface SiteSettings {
     return_due_all_users: true
   }
   operation_settings: {
-    calendar_default_view: 'month' | 'week' | 'day' | 'list'
-    task_default_status: 'todo' | 'in_progress' | 'done'
+    calendar_default_view: 'month' | 'list'
+    task_default_status: 'todo' | 'in_progress' | 'review' | 'done'
     upload_max_file_size_mb: number
   }
   security_settings: {
@@ -94,6 +94,9 @@ const notificationOptions = [
   { key: 'equipment', title: '備品' },
   { key: 'accounting', title: '会計' },
   { key: 'files', title: 'ファイル' },
+  { key: 'milk_collection', title: '牛乳パック回収' },
+  { key: 'wishlist', title: 'ほしい物リスト' },
+  { key: 'account_admin', title: 'アカウント管理' },
 ]
 function defaultFeatureSettings(): Record<string, FeatureConfig> {
   return Object.fromEntries(featureOptions.map(({ key }) => [key, {
@@ -521,7 +524,7 @@ onBeforeUnmount(() => {
           <v-select v-model="settings.operation_settings.calendar_default_view" label="カレンダー初期表示"
             :items="[{ title: '月表示', value: 'month' }, { title: '予定一覧', value: 'list' }]" />
           <v-select v-model="settings.operation_settings.task_default_status" label="新規タスクの初期状態"
-            :items="[{ title: '未着手', value: 'todo' }, { title: '進行中', value: 'in_progress' }, { title: '完了', value: 'done' }]" />
+            :items="[{ title: '未着手', value: 'todo' }, { title: '進行中', value: 'in_progress' }, { title: '確認待ち', value: 'review' }, { title: '完了', value: 'done' }]" />
           <v-text-field v-model.number="settings.operation_settings.upload_max_file_size_mb" type="number" min="1" max="100" label="アップロード上限（MB）" />
           <v-alert type="info" variant="tonal" density="compact">
             アップロード上限は1〜100MBです。Cloudflare側のリクエスト上限を超えるファイルは別途制限されます。
