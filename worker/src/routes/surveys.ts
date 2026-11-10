@@ -1,4 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { createNotificationsForUsers } from "../lib/notifications"
 
 type ResponseType = "single_choice" | "multiple_choice" | "free_text"
 type SurveyStatus = "draft" | "published" | "closed"
@@ -116,6 +117,172 @@ async function readBody<T>(request: Request): Promise<T | null> {
     return await request.json<T>()
   } catch {
     return null
+  }
+}
+
+async function getSurveyRecipientUserIds(
+  env: Env,
+  includeViewOnly = false,
+): Promise<string[]> {
+  const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+  const eligible = await Promise.all(users.results.map(async user => {
+    const [canView, canRespond] = await Promise.all([
+      permitted(env, user.id, "surveys.view"),
+      permitted(env, user.id, "surveys.respond"),
+    ])
+    return {
+      id: user.id,
+      allowed: includeViewOnly ? canView || canRespond : canRespond,
+    }
+  }))
+  return eligible.filter(user => user.allowed).map(user => user.id)
+}
+
+async function notifySurveyRecipients(
+  env: Env,
+  survey: Survey,
+  actorUserId: string | undefined,
+  eventKey: "surveys.published" | "surveys.opened" | "surveys.closed",
+  operationId: string,
+): Promise<void> {
+  const recipientUserIds = await getSurveyRecipientUserIds(env, eventKey === "surveys.closed")
+  const title = eventKey === "surveys.closed"
+    ? "アンケートが終了しました"
+    : eventKey === "surveys.opened"
+      ? "アンケートの回答が開始されました"
+      : "アンケートが公開されました"
+
+  await createNotificationsForUsers(env, {
+    recipientUserIds,
+    eventKey,
+    category: "surveys",
+    title,
+    body: survey.title,
+    targetUrl: "/surveys?open=" + encodeURIComponent(survey.id),
+    requiredPermission: null,
+    actorUserId,
+    entityType: "survey",
+    entityId: survey.id,
+    dedupeKey: eventKey + ":" + survey.id + ":" + operationId,
+  })
+}
+
+async function getSurveyUnrespondedUserIds(
+  env: Env,
+  surveyId: string,
+): Promise<string[]> {
+  const eligible = await getSurveyRecipientUserIds(env)
+  if (eligible.length === 0) return []
+
+  const responded = await env.DB.prepare(
+    "SELECT user_id FROM survey_participation WHERE survey_id = ?",
+  ).bind(surveyId).all<{ user_id: string }>()
+  const respondedIds = new Set(responded.results.map(row => row.user_id))
+  return eligible.filter(userId => !respondedIds.has(userId))
+}
+
+async function notifySurveyReminder(
+  env: Env,
+  survey: Survey,
+  eventKey: "surveys.response_reminder_24h" | "surveys.response_reminder_1h",
+): Promise<void> {
+  const recipientUserIds = await getSurveyUnrespondedUserIds(env, survey.id)
+  const title = eventKey === "surveys.response_reminder_24h"
+    ? "アンケートの回答期限まで24時間です"
+    : "アンケートの回答期限まで1時間です"
+
+  await createNotificationsForUsers(env, {
+    recipientUserIds,
+    eventKey,
+    category: "surveys",
+    title,
+    body: survey.title,
+    targetUrl: "/surveys?open=" + encodeURIComponent(survey.id),
+    requiredPermission: null,
+    entityType: "survey",
+    entityId: survey.id,
+    dedupeKey: eventKey + ":" + survey.id + ":" + (survey.deadline_at ?? ""),
+  })
+}
+
+export async function processDueSurveyNotifications(env: Env): Promise<void> {
+  const overdue = await env.DB.prepare(
+    "SELECT id, title, description, response_type, is_anonymous, status, " +
+    "starts_at, deadline_at, created_by, created_at, updated_at " +
+    "FROM surveys WHERE status = 'published' AND deadline_at IS NOT NULL " +
+    "AND julianday(deadline_at) <= julianday('now')",
+  ).all<Survey>()
+
+  for (const survey of overdue.results) {
+    const closedAt = new Date().toISOString()
+    const result = await env.DB.prepare(
+      "UPDATE surveys SET status = 'closed', updated_at = ? " +
+      "WHERE id = ? AND status = 'published'",
+    ).bind(closedAt, survey.id).run()
+
+    if ((result.meta?.changes ?? 0) !== 1) continue
+
+    try {
+      await notifySurveyRecipients(
+        env,
+        { ...survey, status: "closed", updated_at: closedAt },
+        undefined,
+        "surveys.closed",
+        closedAt,
+      )
+    } catch (notificationError) {
+      console.error("Failed to create deadline survey closure notifications:", notificationError)
+    }
+  }
+
+  const opened = await env.DB.prepare(
+    "SELECT s.id, s.title, s.description, s.response_type, s.is_anonymous, s.status, " +
+    "s.starts_at, s.deadline_at, s.created_by, s.created_at, s.updated_at " +
+    "FROM surveys s WHERE s.status = 'published' AND s.starts_at IS NOT NULL " +
+    "AND julianday(s.starts_at) <= julianday('now') " +
+    "AND (s.deadline_at IS NULL OR julianday(s.deadline_at) > julianday('now')) " +
+    "AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.entity_type = 'survey' " +
+    "AND n.entity_id = s.id AND n.event_key IN ('surveys.published', 'surveys.opened'))",
+  ).all<Survey>()
+
+  for (const survey of opened.results) {
+    try {
+      await notifySurveyRecipients(
+        env,
+        survey,
+        survey.created_by,
+        "surveys.opened",
+        survey.starts_at ?? "scheduled-open",
+      )
+    } catch (notificationError) {
+      console.error("Failed to create scheduled survey opening notifications:", notificationError)
+    }
+  }
+
+  const reminders = await env.DB.prepare(
+    "SELECT id, title, description, response_type, is_anonymous, status, " +
+    "starts_at, deadline_at, created_by, created_at, updated_at " +
+    "FROM surveys WHERE status = 'published' AND deadline_at IS NOT NULL " +
+    "AND julianday(deadline_at) > julianday('now') " +
+    "AND (starts_at IS NULL OR julianday(starts_at) <= julianday('now')) " +
+    "AND (julianday(deadline_at) <= julianday('now', '+24 hours') " +
+    "OR julianday(deadline_at) <= julianday('now', '+1 hour'))",
+  ).all<Survey>()
+
+  for (const survey of reminders.results) {
+    if (!survey.deadline_at) continue
+    const hoursRemaining = (Date.parse(survey.deadline_at) - Date.now()) / 3_600_000
+
+    try {
+      if (hoursRemaining <= 24 && hoursRemaining > 23) {
+        await notifySurveyReminder(env, survey, "surveys.response_reminder_24h")
+      }
+      if (hoursRemaining <= 1 && hoursRemaining > 0) {
+        await notifySurveyReminder(env, survey, "surveys.response_reminder_1h")
+      }
+    } catch (notificationError) {
+      console.error("Failed to create survey response reminder:", notificationError)
+    }
   }
 }
 
@@ -242,6 +409,26 @@ export async function handleSurveys(
       ),
     ]
     await env.DB.batch(statements)
+
+    if (
+      status === "published" &&
+      (!startsAt || Date.parse(startsAt) <= Date.now())
+    ) {
+      try {
+        const createdSurvey = await getSurvey(env, surveyId)
+        if (createdSurvey) {
+          await notifySurveyRecipients(
+            env,
+            createdSurvey,
+            userId,
+            "surveys.published",
+            now,
+          )
+        }
+      } catch (notificationError) {
+        console.error("Failed to create survey publication notifications:", notificationError)
+      }
+    }
 
     return Response.json({
       survey: await getSurvey(env, surveyId),
@@ -681,6 +868,36 @@ export async function handleSurveys(
     }
 
     await env.DB.batch(statements)
+
+    if (status !== survey.status) {
+      try {
+        const updatedSurvey = await getSurvey(env, surveyId)
+        if (updatedSurvey && status === "closed") {
+          await notifySurveyRecipients(
+            env,
+            updatedSurvey,
+            userId,
+            "surveys.closed",
+            updatedSurvey.updated_at,
+          )
+        } else if (
+          updatedSurvey &&
+          status === "published" &&
+          (!startValue || Date.parse(startValue) <= Date.now())
+        ) {
+          await notifySurveyRecipients(
+            env,
+            updatedSurvey,
+            userId,
+            "surveys.published",
+            updatedSurvey.updated_at,
+          )
+        }
+      } catch (notificationError) {
+        console.error("Failed to create survey status notifications:", notificationError)
+      }
+    }
+
     return Response.json({
       survey: await getSurvey(env, surveyId),
       options: await getOptions(env, surveyId),

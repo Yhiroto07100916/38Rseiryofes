@@ -675,9 +675,12 @@ function historyColor(action: string): string {
   }
 }
 
-onMounted(() => {
-  void loadDecisions()
-  void loadSurveys()
+const route = useRoute()
+
+onMounted(async () => {
+  await Promise.all([loadDecisions(), loadSurveys()])
+  const openId = typeof route.query.open === "string" ? route.query.open : ""
+  if (openId) await openDetail(openId)
 })
 </script>
 

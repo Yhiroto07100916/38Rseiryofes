@@ -474,7 +474,7 @@
             </div>
 
             <p class="text-body-2 text-medium-emphasis mb-4">
-              新しいお知らせが追加されたときに、スマートフォンへ通知します。
+              タスクや予定、お知らせなど、通知対象の更新があったときにスマートフォンへ通知します。
               一度登録すると、ログアウト中も通知を受け取れます。
             </p>
 
@@ -550,6 +550,51 @@
           </v-card-text>
         </v-card>
 
+        <PresenceSettings />
+
+        <v-card
+          rounded="xl"
+          elevation="1"
+          class="mb-4"
+        >
+          <v-card-title class="px-5 pt-5">
+            <v-icon icon="mdi-tune-variant" class="mr-2" />
+            通知の受信設定
+          </v-card-title>
+          <v-card-text class="px-5 pb-5">
+            <v-progress-linear v-if="notificationSettingsLoading" indeterminate class="mb-3" />
+            <v-switch
+              :model-value="globalPushEnabled"
+              color="primary"
+              inset
+              hide-details
+              :loading="notificationSettingsSaving"
+              :disabled="notificationSettingsLoading || notificationSettingsSaving"
+              label="すべてのプッシュ通知を受け取る"
+              @update:model-value="saveGlobalPushEnabled"
+            />
+            <div class="text-caption text-medium-emphasis mt-1 mb-4">
+              OFFにすると、カテゴリ別設定に関係なくプッシュ通知を停止します。アプリ内通知は引き続き届きます。
+            </div>
+            <v-divider class="mb-3" />
+            <div class="text-subtitle-2 font-weight-bold mb-2">カテゴリ別の通知</div>
+            <div
+              v-for="category in notificationCategoryOptions"
+              :key="category.value"
+              class="d-flex align-center justify-space-between py-1"
+            >
+              <span class="text-body-2">{{ category.title }}</span>
+              <v-switch
+                :model-value="notificationCategorySettings[category.value] !== false"
+                color="primary"
+                density="compact"
+                hide-details
+                :disabled="notificationSettingsLoading || notificationSettingsSaving"
+                @update:model-value="value => saveCategoryPushEnabled(category.value, value)"
+              />
+            </div>
+          </v-card-text>
+        </v-card>
         <v-card
           rounded="xl"
           elevation="1"
@@ -783,6 +828,25 @@ const {
   disable: disablePush,
 } = usePushNotifications()
 
+const notificationSettingsLoading = ref(true)
+const notificationSettingsSaving = ref(false)
+const globalPushEnabled = ref(true)
+const notificationCategorySettings = ref<Record<string, boolean>>({})
+const notificationCategoryOptions = [
+  { title: 'タスク', value: 'tasks' },
+  { title: 'カレンダー', value: 'calendar' },
+  { title: '提出物', value: 'submissions' },
+  { title: 'お知らせ', value: 'news' },
+  { title: 'アンケート', value: 'surveys' },
+  { title: '意思決定', value: 'decisions' },
+  { title: '備品', value: 'equipment' },
+  { title: '工具貸出', value: 'tool_rental' },
+  { title: '会計', value: 'accounting' },
+  { title: 'ファイル', value: 'files' },
+  { title: '牛乳パック', value: 'milk_collection' },
+  { title: 'ほしい物リスト', value: 'wishlist' },
+  { title: 'アカウント', value: 'account_admin' },
+]
 const {
   apiFetch,
   getCalendarEvents,
@@ -792,6 +856,63 @@ const {
   getNewsById,
 } = useApi()
 
+const loadNotificationSettings = async () => {
+  notificationSettingsLoading.value = true
+  try {
+    const settings = await apiFetch<{
+      global_push_enabled: boolean
+      categories: Record<string, boolean>
+    }>('/api/notifications/settings')
+    globalPushEnabled.value = settings.global_push_enabled
+    notificationCategorySettings.value = settings.categories
+  } catch {
+    snackbar.error('通知設定を取得できませんでした。')
+  } finally {
+    notificationSettingsLoading.value = false
+  }
+}
+
+const saveGlobalPushEnabled = async (value: boolean | null) => {
+  const nextValue = value === true
+  const previous = globalPushEnabled.value
+  notificationSettingsSaving.value = true
+  globalPushEnabled.value = nextValue
+  try {
+    await apiFetch('/api/notifications/settings', {
+      method: 'PATCH',
+      body: { global_push_enabled: nextValue },
+    })
+  } catch {
+    globalPushEnabled.value = previous
+    snackbar.error('通知設定を保存できませんでした。')
+  } finally {
+    notificationSettingsSaving.value = false
+  }
+}
+
+const saveCategoryPushEnabled = async (category: string, value: boolean | null) => {
+  const nextValue = value === true
+  const previous = notificationCategorySettings.value[category] !== false
+  notificationCategorySettings.value = {
+    ...notificationCategorySettings.value,
+    [category]: nextValue,
+  }
+  notificationSettingsSaving.value = true
+  try {
+    await apiFetch('/api/notifications/settings', {
+      method: 'PATCH',
+      body: { categories: { [category]: nextValue } },
+    })
+  } catch {
+    notificationCategorySettings.value = {
+      ...notificationCategorySettings.value,
+      [category]: previous,
+    }
+    snackbar.error('通知設定を保存できませんでした。')
+  } finally {
+    notificationSettingsSaving.value = false
+  }
+}
 const loadingEvents = ref(true)
 const loadingTasks = ref(true)
 const loadingNews = ref(true)
@@ -1358,6 +1479,7 @@ onMounted(async () => {
     loadTasks(),
     loadNews(),
     refreshPushStatus(),
+    loadNotificationSettings(),
   ])
 })
 </script>

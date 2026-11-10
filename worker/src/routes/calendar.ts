@@ -1,4 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { createNotificationsForUsers } from "../lib/notifications"
 
 export interface CalendarEvent {
   id: string
@@ -47,6 +48,52 @@ interface CalendarCategoryRow {
   color: string
   is_active: number
 }
+
+async function notifyCalendarAttendanceChange(
+  env: Env,
+  event: CalendarEvent,
+  targetUserId: string,
+  actorUserId: string,
+  status: "attending" | "not_attending" | "undecided",
+  operationId: string,
+): Promise<void> {
+  const admins = await env.DB.prepare(
+    "SELECT uar.user_id FROM user_account_roles uar " +
+    "INNER JOIN account_roles ar ON ar.id = uar.account_role_id " +
+    "WHERE ar.name = 'admin'",
+  ).all<{ user_id: string }>()
+
+  const statusLabel = {
+    attending: "参加",
+    not_attending: "不参加",
+    undecided: "未定",
+  }[status]
+
+  await createNotificationsForUsers(env, {
+    recipientUserIds: [...new Set([event.created_by, ...admins.results.map(row => row.user_id)])],
+    eventKey: "calendar.attendance_updated",
+    category: "calendar",
+    title: "予定の出欠が更新されました",
+    body: event.title + "：" + statusLabel,
+    targetUrl: "/calendar/" + event.id,
+    requiredPermission: "schedule.view",
+    actorUserId,
+    entityType: "calendar_event",
+    entityId: event.id,
+    dedupeKey: "calendar.attendance_updated:" + event.id + ":" + targetUserId + ":" + operationId,
+  })
+}
+
+async function getScheduleViewUserIds(env: Env): Promise<string[]> {
+  const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+  const eligible = await Promise.all(users.results.map(async user => ({
+    id: user.id,
+    allowed: await hasPermission(env, user.id, "schedule.view"),
+  })))
+  return eligible.filter(user => user.allowed).map(user => user.id)
+}
+
+
 
 function generateId(): string {
   return crypto.randomUUID()
@@ -362,6 +409,10 @@ export async function handleCalendar(
       )
     }
 
+    const previous = await env.DB.prepare(
+      "SELECT status FROM calendar_event_attendance WHERE event_id = ? AND user_id = ?",
+    ).bind(eventId, targetUserId).first<{ status: string }>()
+
     const now = new Date().toISOString()
 
     await env.DB
@@ -377,6 +428,14 @@ export async function handleCalendar(
       `)
       .bind(eventId, targetUserId, status, now, now)
       .run()
+
+    if (previous?.status !== status) {
+      try {
+        await notifyCalendarAttendanceChange(env, event, targetUserId, auth.user.id, status, now)
+      } catch (notificationError) {
+        console.error("Failed to create attendance notifications:", notificationError)
+      }
+    }
 
     return Response.json({
       event_id: eventId,
@@ -516,6 +575,10 @@ export async function handleCalendar(
       )
     }
 
+    const previous = await env.DB.prepare(
+      "SELECT status FROM calendar_event_attendance WHERE event_id = ? AND user_id = ?",
+    ).bind(eventId, auth.user.id).first<{ status: string }>()
+
     const now = new Date().toISOString()
 
     await env.DB
@@ -541,6 +604,14 @@ export async function handleCalendar(
         now,
       )
       .run()
+
+    if (previous?.status !== status) {
+      try {
+        await notifyCalendarAttendanceChange(env, event, auth.user.id, auth.user.id, status, now)
+      } catch (notificationError) {
+        console.error("Failed to create attendance notifications:", notificationError)
+      }
+    }
 
     const result = await env.DB
       .prepare(`
@@ -717,6 +788,25 @@ export async function handleCalendar(
 
     const event = await getCalendarEvent(env, id)
 
+    try {
+      const recipientUserIds = await getScheduleViewUserIds(env)
+      await createNotificationsForUsers(env, {
+        recipientUserIds,
+        eventKey: "calendar.created",
+        category: "calendar",
+        title: "予定が作成されました",
+        body: body.title.trim(),
+        targetUrl: "/calendar/" + id,
+        requiredPermission: "schedule.view",
+        actorUserId: auth.user.id,
+        entityType: "calendar_event",
+        entityId: id,
+        dedupeKey: "calendar.created:" + id,
+      })
+    } catch (notificationError) {
+      console.error("Failed to create calendar notifications:", notificationError)
+    }
+
     return Response.json(event, { status: 201 })
   }
 
@@ -870,6 +960,36 @@ export async function handleCalendar(
 
     const event = await getCalendarEvent(env, eventId)
 
+    const meaningfulChanges =
+      title !== existing.title ||
+      description !== existing.description ||
+      startsAt !== existing.starts_at ||
+      endsAt !== existing.ends_at ||
+      isAllDay !== existing.is_all_day ||
+      location !== existing.location ||
+      categoryId !== existing.category_id
+
+    if (meaningfulChanges && event) {
+      try {
+        const recipientUserIds = await getScheduleViewUserIds(env)
+        await createNotificationsForUsers(env, {
+          recipientUserIds,
+          eventKey: "calendar.updated",
+          category: "calendar",
+          title: "予定が更新されました",
+          body: event.title,
+          targetUrl: "/calendar/" + eventId,
+          requiredPermission: "schedule.view",
+          actorUserId: auth.user.id,
+          entityType: "calendar_event",
+          entityId: eventId,
+          dedupeKey: "calendar.updated:" + eventId + ":" + updatedAt,
+        })
+      } catch (notificationError) {
+        console.error("Failed to create calendar update notifications:", notificationError)
+      }
+    }
+
     return Response.json(event)
   }
 
@@ -902,6 +1022,23 @@ export async function handleCalendar(
       `)
       .bind(eventId)
       .run()
+
+    try {
+      const recipientUserIds = await getScheduleViewUserIds(env)
+      await createNotificationsForUsers(env, {
+        recipientUserIds,
+        eventKey: "calendar.deleted",
+        category: "calendar",
+        title: "予定が削除されました",
+        body: existing.title,
+        targetUrl: "/calendar",
+        requiredPermission: "schedule.view",
+        actorUserId: auth.user.id,
+        dedupeKey: "calendar.deleted:" + eventId,
+      })
+    } catch (notificationError) {
+      console.error("Failed to create calendar deletion notifications:", notificationError)
+    }
 
     return Response.json({
       success: true,

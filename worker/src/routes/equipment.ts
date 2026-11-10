@@ -1,4 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { createNotificationsForUsers } from "../lib/notifications"
 
 interface EquipmentItem {
   id: string
@@ -473,6 +474,62 @@ export async function handleEquipment(
       .run()
 
     const item = await getEquipmentItem(env, equipmentId)
+
+    try {
+      const statusChanged = status !== existing.status
+      const assignmentChanged = ownerUserId !== existing.owner_user_id
+      const recipients = [...new Set([existing.created_by, ownerUserId].filter(
+        (userId): userId is string => Boolean(userId),
+      ))]
+
+      if (statusChanged && status === "broken") {
+        await createNotificationsForUsers(env, {
+          recipientUserIds: recipients,
+          eventKey: "equipment.broken",
+          category: "equipment",
+          title: "備品の故障が登録されました",
+          body: name,
+          targetUrl: "/supplies?open=" + encodeURIComponent(equipmentId),
+          requiredPermission: "equipment.view",
+          actorUserId: auth.user.id,
+          entityType: "equipment",
+          entityId: equipmentId,
+          dedupeKey: "equipment.broken:" + equipmentId + ":" + existing.updated_at,
+        })
+      } else if (statusChanged && existing.status === "broken" && (status === "ready" || status === "in_use")) {
+        await createNotificationsForUsers(env, {
+          recipientUserIds: recipients,
+          eventKey: "equipment.repaired",
+          category: "equipment",
+          title: "故障していた備品が修理済みになりました",
+          body: name,
+          targetUrl: "/supplies?open=" + encodeURIComponent(equipmentId),
+          requiredPermission: "equipment.view",
+          actorUserId: auth.user.id,
+          entityType: "equipment",
+          entityId: equipmentId,
+          dedupeKey: "equipment.repaired:" + equipmentId + ":" + existing.updated_at,
+        })
+      }
+
+      if (assignmentChanged && ownerUserId) {
+        await createNotificationsForUsers(env, {
+          recipientUserIds: [ownerUserId],
+          eventKey: "equipment.assignee_changed",
+          category: "equipment",
+          title: "備品の担当者に設定されました",
+          body: name,
+          targetUrl: "/supplies?open=" + encodeURIComponent(equipmentId),
+          requiredPermission: "equipment.view",
+          actorUserId: auth.user.id,
+          entityType: "equipment",
+          entityId: equipmentId,
+          dedupeKey: "equipment.assignee_changed:" + equipmentId + ":" + existing.updated_at + ":" + ownerUserId,
+        })
+      }
+    } catch (notificationError) {
+      console.error("Failed to create equipment notifications:", notificationError)
+    }
 
     return json(item)
   }

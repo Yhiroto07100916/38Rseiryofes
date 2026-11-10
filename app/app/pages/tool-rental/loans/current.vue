@@ -18,7 +18,12 @@
       <v-table>
         <thead><tr><th>工具</th><th>個体ID</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th></tr></thead>
         <tbody>
-          <tr v-for="loan in filteredLoans" :key="loan.loan_item_id">
+          <tr
+            v-for="loan in filteredLoans"
+            :id="`loan-item-${loan.loan_item_id}`"
+            :key="loan.loan_item_id"
+            :class="{ 'loan-item-highlight': highlightedLoanId === String(loan.loan_id) || highlightedLoanId === String(loan.loan_item_id) }"
+          >
             <td>{{ loan.tool_name }}</td>
             <td>{{ loan.tool_item_id }}</td><td><v-chip size="small" variant="tonal">{{ loan.management_number }}</v-chip></td>
             <td>{{ loan.class_name }} {{ loan.borrower_name }}</td>
@@ -32,11 +37,14 @@
 </template>
 
 <script setup lang="ts">
+import { nextTick } from 'vue'
 import type { CurrentLoanItem } from '~/types/tool-rental'
 
 definePageMeta({ middleware: 'auth' })
 
 const { request } = useToolRentalApi()
+const route = useRoute()
+const highlightedLoanId = ref(typeof route.query.open === 'string' ? route.query.open : '')
 const loans = ref<CurrentLoanItem[]>([])
 const search = ref('')
 const loading = ref(false)
@@ -66,5 +74,20 @@ const loadLoans = async () => {
   }
 }
 
-onMounted(loadLoans)
+onMounted(async () => {
+  await loadLoans()
+  if (!highlightedLoanId.value) return
+  const loan = loans.value.find(item => String(item.loan_id) === highlightedLoanId.value || String(item.loan_item_id) === highlightedLoanId.value)
+  if (!loan) return
+  await nextTick()
+  document.getElementById(`loan-item-${loan.loan_item_id}`)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+})
 </script>
+
+<style scoped>
+.loan-item-highlight {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: -2px;
+}
+</style>

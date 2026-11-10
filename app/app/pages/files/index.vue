@@ -147,6 +147,18 @@
             />
           </v-col>
         </v-row>
+        <v-switch
+          v-model="notifyUpload"
+          color="primary"
+          density="compact"
+          hide-details
+          :disabled="uploading"
+          label="関連機能に添付した際に通知する"
+          class="mt-2"
+        />
+        <div class="text-caption text-medium-emphasis">
+          ONにすると、タスク・提出物・意思決定・会計などの関連機能に添付した際、その機能を閲覧できるユーザーへ通知します。関連付けがない間は通知されません。初期設定はOFFです。
+        </div>
       </v-card-text>
     </v-card>
 
@@ -162,7 +174,11 @@
 
       <v-list v-if="files.length" class="file-list pa-0">
         <template v-for="(file, index) in files" :key="file.id">
-          <v-list-item class="file-list-item">
+          <v-list-item
+            :id="`file-item-${file.id}`"
+            class="file-list-item"
+            :class="{ 'file-list-item-highlight': highlightedFileId === file.id }"
+          >
             <div class="file-entry">
               <div class="file-info">
                 <v-avatar
@@ -460,6 +476,7 @@
 </template>
 
 <script setup lang="ts">
+import { nextTick } from "vue"
 definePageMeta({
   middleware: ['auth'],
 })
@@ -489,6 +506,8 @@ interface ManagedFile {
 }
 
 const { apiFetch } = useApi()
+const route = useRoute()
+const highlightedFileId = ref(typeof route.query.open === "string" ? route.query.open : "")
 const { confirm } = useConfirmDialog()
 const config = useRuntimeConfig()
 const auth = useAuthStore()
@@ -498,6 +517,7 @@ const uploading = ref(false)
 const search = ref('')
 const categoryFilter = ref<string | null>(null)
 const uploadCategory = ref('uploads')
+const notifyUpload = ref(false)
 const showArchived = ref(false)
 const selectedFile = ref<File | File[] | null>(null)
 const files = ref<ManagedFile[]>([])
@@ -659,6 +679,7 @@ const uploadFile = async () => {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('category', uploadCategory.value)
+    formData.append('notify', notifyUpload.value ? 'true' : 'false')
 
     await apiFetch('/api/files', {
       method: 'POST',
@@ -666,6 +687,7 @@ const uploadFile = async () => {
     })
 
     selectedFile.value = null
+    notifyUpload.value = false
     snackbarMessage.value = 'アップロードしました。'
     snackbar.value = true
     await loadFiles()
@@ -990,6 +1012,11 @@ onMounted(async () => {
   }
 
   await loadFiles()
+  if (highlightedFileId.value) {
+    await nextTick()
+    document.getElementById(`file-item-${highlightedFileId.value}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" })
+  }
 })
 </script>\n
 <style scoped>
@@ -1074,5 +1101,13 @@ onMounted(async () => {
     flex: 1 1 44px;
     max-width: 64px;
   }
+}
+</style>
+
+<style scoped>
+.file-list-item-highlight {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: -2px;
+  border-radius: 12px;
 }
 </style>

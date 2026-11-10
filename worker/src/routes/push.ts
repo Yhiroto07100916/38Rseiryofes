@@ -1,5 +1,5 @@
 import { buildPushHTTPRequest } from "@pushforge/builder"
-import { requireAuth } from "../lib/authz"
+import { hasPermission, requireAuth } from "../lib/authz"
 
 interface PushSubscriptionRecord {
   id: string
@@ -12,6 +12,7 @@ interface PushDeliveryRecord {
   delivery_id: string
   news_id: string
   subscription_id: string
+  recipient_user_id: string
   attempt_count: number
   endpoint: string
   p256dh: string
@@ -98,6 +99,12 @@ function jsonError(message: string, status: number): Response {
   return Response.json({ error: message }, { status })
 }
 
+export function parseJstDateTime(value: string): number {
+  const normalized = value.trim().replace(" ", "T")
+  const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(normalized)
+  return Date.parse(hasTimezone ? normalized : normalized + "+09:00")
+}
+
 export async function handlePush(
   request: Request,
   env: Env,
@@ -126,8 +133,8 @@ export async function handlePush(
       }
 
       const subscription = await env.DB
-        .prepare("SELECT id FROM push_subscriptions WHERE endpoint = ?")
-        .bind(endpoint)
+        .prepare("SELECT id FROM push_subscriptions WHERE endpoint = ? AND user_id = ?")
+        .bind(endpoint, auth.user.id)
         .first<{ id: string }>()
 
       return Response.json({ registered: Boolean(subscription) })
@@ -164,32 +171,38 @@ export async function handlePush(
         .prepare(`
           INSERT INTO push_subscriptions (
             id,
+            user_id,
             endpoint,
             p256dh,
             auth
           )
-          SELECT ?, ?, ?, ?
+          SELECT ?, ?, ?, ?, ?
           WHERE
             EXISTS (
               SELECT 1
               FROM push_subscriptions
-              WHERE endpoint = ?
+              WHERE endpoint = ? AND user_id = ?
             )
             OR (
               SELECT COUNT(*)
               FROM push_subscriptions
+              WHERE user_id = ?
             ) < ?
           ON CONFLICT(endpoint) DO UPDATE SET
+            user_id = excluded.user_id,
             p256dh = excluded.p256dh,
             auth = excluded.auth,
             updated_at = CURRENT_TIMESTAMP
         `)
         .bind(
           crypto.randomUUID(),
+          auth.user.id,
           endpoint,
           p256dh,
           authKey,
           endpoint,
+          auth.user.id,
+          auth.user.id,
           MAX_SUBSCRIPTIONS,
         )
         .run()
@@ -217,8 +230,8 @@ export async function handlePush(
       }
 
       await env.DB
-        .prepare("DELETE FROM push_subscriptions WHERE endpoint = ?")
-        .bind(endpoint)
+        .prepare("DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?")
+        .bind(endpoint, auth.user.id)
         .run()
 
       return Response.json({ registered: false })
@@ -243,6 +256,7 @@ export async function enqueueNewsPushDeliveries(
         id,
         news_id,
         subscription_id,
+        recipient_user_id,
         status,
         attempt_count,
         next_attempt_at
@@ -251,10 +265,12 @@ export async function enqueueNewsPushDeliveries(
         lower(hex(randomblob(16))),
         ?,
         id,
+        user_id,
         'pending',
         0,
         CURRENT_TIMESTAMP
       FROM push_subscriptions
+      WHERE user_id IS NOT NULL
     `)
     .bind(news.id)
     .run()
@@ -265,40 +281,53 @@ export async function enqueueNewsPushDeliveries(
 export async function reenqueueNewsPushDeliveries(
   env: Env,
   news: { id: string },
+  operatorUserId?: string,
 ): Promise<{ configured: boolean; queued: number }> {
   if (!isPushConfigured(env)) {
     return { configured: false, queued: 0 }
   }
 
-  const result = await env.DB
-    .prepare(`
-      INSERT INTO push_notification_deliveries (
-        id,
-        news_id,
-        subscription_id,
-        status,
-        attempt_count,
-        next_attempt_at
-      )
-      SELECT
-        lower(hex(randomblob(16))),
-        ?,
-        id,
-        'pending',
-        0,
-        CURRENT_TIMESTAMP
-      FROM push_subscriptions
-      WHERE 1
-      ON CONFLICT(news_id, subscription_id) DO UPDATE SET
-        status = 'pending',
-        attempt_count = 0,
-        next_attempt_at = CURRENT_TIMESTAMP,
-        lease_until = NULL,
-        last_error = NULL,
-        updated_at = CURRENT_TIMESTAMP
-    `)
-    .bind(news.id)
-    .run()
+  if (operatorUserId === undefined) {
+    // 既存の内部呼び出しとの互換性。HTTP経由の再通知では必ず操作者IDを渡し、権限・設定で絞り込む。
+    const legacyResult = await env.DB.prepare(
+      "INSERT INTO push_notification_deliveries (" +
+      "id, news_id, subscription_id, recipient_user_id, status, attempt_count, next_attempt_at" +
+      ") SELECT lower(hex(randomblob(16))), ?, s.id, s.user_id, 'pending', 0, CURRENT_TIMESTAMP " +
+      "FROM push_subscriptions s WHERE s.user_id IS NOT NULL " +
+      "ON CONFLICT(news_id, subscription_id) DO UPDATE SET " +
+      "recipient_user_id = excluded.recipient_user_id, status = 'pending', attempt_count = 0, " +
+      "next_attempt_at = CURRENT_TIMESTAMP, lease_until = NULL, last_error = NULL, updated_at = CURRENT_TIMESTAMP",
+    ).bind(news.id).run()
+    return { configured: true, queued: legacyResult.meta?.changes ?? 0 }
+  }
+
+  const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+  const eligible = await Promise.all(users.results.map(async user => ({
+    id: user.id,
+    allowed: user.id !== operatorUserId && await hasPermission(env, user.id, "news.view"),
+  })))
+  const recipientIds = eligible.filter(user => user.allowed).map(user => user.id)
+
+  if (recipientIds.length === 0) {
+    return { configured: true, queued: 0 }
+  }
+
+  const placeholders = recipientIds.map(() => "?").join(", ")
+  const result = await env.DB.prepare(
+    "INSERT INTO push_notification_deliveries (" +
+    "id, news_id, subscription_id, recipient_user_id, status, attempt_count, next_attempt_at" +
+    ") SELECT lower(hex(randomblob(16))), ?, s.id, s.user_id, 'pending', 0, CURRENT_TIMESTAMP " +
+    "FROM push_subscriptions s " +
+    "LEFT JOIN notification_user_settings us ON us.user_id = s.user_id " +
+    "LEFT JOIN notification_category_settings cs " +
+    "ON cs.user_id = s.user_id AND cs.category = 'news' " +
+    "WHERE s.user_id IN (" + placeholders + ") " +
+    "AND COALESCE(us.global_push_enabled, 1) = 1 " +
+    "AND COALESCE(cs.push_enabled, 1) = 1 " +
+    "ON CONFLICT(news_id, subscription_id) DO UPDATE SET " +
+    "recipient_user_id = excluded.recipient_user_id, status = 'pending', attempt_count = 0, next_attempt_at = CURRENT_TIMESTAMP, " +
+    "lease_until = NULL, last_error = NULL, updated_at = CURRENT_TIMESTAMP",
+  ).bind(news.id, ...recipientIds).run()
 
   return {
     configured: true,
@@ -421,6 +450,34 @@ async function processOneDelivery(
   }
 
   try {
+    const [subscription, newsExists, canViewNews] = await Promise.all([
+      env.DB.prepare(
+        "SELECT COALESCE(us.global_push_enabled, 1) AS global_push_enabled, " +
+        "COALESCE(cs.push_enabled, 1) AS category_push_enabled " +
+        "FROM push_subscriptions s " +
+        "LEFT JOIN notification_user_settings us ON us.user_id = s.user_id " +
+        "LEFT JOIN notification_category_settings cs ON cs.user_id = s.user_id AND cs.category = 'news' " +
+        "WHERE s.id = ? AND s.user_id = ?",
+      ).bind(delivery.subscription_id, delivery.recipient_user_id).first<{
+        global_push_enabled: number
+        category_push_enabled: number
+      }>(),
+      env.DB.prepare("SELECT 1 FROM news WHERE id = ?").bind(delivery.news_id).first(),
+      hasPermission(env, delivery.recipient_user_id, "news.view"),
+    ])
+
+    if (
+      !subscription || subscription.global_push_enabled !== 1 ||
+      subscription.category_push_enabled !== 1 || !newsExists || !canViewNews
+    ) {
+      await updateDelivery(env, delivery.delivery_id, {
+        status: "failed",
+        attemptCount: attemptNumber,
+        error: "News Push suppressed by current subscription ownership, settings, or access permissions",
+      })
+      return
+    }
+
     const response = await sendPush(env, delivery, {
       id: delivery.news_id,
       title: delivery.title,
@@ -499,12 +556,24 @@ export async function processDuePushDeliveries(env: Env): Promise<void> {
     return
   }
 
+  await env.DB.prepare(
+    "UPDATE push_notification_deliveries SET status = 'failed', " +
+    "lease_until = NULL, last_error = 'Subscription owner no longer matches the queued recipient', " +
+    "updated_at = CURRENT_TIMESTAMP " +
+    "WHERE status IN ('pending', 'sending') AND (" +
+    "recipient_user_id IS NULL OR EXISTS (" +
+    "SELECT 1 FROM push_subscriptions s " +
+    "WHERE s.id = push_notification_deliveries.subscription_id " +
+    "AND (s.user_id IS NULL OR s.user_id <> push_notification_deliveries.recipient_user_id)))",
+  ).run()
+
   const result = await env.DB
     .prepare(`
       SELECT
         d.id AS delivery_id,
         d.news_id,
         d.subscription_id,
+        d.recipient_user_id,
         d.attempt_count,
         s.endpoint,
         s.p256dh,
@@ -512,7 +581,7 @@ export async function processDuePushDeliveries(env: Env): Promise<void> {
         n.title,
         n.detail
       FROM push_notification_deliveries d
-      INNER JOIN push_subscriptions s ON s.id = d.subscription_id
+      INNER JOIN push_subscriptions s ON s.id = d.subscription_id AND s.user_id = d.recipient_user_id
       INNER JOIN news n ON n.id = d.news_id
       WHERE
         (d.status = 'pending' AND d.next_attempt_at <= CURRENT_TIMESTAMP)
@@ -531,5 +600,571 @@ export async function processDuePushDeliveries(env: Env): Promise<void> {
     await Promise.all(
       batch.map((delivery) => processOneDelivery(env, delivery)),
     )
+  }
+}
+
+
+interface NotificationPushDeliveryRecord {
+  delivery_id: string
+  notification_id: string
+  subscription_id: string
+  attempt_count: number
+  endpoint: string
+  p256dh: string
+  auth: string
+  title: string
+  body: string
+  target_url: string | null
+  recipient_user_id: string
+  category: string
+  event_key: string
+  dedupe_key: string
+  required_permission: string | null
+  entity_type: string | null
+  entity_id: string | null
+}
+
+export async function enqueueNotificationPushDeliveries(
+  env: Env,
+  notificationId: string,
+): Promise<number> {
+  if (!isPushConfigured(env)) return 0
+
+  const result = await env.DB.prepare(
+    "INSERT OR IGNORE INTO notification_push_deliveries (" +
+    "id, notification_id, subscription_id, status, attempt_count, next_attempt_at" +
+    ") SELECT lower(hex(randomblob(16))), n.id, s.id, 'pending', 0, CURRENT_TIMESTAMP " +
+    "FROM notifications n " +
+    "INNER JOIN push_subscriptions s ON s.user_id = n.recipient_user_id " +
+    "LEFT JOIN notification_user_settings us ON us.user_id = n.recipient_user_id " +
+    "LEFT JOIN notification_category_settings cs " +
+    "ON cs.user_id = n.recipient_user_id AND cs.category = n.category " +
+    "WHERE n.id = ? " +
+    "AND COALESCE(us.global_push_enabled, 1) = 1 " +
+    "AND COALESCE(cs.push_enabled, 1) = 1",
+  ).bind(notificationId).run()
+
+  return result.meta?.changes ?? 0
+}
+
+async function updateNotificationDelivery(
+  env: Env,
+  deliveryId: string,
+  values: {
+    status: "pending" | "sent" | "failed"
+    attemptCount: number
+    retryDelayMinutes?: number
+    error?: string | null
+  },
+): Promise<void> {
+  await env.DB.prepare(
+    "UPDATE notification_push_deliveries SET " +
+    "status = ?, attempt_count = ?, " +
+    "next_attempt_at = CASE WHEN ? IS NULL THEN next_attempt_at " +
+    "ELSE datetime('now', '+' || ? || ' minutes') END, " +
+    "lease_until = NULL, last_error = ?, updated_at = CURRENT_TIMESTAMP " +
+    "WHERE id = ?",
+  ).bind(
+    values.status,
+    values.attemptCount,
+    values.retryDelayMinutes ?? null,
+    values.retryDelayMinutes ?? null,
+    values.error ?? null,
+    deliveryId,
+  ).run()
+}
+
+async function sendNotificationPush(
+  env: Env,
+  delivery: NotificationPushDeliveryRecord,
+): Promise<Response> {
+  if (!env.VAPID_PRIVATE_KEY) {
+    throw new Error("VAPID_PRIVATE_KEY is not configured")
+  }
+
+  const targetUrl = delivery.target_url &&
+    delivery.target_url.startsWith("/") &&
+    !delivery.target_url.startsWith("//")
+    ? delivery.target_url
+    : "/notifications"
+
+  const { endpoint, headers, body } = await buildPushHTTPRequest({
+    privateJWK: JSON.parse(env.VAPID_PRIVATE_KEY),
+    subscription: {
+      endpoint: delivery.endpoint,
+      keys: {
+        p256dh: delivery.p256dh,
+        auth: delivery.auth,
+      },
+    },
+    message: {
+      payload: {
+        title: delivery.title,
+        body: formatPushBody(delivery.body || "新しい通知があります。"),
+        icon: "/pwa-192x192.png",
+        badge: "/pwa-64x64.png",
+        tag: delivery.notification_id,
+        notificationId: delivery.notification_id,
+        notificationReadUrl: new URL(
+          "/api/notifications/" + encodeURIComponent(delivery.notification_id) + "/read",
+          env.API_BASE_URL || "https://api.38r-seiryofes.com",
+        ).toString(),
+        url: targetUrl,
+      },
+      adminContact: env.VAPID_SUBJECT || "https://38r-seiryofes.com",
+      options: {
+        ttl: 86400,
+        urgency: "normal",
+        topic: delivery.notification_id.replace(/-/g, "").slice(0, 32),
+      },
+    },
+  })
+
+  return fetch(endpoint, { method: "POST", headers, body })
+}
+
+export async function canAccessNotificationTarget(
+  env: Env,
+  delivery: NotificationPushDeliveryRecord,
+): Promise<boolean> {
+  if (
+    delivery.required_permission !== null &&
+    !(await hasPermission(env, delivery.recipient_user_id, delivery.required_permission))
+  ) {
+    return false
+  }
+
+  if (delivery.entity_type === "calendar_event" && delivery.entity_id) {
+    // 削除通知は対象イベント自体が存在しないことが正しい状態。
+    if (delivery.event_key !== "calendar.deleted") {
+      const event = await env.DB.prepare(
+        "SELECT starts_at, is_all_day FROM calendar_events WHERE id = ?",
+      ).bind(delivery.entity_id).first<{ starts_at: string; is_all_day: number }>()
+      if (!event) return false
+      if (
+        delivery.event_key.startsWith("calendar.reminder_") && event.is_all_day === 1
+      ) return false
+      if (
+        delivery.event_key.startsWith("calendar.all_day_reminder_") && event.is_all_day !== 1
+      ) return false
+      if (delivery.event_key.startsWith("calendar.attendance_reminder_")) {
+        const response = await env.DB.prepare(
+          "SELECT 1 FROM calendar_event_attendance WHERE event_id = ? AND user_id = ? " +
+          "AND status IN ('attending', 'not_attending') LIMIT 1",
+        ).bind(delivery.entity_id, delivery.recipient_user_id).first()
+        if (response) return false
+      }
+      if (
+        delivery.event_key.startsWith("calendar.reminder_") ||
+        delivery.event_key.startsWith("calendar.attendance_reminder_") ||
+        delivery.event_key.startsWith("calendar.all_day_reminder_")
+      ) {
+        if (!delivery.dedupe_key.includes(":" + event.starts_at + ":")) return false
+      }
+    }
+  }
+
+  if (delivery.entity_type === "decision" && delivery.entity_id) {
+    const decision = await env.DB.prepare(
+      "SELECT 1 FROM decisions WHERE id = ?",
+    ).bind(delivery.entity_id).first()
+    if (!decision) return false
+  }
+
+  if (delivery.entity_type === "news" && delivery.entity_id) {
+    const news = await env.DB.prepare(
+      "SELECT 1 FROM news WHERE id = ?",
+    ).bind(delivery.entity_id).first()
+    if (!news) return false
+  }
+
+  if (delivery.entity_type === "equipment" && delivery.entity_id) {
+    const equipment = await env.DB.prepare(
+      "SELECT 1 FROM equipment_items WHERE id = ?",
+    ).bind(delivery.entity_id).first()
+    if (!equipment) return false
+  }
+
+  if (delivery.entity_type === "tool_loan" && delivery.entity_id) {
+    const loan = await env.DB.prepare(
+      "SELECT status, due_at FROM loans WHERE id = ?",
+    ).bind(Number(delivery.entity_id)).first<{ status: string; due_at: string | null }>()
+    if (!loan) return false
+
+    if (delivery.event_key.startsWith("tool_rental.due_soon") || delivery.event_key.startsWith("tool_rental.overdue")) {
+      if (loan.status !== "borrowed" || !loan.due_at) return false
+      const outstanding = await env.DB.prepare(
+        "SELECT 1 FROM loan_items WHERE loan_id = ? AND returned_at IS NULL LIMIT 1",
+      ).bind(Number(delivery.entity_id)).first()
+      if (!outstanding) return false
+
+      const dueAt = parseJstDateTime(loan.due_at)
+      if (delivery.event_key.startsWith("tool_rental.due_soon")) {
+        if (
+          delivery.event_key !== "tool_rental.due_soon:" + delivery.entity_id + ":" + loan.due_at ||
+          !Number.isFinite(dueAt) || dueAt <= Date.now() || dueAt > Date.now() + 6 * 60_000
+        ) return false
+      } else if (!Number.isFinite(dueAt) || dueAt + 5 * 60_000 > Date.now()) {
+        // due_atは返却予定時刻の5分前に鳴る既存タイマー時刻。
+        // 超過通知は、その5分後の実際の返却予定時刻を過ぎてから送る。
+        return false
+      }
+    }
+  }
+
+  if (delivery.entity_type === "tool_loan_item" && delivery.entity_id) {
+    const loanItem = await env.DB.prepare(
+      "SELECT li.returned_at, l.status, l.due_at FROM loan_items li " +
+      "INNER JOIN loans l ON l.id = li.loan_id WHERE li.id = ?",
+    ).bind(Number(delivery.entity_id)).first<{
+      returned_at: string | null
+      status: string
+      due_at: string | null
+    }>()
+    if (!loanItem) return false
+    if (delivery.event_key.startsWith("tool_rental.timer_end")) {
+      const dueAt = loanItem.due_at ? parseJstDateTime(loanItem.due_at) : Number.NaN
+      if (
+        loanItem.returned_at !== null || loanItem.status !== "borrowed" ||
+        !Number.isFinite(dueAt) || dueAt > Date.now() || dueAt <= Date.now() - 6 * 60_000
+      ) return false
+    }
+  }
+
+  if (delivery.entity_type === "wishlist_item" && delivery.entity_id) {
+    const item = await env.DB.prepare(
+      "SELECT 1 FROM wishlist_items WHERE id = ?",
+    ).bind(delivery.entity_id).first()
+    if (!item) return false
+  }
+
+  if (delivery.entity_type === "milk_collection_request" && delivery.entity_id) {
+    const item = await env.DB.prepare(
+      "SELECT 1 FROM milk_collection_requests WHERE id = ?",
+    ).bind(delivery.entity_id).first()
+    if (!item) return false
+  }
+
+  if (delivery.entity_type === "submission" && delivery.entity_id) {
+    const submission = await env.DB.prepare(
+      "SELECT due_at, status FROM submissions WHERE id = ?",
+    ).bind(delivery.entity_id).first<{ due_at: string | null; status: string }>()
+    if (!submission) return false
+    if (delivery.event_key.startsWith("submissions.deadline_reminder_")) {
+      if (
+        submission.status === "completed" || submission.status === "cancelled" ||
+        !submission.due_at || !delivery.dedupe_key.endsWith(":" + submission.due_at)
+      ) return false
+    }
+    if (delivery.event_key === "submissions.deadline_overdue_daily") {
+      if (
+        submission.status === "completed" || submission.status === "cancelled" ||
+        !submission.due_at || Date.parse(submission.due_at) > Date.now()
+      ) return false
+    }
+  }
+
+  if (delivery.entity_type === "task" && delivery.entity_id) {
+    if (delivery.event_key === "task.assignee_removed") {
+      // 担当解除通知はアクセス権を失った本人にも届ける必要がある。
+      return Boolean(await env.DB.prepare(
+        "SELECT 1 FROM tasks WHERE id = ? LIMIT 1",
+      ).bind(delivery.entity_id).first())
+    }
+
+    if (delivery.event_key.startsWith("task.deadline_reminder_")) {
+      const deadline = await env.DB.prepare(
+        "SELECT due_at, status FROM tasks WHERE id = ?",
+      ).bind(delivery.entity_id).first<{ due_at: string | null; status: string }>()
+      if (
+        !deadline || deadline.status === "done" || !deadline.due_at ||
+        !delivery.dedupe_key.endsWith(":" + deadline.due_at)
+      ) return false
+    }
+    if (delivery.event_key === "task.deadline_overdue_daily") {
+      const deadline = await env.DB.prepare(
+        "SELECT due_at, status FROM tasks WHERE id = ?",
+      ).bind(delivery.entity_id).first<{ due_at: string | null; status: string }>()
+      if (!deadline || deadline.status === "done" || !deadline.due_at || Date.parse(deadline.due_at) > Date.now()) return false
+    }
+
+    const access = await env.DB.prepare(
+      "SELECT 1 FROM tasks t " +
+      "LEFT JOIN task_assignees ta ON ta.task_id = t.id " +
+      "LEFT JOIN task_roles tr ON tr.task_id = t.id " +
+      "LEFT JOIN user_roles ur ON ur.role_id = tr.role_id AND ur.user_id = ? " +
+      "WHERE t.id = ? AND (t.created_by = ? OR ta.user_id = ? OR ur.user_id IS NOT NULL) " +
+      "LIMIT 1",
+    ).bind(
+      delivery.recipient_user_id,
+      delivery.entity_id,
+      delivery.recipient_user_id,
+      delivery.recipient_user_id,
+    ).first<{ 1: number }>()
+
+    return Boolean(access)
+  }
+
+  if (delivery.entity_type === "reimbursement" && delivery.entity_id) {
+    const reimbursement = await env.DB.prepare(
+      "SELECT user_id FROM receipt_reimbursements WHERE id = ?",
+    ).bind(delivery.entity_id).first<{ user_id: string }>()
+    if (!reimbursement) return false
+    if (
+      reimbursement.user_id !== delivery.recipient_user_id &&
+      !(await hasPermission(env, delivery.recipient_user_id, "accounting.approve"))
+    ) {
+      return false
+    }
+  }
+
+  if (delivery.entity_type === "file" && delivery.entity_id) {
+    const file = await env.DB.prepare(
+      "SELECT archived_at FROM files WHERE id = ?",
+    ).bind(delivery.entity_id).first<{ archived_at: string | null }>()
+    if (!file || file.archived_at !== null) return false
+
+    const links = await env.DB.prepare(
+      "SELECT " +
+      "EXISTS (SELECT 1 FROM receipt_files WHERE file_id = ?) AS has_receipt, " +
+      "EXISTS (SELECT 1 FROM task_files WHERE file_id = ?) AS has_task, " +
+      "EXISTS (SELECT 1 FROM decision_files WHERE file_id = ?) AS has_decision, " +
+      "EXISTS (SELECT 1 FROM submission_record_files WHERE file_id = ?) AS has_submission",
+    ).bind(
+      delivery.entity_id,
+      delivery.entity_id,
+      delivery.entity_id,
+      delivery.entity_id,
+    ).first<{
+      has_receipt: number
+      has_task: number
+      has_decision: number
+      has_submission: number
+    }>()
+
+    if (!links) return false
+    const linkedAccessChecks: Promise<boolean>[] = []
+    if (links.has_receipt) {
+      linkedAccessChecks.push(hasPermission(env, delivery.recipient_user_id, "accounting.view"))
+    }
+    if (links.has_task) {
+      linkedAccessChecks.push(hasPermission(env, delivery.recipient_user_id, "tasks.view"))
+    }
+    if (links.has_decision) {
+      linkedAccessChecks.push(hasPermission(env, delivery.recipient_user_id, "decisions.view"))
+    }
+    if (links.has_submission) {
+      linkedAccessChecks.push(hasPermission(env, delivery.recipient_user_id, "submissions.view"))
+    }
+    if (linkedAccessChecks.length === 0 || !(await Promise.all(linkedAccessChecks)).some(Boolean)) {
+      return false
+    }
+  }
+
+  if (delivery.entity_type === "survey" && delivery.entity_id) {
+    const [canViewSurvey, canRespondSurvey] = await Promise.all([
+      hasPermission(env, delivery.recipient_user_id, "surveys.view"),
+      hasPermission(env, delivery.recipient_user_id, "surveys.respond"),
+    ])
+    const responseOnlyEvent =
+      delivery.event_key === "surveys.published" ||
+      delivery.event_key === "surveys.opened" ||
+      delivery.event_key === "surveys.response_reminder_24h" ||
+      delivery.event_key === "surveys.response_reminder_1h"
+    if (responseOnlyEvent ? !canRespondSurvey : (!canViewSurvey && !canRespondSurvey)) return false
+
+    const survey = await env.DB.prepare(
+      "SELECT status, deadline_at FROM surveys WHERE id = ?",
+    ).bind(delivery.entity_id).first<{
+      status: string
+      deadline_at: string | null
+    }>()
+
+    if (!survey) return false
+
+    if (
+      (delivery.event_key === "surveys.published" || delivery.event_key === "surveys.opened") &&
+      survey.status !== "published"
+    ) {
+      return false
+    }
+
+    if (delivery.event_key === "surveys.closed" && survey.status !== "closed") {
+      return false
+    }
+
+    if (
+      delivery.event_key === "surveys.response_reminder_24h" ||
+      delivery.event_key === "surveys.response_reminder_1h"
+    ) {
+      if (
+        survey.status !== "published" ||
+        !survey.deadline_at ||
+        !delivery.dedupe_key.endsWith(":" + survey.deadline_at) ||
+        Date.parse(survey.deadline_at) <= Date.now()
+      ) {
+        return false
+      }
+
+      const participation = await env.DB.prepare(
+        "SELECT 1 FROM survey_participation WHERE survey_id = ? AND user_id = ? LIMIT 1",
+      ).bind(delivery.entity_id, delivery.recipient_user_id).first()
+
+      if (participation) return false
+    }
+  }
+
+  return true
+}
+
+async function processOneNotificationDelivery(
+  env: Env,
+  delivery: NotificationPushDeliveryRecord,
+): Promise<void> {
+  if (delivery.attempt_count >= MAX_ATTEMPTS) {
+    await updateNotificationDelivery(env, delivery.delivery_id, {
+      status: "failed",
+      attemptCount: MAX_ATTEMPTS,
+      error: "Maximum attempts reached after an interrupted send",
+    })
+    return
+  }
+
+  const attemptNumber = delivery.attempt_count + 1
+  const claimed = await env.DB.prepare(
+    "UPDATE notification_push_deliveries SET status = 'sending', " +
+    "attempt_count = attempt_count + 1, lease_until = datetime('now', '+2 minutes'), " +
+    "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (" +
+    "(status = 'pending' AND next_attempt_at <= CURRENT_TIMESTAMP) OR " +
+    "(status = 'sending' AND lease_until <= CURRENT_TIMESTAMP))",
+  ).bind(delivery.delivery_id).run()
+
+  if ((claimed.meta?.changes ?? 0) !== 1) return
+
+  try {
+    const preferences = await env.DB.prepare(
+      "SELECT COALESCE(us.global_push_enabled, 1) AS global_enabled, " +
+      "COALESCE(cs.push_enabled, 1) AS category_enabled " +
+      "FROM (SELECT 1) seed " +
+      "LEFT JOIN notification_user_settings us ON us.user_id = ? " +
+      "LEFT JOIN notification_category_settings cs " +
+      "ON cs.user_id = ? AND cs.category = ?",
+    ).bind(delivery.recipient_user_id, delivery.recipient_user_id, delivery.category)
+      .first<{ global_enabled: number; category_enabled: number }>()
+    const effectivePreferences = preferences ?? { global_enabled: 1, category_enabled: 1 }
+
+    if (
+      effectivePreferences.global_enabled !== 1 ||
+      effectivePreferences.category_enabled !== 1 ||
+      !(await canAccessNotificationTarget(env, delivery))
+    ) {
+      await updateNotificationDelivery(env, delivery.delivery_id, {
+        status: "failed",
+        attemptCount: attemptNumber,
+        error: "Delivery suppressed by current user settings or access permissions",
+      })
+      return
+    }
+
+    const response = await sendNotificationPush(env, delivery)
+
+    if (response.ok) {
+      await updateNotificationDelivery(env, delivery.delivery_id, {
+        status: "sent",
+        attemptCount: attemptNumber,
+      })
+      return
+    }
+
+    if (response.status === 404 || response.status === 410) {
+      await env.DB.prepare(
+        "DELETE FROM push_subscriptions WHERE id = ?",
+      ).bind(delivery.subscription_id).run()
+      await updateNotificationDelivery(env, delivery.delivery_id, {
+        status: "failed",
+        attemptCount: attemptNumber,
+        error: "Push subscription is no longer valid",
+      })
+      return
+    }
+
+    if (response.status === 429 || response.status >= 500) {
+      if (attemptNumber >= MAX_ATTEMPTS) {
+        await updateNotificationDelivery(env, delivery.delivery_id, {
+          status: "failed",
+          attemptCount: attemptNumber,
+          error: "Push service returned " + response.status,
+        })
+      } else {
+        await updateNotificationDelivery(env, delivery.delivery_id, {
+          status: "pending",
+          attemptCount: attemptNumber,
+          retryDelayMinutes: RETRY_DELAYS_MINUTES[attemptNumber - 1],
+          error: "Push service returned " + response.status,
+        })
+      }
+      return
+    }
+
+    await updateNotificationDelivery(env, delivery.delivery_id, {
+      status: "failed",
+      attemptCount: attemptNumber,
+      error: "Push service returned " + response.status,
+    })
+
+    if (response.status === 401 || response.status === 403) {
+      console.error("Web Push authentication/configuration error:", response.status)
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown push error"
+    if (attemptNumber >= MAX_ATTEMPTS) {
+      await updateNotificationDelivery(env, delivery.delivery_id, {
+        status: "failed",
+        attemptCount: attemptNumber,
+        error: message.slice(0, 300),
+      })
+    } else {
+      await updateNotificationDelivery(env, delivery.delivery_id, {
+        status: "pending",
+        attemptCount: attemptNumber,
+        retryDelayMinutes: RETRY_DELAYS_MINUTES[attemptNumber - 1],
+        error: message.slice(0, 300),
+      })
+    }
+  }
+}
+
+export async function processDueNotificationPushDeliveries(env: Env): Promise<void> {
+  if (!isPushConfigured(env)) return
+
+  // Subscriptionが別アカウントへ移管された場合、旧通知の配送を残さず失敗扱いにする。
+  await env.DB.prepare(
+    "UPDATE notification_push_deliveries SET status = 'failed', " +
+    "lease_until = NULL, last_error = 'Subscription owner no longer matches notification recipient', " +
+    "updated_at = CURRENT_TIMESTAMP " +
+    "WHERE status IN ('pending', 'sending') AND EXISTS (" +
+    "SELECT 1 FROM notifications n " +
+    "WHERE n.id = notification_push_deliveries.notification_id AND NOT EXISTS (" +
+    "SELECT 1 FROM push_subscriptions s " +
+    "WHERE s.id = notification_push_deliveries.subscription_id AND s.user_id = n.recipient_user_id))"
+  ).run()
+
+  const result = await env.DB.prepare(
+    "SELECT d.id AS delivery_id, d.notification_id, d.subscription_id, " +
+    "d.attempt_count, s.endpoint, s.p256dh, s.auth, n.title, n.body, n.target_url, " +
+    "n.recipient_user_id, n.category, n.event_key, n.dedupe_key, n.required_permission, n.entity_type, n.entity_id " +
+    "FROM notification_push_deliveries d " +
+    "INNER JOIN notifications n ON n.id = d.notification_id " +
+    "INNER JOIN push_subscriptions s ON s.id = d.subscription_id AND s.user_id = n.recipient_user_id " +
+    "WHERE (d.status = 'pending' AND d.next_attempt_at <= CURRENT_TIMESTAMP) " +
+    "OR (d.status = 'sending' AND d.lease_until <= CURRENT_TIMESTAMP) " +
+    "ORDER BY d.created_at ASC LIMIT ?",
+  ).bind(MAX_BATCH_SIZE).all<NotificationPushDeliveryRecord>()
+
+  for (let offset = 0; offset < result.results.length; offset += 10) {
+    const batch = result.results.slice(offset, offset + 10)
+    await Promise.all(batch.map(delivery =>
+      processOneNotificationDelivery(env, delivery),
+    ))
   }
 }

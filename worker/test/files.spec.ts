@@ -2,9 +2,11 @@ declare const __D1_MIGRATIONS__: string;
 
 import { applyD1Migrations, env, SELF } from "cloudflare:test";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { notifyFileLinked } from "../src/lib/file-notifications";
 
 type Fixture = {
   userId: string;
+  recipientUserId: string;
   sessionId: string;
   receiptId: string;
   taskId: string;
@@ -17,6 +19,7 @@ type Fixture = {
     decision: string;
     submission: string;
   };
+  uploadedFileIds: string[];
   objectKeys: string[];
   cookie: string;
 };
@@ -40,10 +43,12 @@ async function grantPermissions(userId: string, keys: string[]) {
 
 async function createFixture(): Promise<Fixture> {
   const userId = crypto.randomUUID();
+  const recipientUserId = crypto.randomUUID();
   const sessionId = crypto.randomUUID();
 
   const fixture: Fixture = {
     userId,
+    recipientUserId,
     sessionId,
     receiptId: crypto.randomUUID(),
     taskId: crypto.randomUUID(),
@@ -56,6 +61,7 @@ async function createFixture(): Promise<Fixture> {
       decision: crypto.randomUUID(),
       submission: crypto.randomUUID(),
     },
+    uploadedFileIds: [],
     objectKeys: [],
     cookie: `session_id=${sessionId}`,
   };
@@ -66,6 +72,11 @@ async function createFixture(): Promise<Fixture> {
     INSERT INTO users (id, student_number, name, nickname)
     VALUES (?, ?, ?, NULL)
   `).bind(userId, `files-test-${userId}`, "ファイル権限テストユーザー").run();
+
+  await env.DB.prepare(`
+    INSERT INTO users (id, student_number, name, nickname)
+    VALUES (?, ?, ?, NULL)
+  `).bind(recipientUserId, `files-recipient-${recipientUserId}`, "通知受信ユーザー").run();
 
   await env.DB.prepare(`
     INSERT INTO sessions (id, user_id, expires_at)
@@ -201,7 +212,7 @@ afterEach(async () => {
     await env.DB.prepare("DELETE FROM sessions WHERE id = ?")
       .bind(fixture.sessionId).run();
 
-    for (const fileId of Object.values(fixture.fileIds)) {
+    for (const fileId of [...Object.values(fixture.fileIds), ...fixture.uploadedFileIds]) {
       await env.DB.prepare("DELETE FROM files WHERE id = ?")
         .bind(fileId).run();
     }
@@ -210,11 +221,25 @@ afterEach(async () => {
       await env.FILES_BUCKET.delete(objectKey);
     }
 
-    await env.DB.prepare("DELETE FROM user_permissions WHERE user_id = ?")
-      .bind(fixture.userId).run();
-
-    await env.DB.prepare("DELETE FROM users WHERE id = ?")
-      .bind(fixture.userId).run();
+    for (const userId of [fixture.recipientUserId, fixture.userId]) {
+      await env.DB.prepare(
+        "DELETE FROM notifications WHERE recipient_user_id = ? OR actor_user_id = ?",
+      ).bind(userId, userId).run();
+      await env.DB.prepare("DELETE FROM notification_user_settings WHERE user_id = ?")
+        .bind(userId).run();
+      await env.DB.prepare("DELETE FROM notification_category_settings WHERE user_id = ?")
+        .bind(userId).run();
+      await env.DB.prepare("DELETE FROM push_subscriptions WHERE user_id = ?")
+        .bind(userId).run();
+      await env.DB.prepare("DELETE FROM user_roles WHERE user_id = ?")
+        .bind(userId).run();
+      await env.DB.prepare("DELETE FROM user_account_roles WHERE user_id = ?")
+        .bind(userId).run();
+      await env.DB.prepare("DELETE FROM user_permissions WHERE user_id = ?")
+        .bind(userId).run();
+      await env.DB.prepare("DELETE FROM users WHERE id = ?")
+        .bind(userId).run();
+    }
   }
 });
 
@@ -420,4 +445,77 @@ describe("Files access permissions", () => {
     expect(body.files[0].id).toBe(fixture.fileIds.receipt);
     expect(body.count).toBe(1);
   });
+  it("creates upload notifications only when the uploader opts in", async () => {
+    const fixture = await createFixture();
+    const category = await env.DB.prepare(
+      "SELECT slug FROM file_categories WHERE is_active = 1 LIMIT 1",
+    ).first<{ slug: string }>();
+    expect(category).not.toBeNull();
+
+    const formData = new FormData();
+    formData.set("file", new File(["notification test"], "notify.txt", { type: "text/plain" }));
+    formData.set("category", category!.slug);
+    formData.set("notify", "true");
+
+    const response = await SELF.fetch("http://example.com/api/files", {
+      method: "POST",
+      headers: { Cookie: fixture.cookie },
+      body: formData,
+    });
+
+    expect(response.status).toBe(201);
+    const uploaded = await response.json() as { id: string; object_key: string };
+    fixture.uploadedFileIds.push(uploaded.id);
+    fixture.objectKeys.push(uploaded.object_key);
+
+    await grantPermissions(fixture.recipientUserId, ["tasks.view"]);
+    await env.DB.prepare(
+      "INSERT INTO task_files (task_id, file_id) VALUES (?, ?)",
+    ).bind(fixture.taskId, uploaded.id).run();
+    await notifyFileLinked(env, uploaded.id, fixture.userId);
+
+    const notification = await env.DB.prepare(`
+      SELECT event_key, recipient_user_id, body, target_url
+      FROM notifications
+      WHERE entity_type = 'file' AND entity_id = ?
+    `).bind(uploaded.id).first<{
+      event_key: string;
+      recipient_user_id: string;
+      body: string;
+      target_url: string;
+    }>();
+
+    expect(notification).toMatchObject({
+      event_key: "files.uploaded",
+      recipient_user_id: fixture.recipientUserId,
+      body: "notify.txt",
+      target_url: "/files?open=" + uploaded.id,
+    });
+
+    const actorNotification = await env.DB.prepare(
+      "SELECT id FROM notifications WHERE entity_id = ? AND recipient_user_id = ?",
+    ).bind(uploaded.id, fixture.userId).first();
+    expect(actorNotification).toBeNull();
+
+    const silentFormData = new FormData();
+    silentFormData.set("file", new File(["silent upload"], "silent.txt", { type: "text/plain" }));
+    silentFormData.set("category", category!.slug);
+
+    const silentResponse = await SELF.fetch("http://example.com/api/files", {
+      method: "POST",
+      headers: { Cookie: fixture.cookie },
+      body: silentFormData,
+    });
+
+    expect(silentResponse.status).toBe(201);
+    const silentUpload = await silentResponse.json() as { id: string; object_key: string };
+    fixture.uploadedFileIds.push(silentUpload.id);
+    fixture.objectKeys.push(silentUpload.object_key);
+
+    const silentNotification = await env.DB.prepare(
+      "SELECT id FROM notifications WHERE entity_type = 'file' AND entity_id = ?",
+    ).bind(silentUpload.id).first();
+    expect(silentNotification).toBeNull();
+  });
+
 });

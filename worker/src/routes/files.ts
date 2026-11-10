@@ -679,6 +679,7 @@ export async function handleFiles(
 
       const formData = await request.formData()
       const file = formData.get("file")
+      const notifyUpload = formData.get("notify") === "true"
 
       if (!(file instanceof File)) {
         return json(
@@ -754,9 +755,10 @@ export async function handleFiles(
               content_type,
               size,
               category,
-              uploaded_by
+              uploaded_by,
+              notify_on_upload
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           `)
           .bind(
             id,
@@ -766,6 +768,7 @@ export async function handleFiles(
             file.size,
             category,
             auth.user.id,
+            notifyUpload ? 1 : 0,
           )
           .run()
       } catch (error) {

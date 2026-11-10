@@ -531,7 +531,10 @@
                 v-for="(item, index) in reimbursements"
                 :key="item.id"
               >
-                <v-list-item>
+                <v-list-item
+                  :id="`reimbursement-${item.id}`"
+                  :class="{ 'reimbursement-item-highlight': highlightedReimbursementId === item.id }"
+                >
                   <template #prepend>
                     <UserAvatar
                       v-if="item.user_id"
@@ -1114,7 +1117,9 @@ const auth = useAuthStore()
 const { apiFetch } = useApi()
 const { confirm } = useConfirmDialog()
 
-const tab = ref('receipts')
+const route = useRoute()
+const highlightedReimbursementId = ref(typeof route.query.open === 'string' ? route.query.open : '')
+const tab = ref(route.query.tab === 'reimbursements' ? 'reimbursements' : 'receipts')
 const loading = ref(false)
 const saving = ref(false)
 const errorMessage = ref('')
@@ -2581,5 +2586,18 @@ const markReimbursementPaid = async (item: Reimbursement) => {
 onMounted(async () => {
   await nextTick()
   await loadAll()
+  if (highlightedReimbursementId.value) {
+    await nextTick()
+    document.getElementById(`reimbursement-${highlightedReimbursementId.value}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 })
 </script>
+
+<style scoped>
+.reimbursement-item-highlight {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+  border-radius: 12px;
+}
+</style>

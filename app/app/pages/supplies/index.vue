@@ -130,9 +130,11 @@
             md="6"
           >
             <v-card
+              :id="`equipment-item-${item.id}`"
               rounded="xl"
               variant="outlined"
               class="equipment-card"
+              :class="{ 'equipment-card-highlight': highlightedEquipmentId === item.id }"
             >
               <v-card-item>
                 <template #prepend>
@@ -452,7 +454,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 
 definePageMeta({
   permissions: ['equipment.view'],
@@ -492,6 +494,8 @@ interface EquipmentForm {
 
 const api = useApi()
 const auth = useAuthStore()
+const route = useRoute()
+const highlightedEquipmentId = ref(typeof route.query.open === 'string' ? route.query.open : '')
 
 const equipment = ref<EquipmentItem[]>([])
 const ownerItems = ref<{
@@ -802,9 +806,12 @@ watch(
   },
 )
 
-onMounted(() => {
-  loadEquipment()
-  loadOwnerItems()
+onMounted(async () => {
+  await Promise.all([loadEquipment(), loadOwnerItems()])
+  if (!highlightedEquipmentId.value) return
+  await nextTick()
+  document.getElementById(`equipment-item-${highlightedEquipmentId.value}`)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 })
 </script>
 
@@ -854,6 +861,11 @@ onMounted(() => {
   transition:
     transform 0.15s ease,
     box-shadow 0.15s ease;
+}
+
+.equipment-card-highlight {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
 }
 
 .equipment-card:hover {

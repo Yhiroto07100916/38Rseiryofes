@@ -33,7 +33,7 @@
       />
     </div>
 
-    <template v-else-if="task">
+    <template v-else-if="hasTask">
       <v-card
         variant="outlined"
         class="rounded-xl"
@@ -81,20 +81,7 @@
                 class="mb-3"
               />
 
-              <div class="mb-4">
-                <div class="d-flex align-center justify-space-between mb-2">
-                  <div class="text-subtitle-2 font-weight-medium">関連リンク</div>
-                  <v-btn size="small" variant="tonal" prepend-icon="mdi-plus" @click="editForm.links.push({ title: '', url: '' })">追加</v-btn>
-                </div>
-                <div v-for="(link, index) in editForm.links" :key="index" class="d-flex align-start ga-2 mb-2">
-                  <div class="flex-grow-1">
-                    <v-text-field v-model="link.title" label="表示タイトル" placeholder="例：資料・参考ページ" variant="outlined" density="comfortable" hide-details class="mb-2" />
-                    <v-text-field v-model="link.url" label="URL" placeholder="https://example.com" variant="outlined" density="comfortable" hide-details />
-                  </div>
-                  <v-btn icon="mdi-close" variant="text" color="error" aria-label="リンクを削除" @click="editForm.links.splice(index, 1)" />
-                </div>
-                <div class="text-caption text-medium-emphasis">最大20件。タイトルとURLを両方入力してください。</div>
-              </div>
+              <TaskLinksEditor v-model="editForm.links" />
 
               <v-row>
                 <v-col
@@ -590,6 +577,7 @@ import {
   ref,
 } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
+import TaskLinksEditor from '~/components/tasks/TaskLinksEditor.vue'
 import { useConfirmDialog } from '~/composables/useConfirmDialog'
 import { useSnackbar } from '~/composables/useSnackbar'
 import {
@@ -618,7 +606,24 @@ const {
   apiFetch,
 } = useApi()
 
-const task = ref<Task | null>(null)
+const createEmptyTask = (): Task => ({
+  id: "",
+  title: "",
+  description: null,
+  scope: "class",
+  status: "todo",
+  priority: "medium",
+  due_at: null,
+  created_by: "",
+  created_at: "",
+  updated_at: "",
+  assignments: { users: [], roles: [] },
+  calendar_event: null,
+  files: [],
+  links: [],
+})
+const task = ref<Task>(createEmptyTask())
+const hasTask = ref(false)
 const comments = ref<TaskComment[]>([])
 
 const loading = ref(false)
@@ -862,6 +867,7 @@ const formatFileSize = (size: number) => {
 
 const loadTask = async () => {
   loading.value = true
+  hasTask.value = false
   try {
     const taskId = String(route.params.id)
 
@@ -874,9 +880,11 @@ const loadTask = async () => {
       ])
 
     task.value = taskResponse
+    hasTask.value = true
     comments.value = commentsResponse.comments
   } catch (error) {
     console.error(error)
+    hasTask.value = false
     snackbar.error('タスクの取得に失敗しました。')
   } finally {
     loading.value = false

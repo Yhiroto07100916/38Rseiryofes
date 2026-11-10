@@ -1,0 +1,3 @@
+ALTER TABLE files
+ADD COLUMN notify_on_upload INTEGER NOT NULL DEFAULT 0;
+

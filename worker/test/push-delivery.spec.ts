@@ -55,7 +55,21 @@ async function createPushEnvironment(): Promise<Env> {
   }) as Env;
 }
 
+async function createViewer(): Promise<string> {
+  const userId = crypto.randomUUID()
+  userIds.push(userId)
+  await env.DB.prepare(
+    "INSERT INTO users (id, student_number, name, nickname) VALUES (?, ?, ?, NULL)",
+  ).bind(userId, "push-viewer-" + userId, "Push購読者").run()
+  await env.DB.prepare(
+    "INSERT INTO user_permissions (user_id, permission_id, effect) " +
+    "SELECT ?, id, 'allow' FROM permissions WHERE key = 'news.view'",
+  ).bind(userId).run()
+  return userId
+}
+
 async function createSubscription(): Promise<string> {
+  const userId = await createViewer()
   // Pushサービスに渡す購読者側のECDH公開鍵と認証用秘密情報。
   const keys = await crypto.subtle.generateKey(
     { name: "ECDH", namedCurve: "P-256" },
@@ -70,10 +84,11 @@ async function createSubscription(): Promise<string> {
   const endpoint = `https://fcm.googleapis.com/fcm/send/${crypto.randomUUID()}`;
 
   await env.DB.prepare(`
-    INSERT INTO push_subscriptions (id, endpoint, p256dh, auth)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth)
+    VALUES (?, ?, ?, ?, ?)
   `).bind(
     id,
+    userId,
     endpoint,
     toBase64Url(publicKey),
     toBase64Url(authKey),
@@ -190,6 +205,48 @@ describe("Web Push delivery queue", () => {
     expect(deliveries.results.every((row) => row.attempt_count === 1)).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("does not send a queued news notice to a subscription reassigned to another account", async () => {
+    const subscriptionId = await createSubscription()
+    const newsId = await createNews()
+    const originalOwner = await env.DB.prepare(
+      "SELECT user_id FROM push_subscriptions WHERE id = ?",
+    ).bind(subscriptionId).first<{ user_id: string }>()
+    const newOwnerId = await createViewer()
+    expect(originalOwner?.user_id).toBeTruthy()
+
+    await enqueueNewsPushDeliveries(pushEnv, { id: newsId })
+    await env.DB.prepare("UPDATE push_subscriptions SET user_id = ? WHERE id = ?")
+      .bind(newOwnerId, subscriptionId).run()
+
+    const fetchMock = vi.fn(async () => new Response(null, { status: 201 }))
+    vi.stubGlobal("fetch", fetchMock)
+    await processDuePushDeliveries(pushEnv)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    const delivery = await getDelivery(newsId)
+    expect(delivery?.status).toBe("failed")
+  })
+
+  it("suppresses queued legacy news Push when the category is turned off", async () => {
+    const subscriptionId = await createSubscription()
+    const newsId = await createNews()
+    const owner = await env.DB.prepare(
+      "SELECT user_id FROM push_subscriptions WHERE id = ?",
+    ).bind(subscriptionId).first<{ user_id: string }>()
+    await env.DB.prepare(
+      "INSERT INTO notification_category_settings (user_id, category, push_enabled) VALUES (?, 'news', 0)",
+    ).bind(owner!.user_id).run()
+
+    await enqueueNewsPushDeliveries(pushEnv, { id: newsId })
+    const fetchMock = vi.fn(async () => new Response(null, { status: 201 }))
+    vi.stubGlobal("fetch", fetchMock)
+    await processDuePushDeliveries(pushEnv)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    const delivery = await getDelivery(newsId)
+    expect(delivery?.status).toBe("failed")
+  })
 
   it("requeues an existing news notification for all current subscriptions", async () => {
     await createSubscription()

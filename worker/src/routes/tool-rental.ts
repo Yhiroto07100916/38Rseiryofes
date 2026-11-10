@@ -1,4 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { createNotificationsForUsers } from "../lib/notifications"
 
 type ToolItemRow = {
   id: number
@@ -50,6 +51,24 @@ async function getBorrowerId(
   return borrower.id
 }
 
+async function findBorrowerUserId(
+  db: D1Database,
+  name: string,
+  requestedUserId?: string | null,
+): Promise<string | null> {
+  if (requestedUserId) {
+    const matched = await db.prepare(
+      "SELECT id FROM users WHERE id = ? AND (name = ? OR nickname = ?)",
+    ).bind(requestedUserId, name, name).first<{ id: string }>()
+    if (matched) return matched.id
+  }
+
+  const matches = await db.prepare(
+    "SELECT id FROM users WHERE name = ? OR nickname = ? LIMIT 2",
+  ).bind(name, name).all<{ id: string }>()
+  return matches.results.length === 1 ? matches.results[0].id : null
+}
+
 async function refreshToolCounts(db: D1Database, toolId: number): Promise<void> {
   await db.prepare(`
     UPDATE tools
@@ -66,6 +85,115 @@ async function refreshToolCounts(db: D1Database, toolId: number): Promise<void> 
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `).bind(toolId, toolId, toolId).run()
+}
+
+
+async function getOnCampusUserIds(env: Env): Promise<string[]> {
+  const result = await env.DB.prepare(
+    "SELECT user_id FROM presence_states WHERE status = 'inside' " +
+    "AND local_date = date('now', '+9 hours') AND expires_at > ?",
+  ).bind(new Date().toISOString()).all<{ user_id: string }>()
+  return result.results.map(row => row.user_id)
+}
+
+async function getAllUserIds(env: Env): Promise<string[]> {
+  const result = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+  return result.results.map(row => row.id)
+}
+
+export async function processDueToolRentalNotifications(env: Env): Promise<void> {
+  const allUserIds = await getAllUserIds(env)
+  if (allUserIds.length === 0) return
+  const now = new Date().toISOString()
+
+  const dueSoon = await env.DB.prepare(
+    "SELECT id, tool_name_snapshot, due_at FROM loans " +
+    "WHERE status = 'borrowed' AND due_at IS NOT NULL " +
+    "AND due_at >= datetime('now', '+9 hours', '+4 minutes') " +
+    "AND due_at <= datetime('now', '+9 hours', '+6 minutes') " +
+    "AND presence_due_soon_notified_at IS NULL",
+  ).all<{ id: number; tool_name_snapshot: string | null; due_at: string }>()
+
+  for (const loan of dueSoon.results) {
+    try {
+      await createNotificationsForUsers(env, {
+        recipientUserIds: allUserIds,
+        eventKey: "tool_rental.due_soon:" + loan.id + ":" + loan.due_at,
+        category: "tool_rental",
+        title: "工具の返却期限が近づいています",
+        body: (loan.tool_name_snapshot || "工具") + "の返却期限まで10分です。",
+        targetUrl: "/tool-rental/loans/current?open=" + encodeURIComponent(String(loan.id)),
+        entityType: "tool_loan",
+        entityId: String(loan.id),
+        dedupeKey: "tool_rental.due_soon:" + loan.id + ":" + loan.due_at,
+      })
+      await env.DB.prepare(
+        "UPDATE loans SET presence_due_soon_notified_at = ? WHERE id = ? AND presence_due_soon_notified_at IS NULL",
+      ).bind(now, loan.id).run()
+    } catch (error) {
+      console.error("Failed to create tool due-soon notifications:", error)
+    }
+  }
+
+  const timerAlarms = await env.DB.prepare(
+    "SELECT li.id AS loan_item_id, l.id AS loan_id, l.tool_name_snapshot, ti.management_number " +
+    "FROM loan_items li INNER JOIN loans l ON l.id = li.loan_id " +
+    "INNER JOIN tool_items ti ON ti.id = li.tool_item_id " +
+    "WHERE li.returned_at IS NULL AND l.status = 'borrowed' " +
+    "AND l.due_at IS NOT NULL " +
+    "AND l.due_at <= datetime('now', '+9 hours') " +
+    "AND l.due_at > datetime('now', '+9 hours', '-2 minutes') " +
+    "AND li.timer_alarm_notified_at IS NULL",
+  ).all<{ loan_item_id: number; loan_id: number; tool_name_snapshot: string | null; management_number: string }>()
+
+  for (const alarm of timerAlarms.results) {
+    try {
+      await createNotificationsForUsers(env, {
+        recipientUserIds: allUserIds,
+        eventKey: "tool_rental.timer_end:" + alarm.loan_item_id,
+        category: "tool_rental",
+        title: "工具貸出タイマーが終了しました",
+        body: (alarm.tool_name_snapshot || "工具") + "（" + alarm.management_number + "）の貸出タイマーが終了しました。",
+        targetUrl: "/tool-rental/loans/current?open=" + encodeURIComponent(String(alarm.loan_item_id)),
+        entityType: "tool_loan_item",
+        entityId: String(alarm.loan_item_id),
+        dedupeKey: "tool_rental.timer_end:" + alarm.loan_item_id,
+      })
+      await env.DB.prepare(
+        "UPDATE loan_items SET timer_alarm_notified_at = ? WHERE id = ? AND timer_alarm_notified_at IS NULL",
+      ).bind(now, alarm.loan_item_id).run()
+    } catch (error) {
+      console.error("Failed to create tool timer notifications:", error)
+    }
+  }
+
+  const overdue = await env.DB.prepare(
+    "SELECT id, tool_name_snapshot, due_at FROM loans " +
+    "WHERE status = 'borrowed' AND due_at IS NOT NULL " +
+    "AND due_at <= datetime('now', '+9 hours', '-5 minutes') " +
+    "AND presence_overdue_notified_at IS NULL",
+  ).all<{ id: number; tool_name_snapshot: string | null; due_at: string }>()
+
+  for (const loan of overdue.results) {
+    try {
+      await createNotificationsForUsers(env, {
+        recipientUserIds: allUserIds,
+        eventKey: "tool_rental.overdue:" + loan.id,
+        category: "tool_rental",
+        title: "工具の返却期限を過ぎています",
+        body: (loan.tool_name_snapshot || "工具") + "の返却期限を過ぎています。",
+        targetUrl: "/tool-rental/loans/current?open=" + encodeURIComponent(String(loan.id)),
+        entityType: "tool_loan",
+        entityId: String(loan.id),
+        dedupeKey: "tool_rental.overdue:" + loan.id,
+      })
+      await env.DB.prepare(
+        "UPDATE loans SET presence_overdue_notified_at = ? WHERE id = ? AND presence_overdue_notified_at IS NULL",
+      ).bind(now, loan.id).run()
+    } catch (error) {
+      console.error("Failed to create tool overdue notifications:", error)
+    }
+  }
 }
 
 export async function handleToolRental(
@@ -244,19 +372,25 @@ export async function handleToolRental(
       if (item.status !== "available") return json({ detail: "この個体は現在貸出できません" }, 409)
 
       const borrowerId = await getBorrowerId(env.DB, className, name)
+      const requestedBorrowerUserId = typeof body.borrower_user_id === "string"
+        ? body.borrower_user_id
+        : null
+      const borrowerUserId = await findBorrowerUserId(env.DB, name, requestedBorrowerUserId)
       const loan = await env.DB.prepare(`
         INSERT INTO loans (
           borrower_id, tool_id, quantity, borrowed_at, status,
-          tool_name_snapshot, time_limit_minutes, due_at
+          tool_name_snapshot, time_limit_minutes, due_at,
+          checkout_user_id, borrower_user_id
         )
         VALUES (
           ?, ?, 1, datetime('now', '+9 hours'), 'borrowed',
           ?, ?, CASE WHEN ? IS NULL THEN NULL
-            ELSE datetime('now', '+9 hours', '+' || (? - 5) || ' minutes') END
+            ELSE datetime('now', '+9 hours', '+' || (? - 5) || ' minutes') END, ?, ?
         )
       `).bind(
         borrowerId, item.tool_id, item.tool_name,
         timeLimitMinutes, timeLimitMinutes, timeLimitMinutes,
+        auth.user.id, borrowerUserId,
       ).run()
       const loanId = Number(loan.meta.last_row_id)
       const update = await env.DB.prepare(`
@@ -277,6 +411,24 @@ export async function handleToolRental(
         throw error
       }
       await refreshToolCounts(env.DB, item.tool_id)
+      try {
+        const onCampus = await getOnCampusUserIds(env)
+        await createNotificationsForUsers(env, {
+          recipientUserIds: [...new Set([...onCampus, auth.user.id])],
+          eventKey: "tool_rental.checked_out:" + loanId,
+          category: "tool_rental",
+          title: "工具の貸出がありました",
+          body: item.tool_name + "（" + item.management_number + "）が貸し出されました。",
+          targetUrl: "/tool-rental/loans/current?open=" + encodeURIComponent(String(loanId)),
+          actorUserId: auth.user.id,
+          includeActor: true,
+          entityType: "tool_loan",
+          entityId: String(loanId),
+          dedupeKey: "tool_rental.checked_out:" + loanId,
+        })
+      } catch (notificationError) {
+        console.error("Failed to create tool checkout notifications:", notificationError)
+      }
       return json({ success: true, loan_id: loanId }, 201)
     }
 
@@ -307,12 +459,23 @@ export async function handleToolRental(
       if (!className || !name) return json({ detail: "返却者のクラスと氏名を入力してください" }, 400)
 
       const loanItem = await env.DB.prepare(`
-        SELECT li.id, li.loan_id, li.tool_item_id, l.tool_id
+        SELECT li.id, li.loan_id, li.tool_item_id, l.tool_id, l.tool_name_snapshot,
+          l.borrower_user_id, b.name AS borrower_name, ti.management_number
         FROM loan_items li
         INNER JOIN loans l ON l.id = li.loan_id
+        INNER JOIN borrowers b ON b.id = l.borrower_id
         INNER JOIN tool_items ti ON ti.id = li.tool_item_id
         WHERE li.id = ? AND li.returned_at IS NULL AND ti.status = 'borrowed'
-      `).bind(loanItemId).first<{ id: number; loan_id: number; tool_item_id: number; tool_id: number }>()
+      `).bind(loanItemId).first<{
+        id: number
+        loan_id: number
+        tool_item_id: number
+        tool_id: number
+        tool_name_snapshot: string | null
+        borrower_user_id: string | null
+        borrower_name: string
+        management_number: string
+      }>()
       if (!loanItem) return json({ detail: "この個体は返却済みか、貸出記録が見つかりません" }, 404)
 
       const returnerId = await getBorrowerId(env.DB, className, name)
@@ -347,6 +510,30 @@ export async function handleToolRental(
         WHERE id = ?
       `).bind(returnerId, remaining?.count ?? 0, remaining?.count ?? 0, loanItem.loan_id).run()
       await refreshToolCounts(env.DB, loanItem.tool_id)
+      const borrowerUserId = loanItem.borrower_user_id ||
+        await findBorrowerUserId(env.DB, loanItem.borrower_name)
+      try {
+        const onCampus = await getOnCampusUserIds(env)
+        await createNotificationsForUsers(env, {
+          recipientUserIds: [...new Set([
+            ...onCampus,
+            auth.user.id,
+            ...(borrowerUserId ? [borrowerUserId] : []),
+          ])],
+          eventKey: "tool_rental.returned:" + loanItem.id,
+          category: "tool_rental",
+          title: "工具の返却がありました",
+          body: (loanItem.tool_name_snapshot || "工具") + "（" + loanItem.management_number + "）が返却されました。",
+          targetUrl: "/tool-rental/loans/history?open=" + encodeURIComponent(String(loanItem.id)),
+          actorUserId: auth.user.id,
+          includeActor: true,
+          entityType: "tool_loan_item",
+          entityId: String(loanItem.id),
+          dedupeKey: "tool_rental.returned:" + loanItem.id,
+        })
+      } catch (notificationError) {
+        console.error("Failed to create tool return notifications:", notificationError)
+      }
       return json({ success: true })
     }
 

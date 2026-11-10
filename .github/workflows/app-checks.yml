@@ -1,0 +1,43 @@
+name: App checks
+
+on:
+  push:
+    branches:
+      - feature/notification-center
+    paths:
+      - "app/**"
+      - ".github/workflows/app-checks.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - ".github/workflows/app-checks.yml"
+
+jobs:
+  app-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install app dependencies
+        run: npm ci
+        working-directory: app
+
+      - name: Run notification cache unit tests
+        run: npm test
+        working-directory: app
+
+      - name: Run Nuxt typecheck
+        run: npx nuxt typecheck
+        working-directory: app
+
+      - name: Build Nuxt app
+        run: npm run build
+        working-directory: app
