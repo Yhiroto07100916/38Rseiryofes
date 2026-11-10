@@ -550,6 +550,8 @@
           </v-card-text>
         </v-card>
 
+        <PresenceSettings />
+
         <v-card
           rounded="xl"
           elevation="1"
