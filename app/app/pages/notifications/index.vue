@@ -413,7 +413,7 @@ function formatDate(value: string): string {
 }
 
 async function openNotification(item: AppNotification) {
-  if (!item.is_read) await setRead(item.id, true)
+  if (!item.is_read) void setRead(item.id, true)
   const target = item.target_url
   if (target && target.startsWith("/") && !target.startsWith("//")) {
     await navigateTo(target)
