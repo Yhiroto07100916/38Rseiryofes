@@ -143,29 +143,6 @@
         </template>
       </nav>
 
-      <v-divider class="legal-divider" />
-
-      <section class="legal-navigation" aria-label="規約とポリシー">
-        <div class="legal-navigation-title">規約とポリシー</div>
-        <NuxtLink
-          to="/privacy-policy"
-          class="drawer-item"
-          :class="{ 'is-active': route.path === '/privacy-policy' }"
-          @click="isOpen = false"
-        >
-          <v-icon icon="mdi-shield-check-outline" size="23" class="drawer-item-icon" />
-          <span>プライバシーポリシー</span>
-        </NuxtLink>
-        <NuxtLink
-          to="/terms"
-          class="drawer-item"
-          :class="{ 'is-active': route.path === '/terms' }"
-          @click="isOpen = false"
-        >
-          <v-icon icon="mdi-file-document-outline" size="23" class="drawer-item-icon" />
-          <span>利用規約</span>
-        </NuxtLink>
-      </section>
     </div>
   </v-navigation-drawer>
 </template>
@@ -302,24 +279,6 @@ const handleLogout = async () => {
   display: flex;
   flex-direction: column;
   padding: 12px;
-}
-
-.legal-divider {
-  margin: 4px 16px 0;
-}
-
-.legal-navigation {
-  display: flex;
-  flex-direction: column;
-  padding: 12px;
-}
-
-.legal-navigation-title {
-  padding: 8px 14px 6px;
-  color: #78909c;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
 }
 
 .drawer-item {
