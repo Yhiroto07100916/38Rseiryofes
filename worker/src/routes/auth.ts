@@ -3,7 +3,7 @@ import {
   requireAccountRole,
 } from "../lib/authz"
 import { hashPassword, verifyPassword } from "../lib/password"
-import { getSecuritySettings } from "../lib/site-settings"
+import { getSecuritySettings, getSiteSetting } from "../lib/site-settings"
 import {
   createLoginSessionHeaders,
   createLogoutSessionHeaders,
