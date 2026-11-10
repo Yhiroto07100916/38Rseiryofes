@@ -173,10 +173,19 @@ async function loadSettings() {
       '/api/admin/settings',
     )
     Object.assign(settings, response.settings)
-    settings.feature_settings = {
-      ...defaultFeatureSettings(),
-      ...(response.settings.feature_settings ?? {}),
-    }
+    const featureDefaults = defaultFeatureSettings()
+    const storedFeatures = response.settings.feature_settings ?? {}
+    settings.feature_settings = Object.fromEntries(
+      Object.entries({ ...featureDefaults, ...storedFeatures }).map(([key, config]) => [
+        key,
+        {
+          ...(featureDefaults[key] ?? {
+            enabled: true, view: true, create: true, edit: true, delete: true,
+          }),
+          ...config,
+        },
+      ]),
+    )
     settings.notification_settings = {
       ...defaultSettings().notification_settings,
       ...(response.settings.notification_settings ?? {}),
