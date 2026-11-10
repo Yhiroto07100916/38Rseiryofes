@@ -1,5 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
-import { enqueueNewsPushDeliveries, processDuePushDeliveries, reenqueueNewsPushDeliveries } from "./push"
+import { notifyUsers } from "./presence-notifications"
 
 export interface News {
   id: string
@@ -605,19 +605,18 @@ export async function handleNews(
 
     const news = await getNews(env, newsId)
 
-    // 配信キューへの保存だけを同期実行し、Push送信はレスポンス後に行う。
     try {
-      await enqueueNewsPushDeliveries(env, { id: newsId })
-
-      if (ctx) {
-        ctx.waitUntil(
-          processDuePushDeliveries(env).catch((error) => {
-            console.error("Background push delivery failed:", error)
-          }),
-        )
-      }
+      const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+      await notifyUsers(env, {
+        eventKey: `news:${newsId}:created`,
+        eventType: "news_created",
+        title,
+        body: detail,
+        targetUrl: `/news/${newsId}`,
+        userIds: users.results.map(user => user.id),
+      })
     } catch (error) {
-      console.error("Failed to enqueue news push notifications:", error)
+      console.error("Failed to enqueue common news notifications:", error)
     }
 
     return Response.json(news, { status: 201 })
@@ -651,24 +650,18 @@ export async function handleNews(
       )
     }
 
-    const result = await reenqueueNewsPushDeliveries(env, { id: newsId })
-
-    if (!result.configured) {
-      return Response.json(
-        { error: "Push notifications are not configured" },
-        { status: 503 },
-      )
-    }
-
-    if (ctx) {
-      ctx.waitUntil(
-        processDuePushDeliveries(env).catch((error) => {
-          console.error("Background news re-notification failed:", error)
-        }),
-      )
-    }
-
-    return Response.json({ queued: result.queued })
+    const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+    const title = await env.DB.prepare("SELECT title FROM news WHERE id = ?")
+      .bind(newsId).first<{ title: string }>()
+    const result = await notifyUsers(env, {
+      eventKey: `news:${newsId}:manual:${crypto.randomUUID()}`,
+      eventType: "news_resent",
+      title: title?.title || "새로운 소식",
+      body: "새로운 소식을 확인해 주세요.",
+      targetUrl: `/news/${newsId}`,
+      userIds: users.results.map(user => user.id),
+    })
+    return Response.json({ queued: result })
   }
 
   if (
