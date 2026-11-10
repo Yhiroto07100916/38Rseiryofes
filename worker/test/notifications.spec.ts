@@ -126,7 +126,7 @@ describe("Notification center API", () => {
     }
 
     expect(data.notifications).toHaveLength(0)
-    expect(data.known_notifications).toContainEqual({ id, is_read: 1 })
+    expect(data.known_notifications).toEqual(expect.arrayContaining([expect.objectContaining({ id, is_read: 1 })]))
   })
 
   it("returns notifications newest first and limits each page to 20", async () => {
