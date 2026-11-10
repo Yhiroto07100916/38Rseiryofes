@@ -1,95 +1,102 @@
-<template>
-  <div class="mb-4">
-    <div class="d-flex align-center justify-space-between mb-2">
-      <div class="text-subtitle-2 font-weight-medium">関連リンク</div>
-      <v-btn
-        size="small"
-        variant="tonal"
-        prepend-icon="mdi-plus"
-        :disabled="modelValue.length >= 20"
-        @click="addLink"
-      >
-        {{ addLabel }}
-      </v-btn>
-    </div>
-
-    <div v-for="(taskLink, index) in props.modelValue" :key="index" class="d-flex align-start ga-2 mb-2">
-      <div class="flex-grow-1">
-        <v-text-field
-          :model-value="taskLink.title"
-          label="表示タイトル"
-          placeholder="例：資料・参考ページ"
-          variant="outlined"
-          density="comfortable"
-          hide-details
-          class="mb-2"
-          @update:model-value="updateTitle(index, $event)"
-        />
-        <v-text-field
-          :model-value="taskLink.url"
-          label="URL"
-          placeholder="https://example.com"
-          variant="outlined"
-          density="comfortable"
-          hide-details
-          @update:model-value="updateUrl(index, $event)"
-        />
-      </div>
-      <v-btn
-        icon="mdi-close"
-        variant="text"
-        color="error"
-        aria-label="リンクを削除"
-        @click="removeLink(index)"
-      />
-    </div>
-
-    <div v-if="helpText" class="text-caption text-medium-emphasis">
-      {{ helpText }}
-    </div>
-  </div>
-</template>
-
-<script setup lang="ts">
-import { computed } from "vue"
+<script lang="ts">
+import { defineComponent, h, resolveComponent, type PropType } from "vue"
 
 interface TaskLink {
   title: string
   url: string
 }
 
-const props = defineProps<{
-  modelValue: TaskLink[]
-  addLabel?: string
-  helpText?: string
-}>()
+export default defineComponent({
+  name: "TaskLinksEditor",
+  props: {
+    modelValue: {
+      type: Array as PropType<TaskLink[]>,
+      required: true,
+    },
+    addLabel: {
+      type: String,
+      default: "追加",
+    },
+    helpText: {
+      type: String,
+      default: "最大20件。タイトルとURLを両方入力してください。",
+    },
+  },
+  emits: {
+    "update:modelValue": (_value: TaskLink[]) => true,
+  },
+  setup(props, { emit }) {
+    const addLink = () => {
+      if (props.modelValue.length >= 20) return
+      emit("update:modelValue", [...props.modelValue, { title: "", url: "" }])
+    }
 
-const modelValue = computed(() => props.modelValue)
-const addLabel = computed(() => props.addLabel ?? "追加")
-const helpText = computed(() => props.helpText ?? "最大20件。タイトルとURLを両方入力してください。")
+    const updateLink = (index: number, field: keyof TaskLink, value: string | null) => {
+      const links = props.modelValue.map((link, currentIndex) => (
+        currentIndex === index
+          ? { ...link, [field]: value ?? "" }
+          : link
+      ))
+      emit("update:modelValue", links)
+    }
 
-const emit = defineEmits<{
-  "update:modelValue": [value: TaskLink[]]
-}>()
+    const removeLink = (index: number) => {
+      emit("update:modelValue", props.modelValue.filter((_, currentIndex) => currentIndex !== index))
+    }
 
-const addLink = () => {
-  if (props.modelValue.length >= 20) return
-  emit("update:modelValue", [...props.modelValue, { title: "", url: "" }])
-}
+    return () => {
+      const VBtn = resolveComponent("v-btn")
+      const VTextField = resolveComponent("v-text-field")
 
-const updateLink = (index: number, field: keyof TaskLink, value: string | null) => {
-  const links = props.modelValue.map((link, currentIndex) => (
-    currentIndex === index
-      ? { ...link, [field]: value ?? "" }
-      : link
-  ))
-  emit("update:modelValue", links)
-}
-
-const updateTitle = (index: number, value: string | null) => updateLink(index, "title", value)
-const updateUrl = (index: number, value: string | null) => updateLink(index, "url", value)
-
-const removeLink = (index: number) => {
-  emit("update:modelValue", props.modelValue.filter((_, currentIndex) => currentIndex !== index))
-}
+      return h("div", { class: "mb-4" }, [
+        h("div", { class: "d-flex align-center justify-space-between mb-2" }, [
+          h("div", { class: "text-subtitle-2 font-weight-medium" }, "関連リンク"),
+          h(VBtn, {
+            size: "small",
+            variant: "tonal",
+            prependIcon: "mdi-plus",
+            disabled: props.modelValue.length >= 20,
+            onClick: addLink,
+          }, () => props.addLabel),
+        ]),
+        ...props.modelValue.map((taskLink, index) => h("div", {
+          key: index,
+          class: "d-flex align-start ga-2 mb-2",
+        }, [
+          h("div", { class: "flex-grow-1" }, [
+            h(VTextField, {
+              modelValue: taskLink.title,
+              label: "表示タイトル",
+              placeholder: "例：資料・参考ページ",
+              variant: "outlined",
+              density: "comfortable",
+              hideDetails: true,
+              class: "mb-2",
+              "onUpdate:modelValue": (value: string | null) => updateLink(index, "title", value),
+            }),
+            h(VTextField, {
+              modelValue: taskLink.url,
+              label: "URL",
+              placeholder: "https://example.com",
+              variant: "outlined",
+              density: "comfortable",
+              hideDetails: true,
+              "onUpdate:modelValue": (value: string | null) => updateLink(index, "url", value),
+            }),
+          ]),
+          h(VBtn, {
+            icon: "mdi-close",
+            variant: "text",
+            color: "error",
+            "aria-label": "リンクを削除",
+            onClick: () => removeLink(index),
+          }),
+        ])),
+        props.helpText
+          ? h("div", { class: "text-caption text-medium-emphasis" }, props.helpText)
+          : null,
+      ])
+    }
+  },
+})
 </script>
