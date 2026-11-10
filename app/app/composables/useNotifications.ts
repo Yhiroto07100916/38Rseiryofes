@@ -111,7 +111,9 @@ export const useNotifications = () => {
       unreadCount.value,
       effectiveServerTime,
       true,
-    ).catch(() => undefined)
+    ).catch(error => {
+      console.warn("[notifications] cache save failed", error)
+    })
     const pending = pendingCacheSaves.get(accountId) ?? new Set<Promise<void>>()
     pending.add(savePromise)
     pendingCacheSaves.set(accountId, pending)
@@ -218,7 +220,8 @@ export const useNotifications = () => {
         ? { created_at: cursorItem.created_at, id: cursorItem.id }
         : null
       hasMore.value = filtered.length > PAGE_SIZE || cached.notifications.length >= 100
-    } catch {
+    } catch (error) {
+      console.warn("[notifications] cache load failed", error)
       // キャッシュ障害時はAPI取得を継続する。
     }
   }
@@ -232,7 +235,8 @@ export const useNotifications = () => {
     let cacheClockValid = true
     try {
       cacheClockValid = await validateNotificationCacheClock(accountId, serverTime)
-    } catch {
+    } catch (error) {
+      console.warn("[notifications] cache clock validation failed", error)
       // キャッシュの時刻検証に失敗しても、APIから取得した最新データの表示は継続する。
     }
     if (
@@ -336,7 +340,8 @@ export const useNotifications = () => {
       }
       partialCacheUpdates.delete(accountId)
       return true
-    })().catch(() => {
+    })().catch(error => {
+      console.warn("[notifications] full cache refresh failed", error)
       // 不完全な取得結果では既存キャッシュを置き換えない。
       return false
     }).finally(() => {
