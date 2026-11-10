@@ -1,5 +1,6 @@
 import { buildPushHTTPRequest } from "@pushforge/builder"
 import { hasPermission, requireAuth } from "../lib/authz"
+import { getSiteSetting } from "../lib/site-settings"
 
 interface PushSubscriptionRecord {
   id: string
@@ -1042,6 +1043,21 @@ async function processOneNotificationDelivery(
   if ((claimed.meta?.changes ?? 0) !== 1) return
 
   try {
+    const siteNotificationSettings = await getSiteSetting<{
+      enabled?: boolean
+      categories?: Record<string, boolean>
+      return_due_all_users?: boolean
+    }>(env, "notification_settings", { enabled: true, categories: {}, return_due_all_users: true })
+    const siteCategoryEnabled = siteNotificationSettings.categories?.[delivery.category] !== false
+    if (siteNotificationSettings.enabled === false || !siteCategoryEnabled) {
+      await updateNotificationDelivery(env, delivery.delivery_id, {
+        status: "failed",
+        attemptCount: attemptNumber,
+        error: "Delivery disabled by site notification settings",
+      })
+      return
+    }
+
     const preferences = await env.DB.prepare(
       "SELECT COALESCE(us.global_push_enabled, 1) AS global_enabled, " +
       "COALESCE(cs.push_enabled, 1) AS category_enabled " +
