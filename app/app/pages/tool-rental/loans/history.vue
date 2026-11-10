@@ -50,6 +50,7 @@
 </template>
 
 <script setup lang="ts">
+import { getDefaultTimeZone } from '~/utils/jst'
 import { nextTick } from 'vue'
 import type { LoanHistoryItem } from '~/types/tool-rental'
 
@@ -82,7 +83,7 @@ const formatDate = (value: string) => {
   const date = /(?:Z|[+-]\d{2}:\d{2})$/.test(normalized)
     ? new Date(normalized)
     : new Date(`${normalized}+09:00`)
-  return date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+  return date.toLocaleString('ja-JP', { timeZone: getDefaultTimeZone() })
 }
 
 const loadHistory = async () => {
