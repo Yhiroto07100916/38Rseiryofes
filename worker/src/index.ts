@@ -17,7 +17,7 @@ import { handleAccounting } from "./routes/accounting"
 import { handleFiles } from "./routes/files"
 import { handlePublicFiles } from "./routes/public-files"
 import { handleReceiptOcr } from "./routes/receipt-ocr"
-import { handleSurveys } from "./routes/surveys"
+import { handleSurveys, processDueSurveyNotifications } from "./routes/surveys"
 import { handleDecisions } from "./routes/decisions"
 import { handleMinutes } from "./routes/minutes"
 import { handleMilkCollection } from "./routes/milk-collection"
@@ -869,6 +869,12 @@ export default {
       await processDueNotificationPushDeliveries(env)
     } catch (error) {
       console.error("Scheduled notification push delivery failed:", error)
+    }
+
+    try {
+      await processDueSurveyNotifications(env)
+    } catch (error) {
+      console.error("Scheduled survey notification processing failed:", error)
     }
   },
 } satisfies ExportedHandler<Env>
