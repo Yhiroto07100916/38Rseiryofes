@@ -90,6 +90,7 @@ export const useNotifications = () => {
   const readStateWriteCompletedAt = new Map<string, number>()
   let cachedClockOffsetMs: number | null = null
   let cacheSnapshot: AppNotification[] = []
+  let cacheInitialized = false
   let listActive = true
 
   const saveCacheSnapshot = async (accountId: string | null, serverTime?: string) => {
