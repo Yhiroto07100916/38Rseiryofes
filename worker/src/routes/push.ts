@@ -794,13 +794,13 @@ export async function canAccessNotificationTarget(
       ).bind(Number(delivery.entity_id)).first()
       if (!outstanding) return false
 
+      const dueAt = parseJstDateTime(loan.due_at)
       if (delivery.event_key.startsWith("tool_rental.due_soon")) {
-        const dueAt = parseJstDateTime(loan.due_at)
         if (
           delivery.event_key !== "tool_rental.due_soon:" + delivery.entity_id + ":" + loan.due_at ||
           !Number.isFinite(dueAt) || dueAt <= Date.now() || dueAt > Date.now() + 6 * 60_000
         ) return false
-      } else if (dueAt + 5 * 60_000 > Date.now()) {
+      } else if (!Number.isFinite(dueAt) || dueAt + 5 * 60_000 > Date.now()) {
         // due_atは返却予定時刻の5分前に鳴る既存タイマー時刻。
         // 超過通知は、その5分後の実際の返却予定時刻を過ぎてから送る。
         return false
