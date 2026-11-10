@@ -13,12 +13,21 @@ export function usePresence() {
   const busy = ref(false);
   const error = ref("");
   const enabled = useState<boolean>("presence-location-enabled", () => false);
+  const loadedUserId = useState<string | null>("presence-loaded-user-id", () => null);
 
   const refresh = async () => {
     if (!import.meta.client) return;
     if (!auth.user?.id) {
       enabled.value = false;
+      status.value = "unknown";
+      method.value = null;
+      loadedUserId.value = null;
       return;
+    }
+    if (loadedUserId.value !== auth.user.id) {
+      status.value = "unknown";
+      method.value = null;
+      loadedUserId.value = auth.user.id;
     }
     enabled.value = localStorage.getItem(consentKey.value) === "true";
     try {
