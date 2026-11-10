@@ -636,6 +636,7 @@ export const useNotifications = () => {
       const response = await apiFetch<{
         updated_count: number
         updated_ids: string[]
+        unread_count: number
         updated_read_states: Array<{ id: string; read_updated_at: string; read_version: number }>
         unread_count: number
       }>("/api/notifications/read-all", {
