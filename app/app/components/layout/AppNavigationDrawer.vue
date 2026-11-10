@@ -7,6 +7,13 @@
     class="app-navigation-drawer"
   >
     <div class="drawer-content">
+      <header class="site-branding">
+        <div class="site-branding-name">{{ siteStatus?.site_name || "38R 星陵祭準備サイト" }}</div>
+        <div class="site-branding-event">
+          {{ siteStatus ? `${siteStatus.event_year}年度 ${siteStatus.event_name}` : "38R 準備サイト" }}
+        </div>
+      </header>
+
       <section class="account-section">
         <template v-if="auth.isLoggedIn">
           <div class="account-header">
@@ -144,6 +151,7 @@ const isOpen = defineModel<boolean>({
 
 const route = useRoute()
 const auth = useAuthStore()
+const siteStatus = useSiteStatus()
 
 const isAdmin = computed(() =>
   auth.accountRoles.some((role) => role.name === 'admin'),
@@ -186,8 +194,28 @@ const handleLogout = async () => {
   background: white;
 }
 
+.site-branding {
+  padding: 58px 18px 14px;
+  border-bottom: 1px solid rgb(18 58 92 / 10%);
+}
+
+.site-branding-name {
+  overflow-wrap: anywhere;
+  color: var(--color-primary);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.site-branding-event {
+  margin-top: 4px;
+  color: #78909c;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
 .account-section {
-  padding: 56px 16px 16px;
+  padding: 16px;
 }
 
 .account-header {
