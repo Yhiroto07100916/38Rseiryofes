@@ -270,7 +270,7 @@ describe("38R tool inventory and lending ledger", () => {
   it("notifies only on-campus users for checkout and return, including the operator", async () => {
     const manager = await createUser("在校中の貸出担当")
     const onCampus = await createUser("在校ユーザー")
-    const offCampus = await createUser("校外ユーザー")
+    const offCampus = await createUser("借用者")
     await grant(manager.userId, [
       "tool_rental.view",
       "tool_rental.manage",
@@ -296,10 +296,20 @@ describe("38R tool inventory and lending ledger", () => {
     const items = await itemResponse.json() as Array<{ id: number }>
     const checkout = await api(manager, "/loans", {
       method: "POST",
-      body: { tool_item_id: items[0].id, class_name: "38R", name: "借用者" },
+      body: {
+        tool_item_id: items[0].id,
+        class_name: "38R",
+        name: "借用者",
+        borrower_user_id: offCampus.userId,
+      },
     })
     expect(checkout.status).toBe(201)
     const checkoutBody = await checkout.json() as { loan_id: number }
+
+    const borrowerMapping = await env.DB.prepare(
+      "SELECT borrower_user_id FROM loans WHERE id = ?",
+    ).bind(checkoutBody.loan_id).first<{ borrower_user_id: string | null }>()
+    expect(borrowerMapping?.borrower_user_id).toBe(offCampus.userId)
 
     const checkoutNotifications = await env.DB.prepare(
       "SELECT recipient_user_id FROM notifications WHERE event_key = ?",
@@ -323,7 +333,7 @@ describe("38R tool inventory and lending ledger", () => {
       "SELECT recipient_user_id FROM notifications WHERE event_key = ?",
     ).bind("tool_rental.returned:" + current[0].loan_item_id).all<{ recipient_user_id: string }>()
     expect(returnNotifications.results.map(row => row.recipient_user_id).sort())
-      .toEqual([manager.userId, onCampus.userId].sort())
+      .toEqual([manager.userId, onCampus.userId, offCampus.userId].sort())
   })
   it("sends due-soon, timer-end, and overdue notifications to everyone", async () => {
     const manager = await createUser("期限通知担当")

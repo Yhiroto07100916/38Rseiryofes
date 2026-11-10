@@ -51,6 +51,24 @@ async function getBorrowerId(
   return borrower.id
 }
 
+async function findBorrowerUserId(
+  db: D1Database,
+  name: string,
+  requestedUserId?: string | null,
+): Promise<string | null> {
+  if (requestedUserId) {
+    const matched = await db.prepare(
+      "SELECT id FROM users WHERE id = ? AND (name = ? OR nickname = ?)",
+    ).bind(requestedUserId, name, name).first<{ id: string }>()
+    if (matched) return matched.id
+  }
+
+  const matches = await db.prepare(
+    "SELECT id FROM users WHERE name = ? OR nickname = ? LIMIT 2",
+  ).bind(name, name).all<{ id: string }>()
+  return matches.results.length === 1 ? matches.results[0].id : null
+}
+
 async function refreshToolCounts(db: D1Database, toolId: number): Promise<void> {
   await db.prepare(`
     UPDATE tools
@@ -354,19 +372,25 @@ export async function handleToolRental(
       if (item.status !== "available") return json({ detail: "この個体は現在貸出できません" }, 409)
 
       const borrowerId = await getBorrowerId(env.DB, className, name)
+      const requestedBorrowerUserId = typeof body.borrower_user_id === "string"
+        ? body.borrower_user_id
+        : null
+      const borrowerUserId = await findBorrowerUserId(env.DB, name, requestedBorrowerUserId)
       const loan = await env.DB.prepare(`
         INSERT INTO loans (
           borrower_id, tool_id, quantity, borrowed_at, status,
-          tool_name_snapshot, time_limit_minutes, due_at
+          tool_name_snapshot, time_limit_minutes, due_at,
+          checkout_user_id, borrower_user_id
         )
         VALUES (
           ?, ?, 1, datetime('now', '+9 hours'), 'borrowed',
           ?, ?, CASE WHEN ? IS NULL THEN NULL
-            ELSE datetime('now', '+9 hours', '+' || (? - 5) || ' minutes') END
+            ELSE datetime('now', '+9 hours', '+' || (? - 5) || ' minutes') END, ?, ?
         )
       `).bind(
         borrowerId, item.tool_id, item.tool_name,
         timeLimitMinutes, timeLimitMinutes, timeLimitMinutes,
+        auth.user.id, borrowerUserId,
       ).run()
       const loanId = Number(loan.meta.last_row_id)
       const update = await env.DB.prepare(`
@@ -435,12 +459,23 @@ export async function handleToolRental(
       if (!className || !name) return json({ detail: "返却者のクラスと氏名を入力してください" }, 400)
 
       const loanItem = await env.DB.prepare(`
-        SELECT li.id, li.loan_id, li.tool_item_id, l.tool_id, l.tool_name_snapshot, ti.management_number
+        SELECT li.id, li.loan_id, li.tool_item_id, l.tool_id, l.tool_name_snapshot,
+          l.borrower_user_id, b.name AS borrower_name, ti.management_number
         FROM loan_items li
         INNER JOIN loans l ON l.id = li.loan_id
+        INNER JOIN borrowers b ON b.id = l.borrower_id
         INNER JOIN tool_items ti ON ti.id = li.tool_item_id
         WHERE li.id = ? AND li.returned_at IS NULL AND ti.status = 'borrowed'
-      `).bind(loanItemId).first<{ id: number; loan_id: number; tool_item_id: number; tool_id: number; tool_name_snapshot: string | null; management_number: string }>()
+      `).bind(loanItemId).first<{
+        id: number
+        loan_id: number
+        tool_item_id: number
+        tool_id: number
+        tool_name_snapshot: string | null
+        borrower_user_id: string | null
+        borrower_name: string
+        management_number: string
+      }>()
       if (!loanItem) return json({ detail: "この個体は返却済みか、貸出記録が見つかりません" }, 404)
 
       const returnerId = await getBorrowerId(env.DB, className, name)
@@ -475,10 +510,16 @@ export async function handleToolRental(
         WHERE id = ?
       `).bind(returnerId, remaining?.count ?? 0, remaining?.count ?? 0, loanItem.loan_id).run()
       await refreshToolCounts(env.DB, loanItem.tool_id)
+      const borrowerUserId = loanItem.borrower_user_id ||
+        await findBorrowerUserId(env.DB, loanItem.borrower_name)
       try {
         const onCampus = await getOnCampusUserIds(env)
         await createNotificationsForUsers(env, {
-          recipientUserIds: [...new Set([...onCampus, auth.user.id])],
+          recipientUserIds: [...new Set([
+            ...onCampus,
+            auth.user.id,
+            ...(borrowerUserId ? [borrowerUserId] : []),
+          ])],
           eventKey: "tool_rental.returned:" + loanItem.id,
           category: "tool_rental",
           title: "工具の返却がありました",
