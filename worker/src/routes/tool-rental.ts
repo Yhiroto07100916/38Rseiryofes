@@ -91,8 +91,8 @@ export async function processDueToolRentalNotifications(env: Env): Promise<void>
   const dueSoon = await env.DB.prepare(
     "SELECT id, tool_name_snapshot, due_at FROM loans " +
     "WHERE status = 'borrowed' AND due_at IS NOT NULL " +
-    "AND due_at >= datetime('now', '+9 hours', '-5 minutes') " +
-    "AND due_at <= datetime('now', '+9 hours', '+5 minutes') " +
+    "AND due_at >= datetime('now', '+9 hours', '+4 minutes') " +
+    "AND due_at <= datetime('now', '+9 hours', '+6 minutes') " +
     "AND presence_due_soon_notified_at IS NULL",
   ).all<{ id: number; tool_name_snapshot: string | null; due_at: string }>()
 
