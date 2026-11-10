@@ -334,6 +334,9 @@ export const useNotifications = () => {
       manualRefreshRequested = false
     } catch {
       listFailures += 1
+      successMessage.value = ""
+      if (successHandle) clearTimeout(successHandle)
+      successHandle = undefined
       if (listFailures >= MAX_FAILURES) {
         error.value = "再取得に失敗しました。手動で再試行してください。"
         refreshMessage.value = ""
@@ -393,6 +396,9 @@ export const useNotifications = () => {
       if (recovered) showUnreadSuccess("未読件数を更新しました")
     } catch {
       unreadFailures += 1
+      unreadCountSuccess.value = ""
+      if (unreadSuccessHandle) clearTimeout(unreadSuccessHandle)
+      unreadSuccessHandle = undefined
       if (unreadFailures >= MAX_FAILURES) {
         unreadCountError.value = "未読件数を再取得できませんでした。手動で再試行してください。"
       } else {
@@ -483,6 +489,9 @@ export const useNotifications = () => {
       }
     } catch {
       listFailures += 1
+      successMessage.value = ""
+      if (successHandle) clearTimeout(successHandle)
+      successHandle = undefined
       error.value = listFailures >= MAX_FAILURES
         ? "再取得に失敗しました。手動で再試行してください。"
         : "通知を取得できませんでした。通信環境を確認して再試行してください。"
