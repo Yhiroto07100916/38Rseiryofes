@@ -1,5 +1,6 @@
 import { hasPermission, requireAuth } from "../lib/authz"
-import { enqueueNewsPushDeliveries, processDuePushDeliveries, reenqueueNewsPushDeliveries } from "./push"
+import { processDuePushDeliveries, processDueNotificationPushDeliveries, reenqueueNewsPushDeliveries } from "./push"
+import { createNotificationsForUsers } from "../lib/notifications"
 
 export interface News {
   id: string
@@ -605,19 +606,38 @@ export async function handleNews(
 
     const news = await getNews(env, newsId)
 
-    // 配信キューへの保存だけを同期実行し、Push送信はレスポンス後に行う。
+    // お知らせを閲覧できるユーザーへ、アプリ内通知を作成する。
+    // Pushは通知設定とアカウントに紐づくSubscriptionを確認して別キューから送信する。
     try {
-      await enqueueNewsPushDeliveries(env, { id: newsId })
+      const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+      const eligible = await Promise.all(users.results.map(async user => ({
+        id: user.id,
+        allowed: user.id !== auth.user.id && await hasPermission(env, user.id, "news.view"),
+      })))
+      const recipientUserIds = eligible.filter(user => user.allowed).map(user => user.id)
+
+      await createNotificationsForUsers(env, {
+        recipientUserIds,
+        eventKey: "news.created",
+        category: "news",
+        title,
+        body: detail,
+        targetUrl: `/news/${newsId}`,
+        actorUserId: auth.user.id,
+        entityType: "news",
+        entityId: newsId,
+        dedupeKey: `news.created:${newsId}`,
+      })
 
       if (ctx) {
         ctx.waitUntil(
-          processDuePushDeliveries(env).catch((error) => {
-            console.error("Background push delivery failed:", error)
+          processDueNotificationPushDeliveries(env).catch((error) => {
+            console.error("Background notification push delivery failed:", error)
           }),
         )
       }
     } catch (error) {
-      console.error("Failed to enqueue news push notifications:", error)
+      console.error("Failed to create news notifications:", error)
     }
 
     return Response.json(news, { status: 201 })
