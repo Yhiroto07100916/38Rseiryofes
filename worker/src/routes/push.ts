@@ -834,9 +834,14 @@ async function canAccessNotificationTarget(
       delivery.event_key.startsWith("tool_rental.overdue:"))
   ) {
     const loan = await env.DB.prepare(
-      "SELECT status FROM loans WHERE id = ?",
-    ).bind(Number(delivery.entity_id)).first<{ status: string }>()
-    if (!loan || loan.status !== "borrowed") return false
+      "SELECT status, due_at FROM loans WHERE id = ?",
+    ).bind(Number(delivery.entity_id)).first<{ status: string; due_at: string | null }>()
+    if (!loan || loan.status !== "borrowed" || !loan.due_at) return false
+    if (delivery.event_key.startsWith("tool_rental.due_soon:")) {
+      if (delivery.event_key !== "tool_rental.due_soon:" + delivery.entity_id + ":" + loan.due_at) return false
+    } else if (Date.parse(loan.due_at) > Date.now()) {
+      return false
+    }
   }
 
   if (
@@ -845,10 +850,13 @@ async function canAccessNotificationTarget(
     delivery.entity_id
   ) {
     const item = await env.DB.prepare(
-      "SELECT li.returned_at, l.status FROM loan_items li " +
+      "SELECT li.returned_at, l.status, l.due_at FROM loan_items li " +
       "INNER JOIN loans l ON l.id = li.loan_id WHERE li.id = ?",
-    ).bind(Number(delivery.entity_id)).first<{ returned_at: string | null; status: string }>()
-    if (!item || item.returned_at !== null || item.status !== "borrowed") return false
+    ).bind(Number(delivery.entity_id)).first<{ returned_at: string | null; status: string; due_at: string | null }>()
+    if (
+      !item || item.returned_at !== null || item.status !== "borrowed" ||
+      !item.due_at || Date.parse(item.due_at) > Date.now()
+    ) return false
   }
 
   if (delivery.entity_type === "survey" && delivery.entity_id) {
