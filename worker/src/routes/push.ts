@@ -692,6 +692,13 @@ async function canAccessNotificationTarget(
         "SELECT starts_at FROM calendar_events WHERE id = ?",
       ).bind(delivery.entity_id).first<{ starts_at: string }>()
       if (!event) return false
+      if (delivery.event_key.startsWith("calendar.attendance_reminder_")) {
+        const response = await env.DB.prepare(
+          "SELECT 1 FROM calendar_event_attendance WHERE event_id = ? AND user_id = ? " +
+          "AND status IN ('attending', 'not_attending') LIMIT 1",
+        ).bind(delivery.entity_id, delivery.recipient_user_id).first()
+        if (response) return false
+      }
       if (
         delivery.event_key.startsWith("calendar.reminder_") ||
         delivery.event_key.startsWith("calendar.attendance_reminder_") ||
