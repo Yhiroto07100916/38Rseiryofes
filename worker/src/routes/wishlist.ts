@@ -224,7 +224,8 @@ export async function handleWishlist(
       const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
       const eligible = await Promise.all(users.results.map(async user => ({
         id: user.id,
-        allowed: await hasPermission(env, user.id, "wishlist.review"),
+        allowed: await hasPermission(env, user.id, "wishlist.review") &&
+          await hasPermission(env, user.id, "wishlist.view"),
       })))
       await createNotificationsForUsers(env, {
         recipientUserIds: eligible.filter(user => user.allowed).map(user => user.id),
@@ -366,7 +367,7 @@ export async function handleWishlist(
         actorUserId: auth.user.id,
         entityType: "wishlist_item",
         entityId: itemId,
-        dedupeKey: "wishlist.status_changed:" + itemId + ":" + (updated?.updated_at ?? crypto.randomUUID()),
+        dedupeKey: "wishlist.status_changed:" + itemId + ":" + crypto.randomUUID(),
       })
     } catch (notificationError) {
       console.error("Failed to create wishlist status notification:", notificationError)
