@@ -187,6 +187,30 @@ describe("notification Push delivery account isolation", () => {
     expect(allowed).toBe(false)
   })
 
+  it("suppresses timed reminders after an event becomes all-day", async () => {
+    const creatorId = await createUser("予定作成者")
+    const recipientId = await createUser("予定閲覧者", ["schedule.view"])
+    const eventId = crypto.randomUUID()
+    const startsAt = new Date(Date.now() + 24 * 60 * 60_000).toISOString()
+    calendarEventIds.push(eventId)
+    await env.DB.prepare(
+      "INSERT INTO calendar_events (id, title, starts_at, is_all_day, created_by) VALUES (?, ?, ?, 1, ?)",
+    ).bind(eventId, "終日予定", startsAt, creatorId).run()
+
+    const allowed = await canAccessNotificationTarget(env, deliveryFor({
+      recipientId,
+      category: "calendar",
+      eventKey: "calendar.reminder_24h",
+      entityType: "calendar_event",
+      entityId: eventId,
+      targetUrl: "/calendar/" + eventId,
+      requiredPermission: "schedule.view",
+      dedupeKey: "calendar.reminder_24h:" + eventId + ":" + startsAt + ":24h",
+    }))
+
+    expect(allowed).toBe(false)
+  })
+
   it("still delivers assignment removal notices after task access is lost", async () => {
     const creatorId = await createUser("タスク作成者")
     const removedAssigneeId = await createUser("担当解除されたユーザー")
