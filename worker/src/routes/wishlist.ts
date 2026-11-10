@@ -1,4 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { createNotificationsForUsers } from "../lib/notifications"
 
 interface WishlistItem {
   id: string
@@ -218,6 +219,30 @@ export async function handleWishlist(
     ).run()
 
     const item = await getWishlistItem(env, id)
+
+    try {
+      const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+      const eligible = await Promise.all(users.results.map(async user => ({
+        id: user.id,
+        allowed: await hasPermission(env, user.id, "wishlist.review"),
+      })))
+      await createNotificationsForUsers(env, {
+        recipientUserIds: eligible.filter(user => user.allowed).map(user => user.id),
+        eventKey: "wishlist.created",
+        category: "wishlist",
+        title: "ほしい物リストに新しい品目が登録されました",
+        body: title,
+        targetUrl: "/wishlist",
+        requiredPermission: "wishlist.view",
+        actorUserId: auth.user.id,
+        entityType: "wishlist_item",
+        entityId: id,
+        dedupeKey: "wishlist.created:" + id,
+      })
+    } catch (notificationError) {
+      console.error("Failed to create wishlist notifications:", notificationError)
+    }
+
     return json(item, 201)
   }
 
@@ -324,5 +349,29 @@ export async function handleWishlist(
   ).run()
 
   const updated = await getWishlistItem(env, itemId)
+
+  if (
+    status !== existing.status &&
+    (status === "planned" || status === "purchased")
+  ) {
+    try {
+      await createNotificationsForUsers(env, {
+        recipientUserIds: [existing.created_by],
+        eventKey: "wishlist.status_changed",
+        category: "wishlist",
+        title: "ほしい物リストの状態が更新されました",
+        body: title + "：" + (status === "planned" ? "購入予定" : "購入済み"),
+        targetUrl: "/wishlist",
+        requiredPermission: "wishlist.view",
+        actorUserId: auth.user.id,
+        entityType: "wishlist_item",
+        entityId: itemId,
+        dedupeKey: "wishlist.status_changed:" + itemId + ":" + (updated?.updated_at ?? crypto.randomUUID()),
+      })
+    } catch (notificationError) {
+      console.error("Failed to create wishlist status notification:", notificationError)
+    }
+  }
+
   return json(updated)
 }
