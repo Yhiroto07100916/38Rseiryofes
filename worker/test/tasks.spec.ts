@@ -354,5 +354,21 @@ describe("Task write atomicity", () => {
     expect(task?.title).toBe("更新後タイトル");
     expect(assignee?.user_id).toBe(fixture.assigneeId);
     expect(role?.role_id).toBe(fixture.roleId);
+
+    const notification = await env.DB.prepare(`
+      SELECT event_key, recipient_user_id, title
+      FROM notifications
+      WHERE entity_type = 'task' AND entity_id = ? AND recipient_user_id = ?
+    `).bind(taskId, fixture.assigneeId).first<{
+      event_key: string;
+      recipient_user_id: string;
+      title: string;
+    }>();
+
+    expect(notification).toMatchObject({
+      event_key: "task.updated",
+      recipient_user_id: fixture.assigneeId,
+      title: "担当タスクが更新されました",
+    });
   });
 });
