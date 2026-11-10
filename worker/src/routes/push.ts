@@ -696,6 +696,13 @@ async function canAccessNotificationTarget(
     return Boolean(access)
   }
 
+  if (delivery.entity_type === "file" && delivery.entity_id) {
+    const file = await env.DB.prepare(
+      "SELECT archived_at FROM files WHERE id = ?",
+    ).bind(delivery.entity_id).first<{ archived_at: string | null }>()
+    return Boolean(file && file.archived_at === null)
+  }
+
   if (delivery.entity_type === "survey" && delivery.entity_id) {
     const survey = await env.DB.prepare(
       "SELECT status, deadline_at FROM surveys WHERE id = ?",
