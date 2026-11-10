@@ -189,6 +189,14 @@ describe("Notification center API", () => {
     expect(refetchedBody.notification.read_version).toBe(updateBody.read_version)
     expect(refetchedBody.notification.read_version).toBe(updateBody.read_version)
 
+    const noOpUpdate = await handleNotifications(
+      request("PATCH", "/" + id + "/read", owner.cookie, { is_read: true }),
+      env,
+      [id, "read"],
+    )
+    const noOpBody = await noOpUpdate.json() as { read_version: number }
+    expect(noOpBody.read_version).toBe(updateBody.read_version)
+
     const secondUpdate = await handleNotifications(
       request("PATCH", "/" + id + "/read", owner.cookie, { is_read: false }),
       env,
