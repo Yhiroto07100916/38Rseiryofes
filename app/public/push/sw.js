@@ -49,24 +49,27 @@ self.addEventListener('notificationclick', (event) => {
     const target = new URL(targetUrl, self.location.origin)
     const notificationId = event.notification.data?.notificationId
 
-    // Push通知から開いた場合も、ログイン中なら正本の既読状態を先に更新する。
-    if (typeof notificationId === 'string' && notificationId.length <= 64) {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 2500)
-      try {
-        await fetch(new URL('/api/notifications/' + encodeURIComponent(notificationId) + '/read', self.location.origin), {
-          method: 'PATCH',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ is_read: true }),
-          signal: controller.signal,
-        })
-      } catch (error) {
-        console.error('Failed to mark the opened Push notification as read:', error)
-      } finally {
-        clearTimeout(timeout)
-      }
-    }
+    // Push通知から開いた場合も、ログイン中なら正本の既読状態を更新する。
+    // 既読APIの応答を待たずに画面遷移を開始し、オフライン時も遷移を遅らせない。
+    const markReadPromise = typeof notificationId === 'string' && notificationId.length <= 64
+      ? (async () => {
+          const controller = new AbortController()
+          const timeout = setTimeout(() => controller.abort(), 2500)
+          try {
+            await fetch(new URL('/api/notifications/' + encodeURIComponent(notificationId) + '/read', self.location.origin), {
+              method: 'PATCH',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ is_read: true }),
+              signal: controller.signal,
+            })
+          } catch (error) {
+            console.error('Failed to mark the opened Push notification as read:', error)
+          } finally {
+            clearTimeout(timeout)
+          }
+        })()
+      : Promise.resolve()
 
     const windows = await self.clients.matchAll({
       type: 'window',
@@ -97,21 +100,27 @@ self.addEventListener('notificationclick', (event) => {
 
         if (handledByApp) {
           await client.focus()
+          await markReadPromise
           return client
         }
 
         const navigatedClient = await client.navigate(target.href)
         if (navigatedClient) {
           await navigatedClient.focus()
+          await markReadPromise
           return navigatedClient
         }
       } catch (error) {
         console.error('Failed to navigate existing PWA window:', error)
       }
 
-      return self.clients.openWindow(target.href)
+      const openedClient = await self.clients.openWindow(target.href)
+      await markReadPromise
+      return openedClient
     }
 
-    return self.clients.openWindow(target.href)
+    const openedClient = await self.clients.openWindow(target.href)
+    await markReadPromise
+    return openedClient
   })())
 })
