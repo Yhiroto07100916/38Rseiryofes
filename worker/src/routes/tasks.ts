@@ -16,6 +16,11 @@ export interface Task {
   updated_at: string
 }
 
+function taskTargetUrl(scope: Task["scope"], taskId: string): string {
+  const section = scope === "class_representative" ? "class-representative" : "class"
+  return `/tasks/${section}/${taskId}`
+}
+
 interface CreateTaskBody {
   title?: unknown
   description?: unknown
@@ -245,9 +250,9 @@ async function getTaskAssignments(
 
 export async function processDueTaskNotifications(env: Env): Promise<void> {
   const result = await env.DB.prepare(
-    "SELECT id, title, due_at, status FROM tasks " +
+    "SELECT id, title, due_at, status, scope FROM tasks " +
     "WHERE due_at IS NOT NULL AND status != 'done'",
-  ).all<{ id: string; title: string; due_at: string; status: Task["status"] }>()
+  ).all<{ id: string; title: string; due_at: string; status: Task["status"]; scope: Task["scope"] }>()
 
   const now = Date.now()
   const localDay = new Date(now + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
@@ -290,7 +295,7 @@ export async function processDueTaskNotifications(env: Env): Promise<void> {
           category: "tasks",
           title: reminder.title,
           body: task.title,
-          targetUrl: "/tasks/" + task.id,
+          targetUrl: taskTargetUrl(task.scope, task.id),
           entityType: "task",
           entityId: task.id,
           dedupeKey: reminder.dedupeKey,
@@ -908,7 +913,7 @@ export async function handleTasks(
           category: "tasks",
           title: "新しいタスクが割り当てられました",
           body: title,
-          targetUrl: "/tasks/" + id,
+          targetUrl: taskTargetUrl(scope as Task["scope"], id),
           actorUserId: auth.user.id,
           entityType: "task",
           entityId: id,
@@ -1505,7 +1510,7 @@ export async function handleTasks(
             category: "tasks",
             title: "タスクの担当に追加されました",
             body: updatedTask?.title ?? existingTask.title,
-            targetUrl: "/tasks/" + id,
+            targetUrl: taskTargetUrl(updatedTask?.scope ?? existingTask.scope, id),
             actorUserId: auth.user.id,
             entityType: "task",
             entityId: id,
@@ -1766,7 +1771,7 @@ export async function handleTasks(
         category: "tasks",
         title: "担当タスクにコメントが追加されました",
         body: content,
-        targetUrl: "/tasks/" + taskId,
+        targetUrl: taskTargetUrl(task.scope, taskId),
         actorUserId: auth.user.id,
         entityType: "task",
         entityId: taskId,
