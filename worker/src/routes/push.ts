@@ -709,7 +709,7 @@ async function canAccessNotificationTarget(
 
   if (delivery.entity_type === "equipment" && delivery.entity_id) {
     const equipment = await env.DB.prepare(
-      "SELECT 1 FROM equipment WHERE id = ?",
+      "SELECT 1 FROM equipment_items WHERE id = ?",
     ).bind(delivery.entity_id).first()
     if (!equipment) return false
   }
