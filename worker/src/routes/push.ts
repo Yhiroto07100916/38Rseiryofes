@@ -692,11 +692,11 @@ async function processOneNotificationDelivery(
     const preferences = await env.DB.prepare(
       "SELECT COALESCE(us.global_push_enabled, 1) AS global_enabled, " +
       "COALESCE(cs.push_enabled, 1) AS category_enabled " +
-      "FROM notification_user_settings us " +
+      "FROM (SELECT 1) seed " +
+      "LEFT JOIN notification_user_settings us ON us.user_id = ? " +
       "LEFT JOIN notification_category_settings cs " +
-      "ON cs.user_id = us.user_id AND cs.category = ? " +
-      "WHERE us.user_id = ?",
-    ).bind(delivery.category, delivery.recipient_user_id)
+      "ON cs.user_id = ? AND cs.category = ?",
+    ).bind(delivery.recipient_user_id, delivery.recipient_user_id, delivery.category)
       .first<{ global_enabled: number; category_enabled: number }>()
     const effectivePreferences = preferences ?? { global_enabled: 1, category_enabled: 1 }
 
