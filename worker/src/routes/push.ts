@@ -705,6 +705,10 @@ async function sendNotificationPush(
         badge: "/pwa-64x64.png",
         tag: delivery.notification_id,
         notificationId: delivery.notification_id,
+        notificationReadUrl: new URL(
+          "/api/notifications/" + encodeURIComponent(delivery.notification_id) + "/read",
+          env.API_BASE_URL || "https://api.38r-seiryofes.com",
+        ).toString(),
         url: targetUrl,
       },
       adminContact: env.VAPID_SUBJECT || "https://38r-seiryofes.com",
