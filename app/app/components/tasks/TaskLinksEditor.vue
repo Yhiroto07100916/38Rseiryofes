@@ -6,15 +6,15 @@
         size="small"
         variant="tonal"
         prepend-icon="mdi-plus"
-        :disabled="modelValue.length >= 20"
+        :disabled="props.modelValue.length >= 20"
         @click="addLink"
       >
-        {{ addLabel }}
+        {{ props.addLabel }}
       </v-btn>
     </div>
 
     <div
-      v-for="(taskLink, index) in modelValue"
+      v-for="(taskLink, index) in props.modelValue"
       :key="index"
       class="d-flex align-start ga-2 mb-2"
     >
@@ -48,8 +48,8 @@
       />
     </div>
 
-    <div v-if="helpText" class="text-caption text-medium-emphasis">
-      {{ helpText }}
+    <div v-if="props.helpText" class="text-caption text-medium-emphasis">
+      {{ props.helpText }}
     </div>
   </div>
 </template>
@@ -60,7 +60,7 @@ interface TaskLink {
   url: string
 }
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: TaskLink[]
   addLabel?: string
   helpText?: string
@@ -73,14 +73,8 @@ const emit = defineEmits<{
   "update:modelValue": [value: TaskLink[]]
 }>()
 
-const props = defineProps<{
-  modelValue: TaskLink[]
-  addLabel?: string
-  helpText?: string
-}>()
-
 const addLink = () => {
-  if (props.modelValue.length >= 20) return
+  if (props.props.modelValue.length >= 20) return
   emit("update:modelValue", [...props.modelValue, { title: "", url: "" }])
 }
 
