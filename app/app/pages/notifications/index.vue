@@ -64,53 +64,6 @@
       </template>
     </v-alert>
 
-    <v-expansion-panels variant="accordion" class="mb-4">
-      <v-expansion-panel rounded="xl">
-        <v-expansion-panel-title>
-          <v-icon icon="mdi-bell-cog-outline" class="mr-2" />
-          プッシュ通知の設定
-        </v-expansion-panel-title>
-        <v-expansion-panel-text>
-          <div v-if="settingsLoading" class="py-3">
-            <v-progress-linear indeterminate />
-          </div>
-          <template v-else>
-            <v-switch
-              :model-value="globalPushEnabled"
-              label="プッシュ通知を受け取る"
-              color="primary"
-              hide-details
-              :disabled="settingsSaving"
-              @update:model-value="updateGlobalPush"
-            />
-            <div class="text-caption text-medium-emphasis mb-3">
-              OFFにしても、このページのアプリ内通知は引き続き届きます。
-            </div>
-            <v-divider class="my-2" />
-            <div class="text-subtitle-2 font-weight-medium mb-2">カテゴリ別設定</div>
-            <v-switch
-              v-for="category in categoryOptions"
-              :key="category.value"
-              :model-value="categoryPushEnabled[category.value] ?? true"
-              :label="category.title"
-              color="primary"
-              density="compact"
-              hide-details
-              class="my-1"
-              :disabled="settingsSaving"
-              @update:model-value="value => updateCategoryPush(category.value, value)"
-            />
-          </template>
-          <v-alert v-if="settingsError" type="error" variant="tonal" density="compact" class="mt-3">
-            {{ settingsError }}
-            <template #append>
-              <v-btn size="small" variant="text" @click="loadNotificationSettings">再取得</v-btn>
-            </template>
-          </v-alert>
-        </v-expansion-panel-text>
-      </v-expansion-panel>
-    </v-expansion-panels>
-
     <v-card rounded="xl" variant="outlined" class="mb-4">
       <v-card-text class="pa-3">
         <v-text-field
@@ -260,7 +213,6 @@
 
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from "vue"
-import { useApi } from "~/composables/useApi"
 import { useNotifications, type AppNotification, type NotificationCategory } from "~/composables/useNotifications"
 
 definePageMeta({ middleware: "auth" })
@@ -289,15 +241,9 @@ const {
   clearUnreadCountError,
 } = useNotifications()
 
-const { apiFetch } = useApi()
 const snackbar = ref(false)
 const snackbarText = ref("")
 const pushPermissionDenied = ref(false)
-const globalPushEnabled = ref(true)
-const categoryPushEnabled = ref<Record<string, boolean>>({})
-const settingsLoading = ref(false)
-const settingsSaving = ref(false)
-const settingsError = ref("")
 let touchStartY: number | null = null
 let touchStartX = 0
 
@@ -324,7 +270,6 @@ function handleTouchEnd(event: TouchEvent) {
 onMounted(() => {
   pushPermissionDenied.value = import.meta.client &&
     typeof Notification !== "undefined" && Notification.permission === "denied"
-  void loadNotificationSettings()
 })
 
 watch([successMessage, unreadCountSuccess], ([listSuccess, countSuccess]) => {
@@ -349,64 +294,6 @@ const categoryOptions = [
   { title: "ほしい物リスト", value: "wishlist" },
   { title: "アカウント", value: "account_admin" },
 ]
-
-async function loadNotificationSettings() {
-  settingsLoading.value = true
-  settingsError.value = ""
-  try {
-    const result = await apiFetch<{
-      global_push_enabled: boolean
-      categories: Record<string, boolean>
-    }>("/api/notifications/settings")
-    globalPushEnabled.value = result.global_push_enabled
-    categoryPushEnabled.value = result.categories
-  } catch (cause) {
-    console.error("Failed to load notification settings:", cause)
-    settingsError.value = "通知設定を読み込めませんでした。"
-  } finally {
-    settingsLoading.value = false
-  }
-}
-
-async function updateGlobalPush(value: boolean | null) {
-  if (typeof value !== "boolean" || settingsSaving.value) return
-  const previous = globalPushEnabled.value
-  globalPushEnabled.value = value
-  settingsSaving.value = true
-  settingsError.value = ""
-  try {
-    await apiFetch("/api/notifications/settings", {
-      method: "PATCH",
-      body: { global_push_enabled: value },
-    })
-  } catch (cause) {
-    globalPushEnabled.value = previous
-    console.error("Failed to update global Push setting:", cause)
-    settingsError.value = "通知設定を保存できませんでした。"
-  } finally {
-    settingsSaving.value = false
-  }
-}
-
-async function updateCategoryPush(category: string, value: boolean | null) {
-  if (typeof value !== "boolean" || settingsSaving.value) return
-  const previous = categoryPushEnabled.value[category] ?? true
-  categoryPushEnabled.value = { ...categoryPushEnabled.value, [category]: value }
-  settingsSaving.value = true
-  settingsError.value = ""
-  try {
-    await apiFetch("/api/notifications/settings", {
-      method: "PATCH",
-      body: { categories: { [category]: value } },
-    })
-  } catch (cause) {
-    categoryPushEnabled.value = { ...categoryPushEnabled.value, [category]: previous }
-    console.error("Failed to update category Push setting:", cause)
-    settingsError.value = "通知設定を保存できませんでした。"
-  } finally {
-    settingsSaving.value = false
-  }
-}
 
 function clearError() {
   error.value = ""
