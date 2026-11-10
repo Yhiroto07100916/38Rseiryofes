@@ -167,11 +167,23 @@ describe("Notification center API", () => {
       [id, "read"],
     )
     expect(updated.status).toBe(200)
+    const updateBody = await updated.json() as { read_updated_at: string }
+    expect(updateBody.read_updated_at).toBeTruthy()
 
     const stored = await env.DB.prepare(
-      "SELECT is_read FROM notifications WHERE id = ?",
-    ).bind(id).first<{ is_read: number }>()
+      "SELECT is_read, read_updated_at FROM notifications WHERE id = ?",
+    ).bind(id).first<{ is_read: number; read_updated_at: string }>()
     expect(stored?.is_read).toBe(1)
+    expect(stored?.read_updated_at).toBe(updateBody.read_updated_at)
+
+    const refetched = await handleNotifications(
+      request("GET", "/" + id, owner.cookie),
+      env,
+      [id],
+    )
+    const refetchedBody = await refetched.json() as { notification: { is_read: number; read_updated_at: string } }
+    expect(refetchedBody.notification.is_read).toBe(1)
+    expect(refetchedBody.notification.read_updated_at).toBe(updateBody.read_updated_at)
   })
 
   it("uses enabled-by-default push preferences and persists category/global changes", async () => {
