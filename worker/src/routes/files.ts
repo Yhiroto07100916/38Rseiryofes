@@ -778,20 +778,14 @@ export async function handleFiles(
       if (notifyUpload) {
         try {
           const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
-          const eligible = await Promise.all(users.results.map(async user => ({
-            id: user.id,
-            allowed: user.id !== auth.user.id &&
-              await hasPermission(env, user.id, "files.view"),
-          })))
 
           await createNotificationsForUsers(env, {
-            recipientUserIds: eligible.filter(user => user.allowed).map(user => user.id),
+            recipientUserIds: users.results.map(user => user.id),
             eventKey: "files.uploaded",
             category: "files",
             title: "新しいファイルがアップロードされました",
             body: originalName,
             targetUrl: "/files",
-            requiredPermission: "files.view",
             actorUserId: auth.user.id,
             entityType: "file",
             entityId: id,
