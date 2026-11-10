@@ -22,6 +22,11 @@ self.addEventListener('push', (event) => {
     renotify: false,
     data: {
       url: typeof payload.url === 'string' ? payload.url : '/',
+      notificationId: typeof payload.notificationId === 'string'
+        ? payload.notificationId
+        : typeof payload.tag === 'string'
+          ? payload.tag
+          : null,
     },
   }
 
@@ -44,6 +49,21 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil((async () => {
     const target = new URL(targetUrl, self.location.origin)
+    const notificationId = event.notification.data?.notificationId
+
+    // Push通知から開いた場合も、ログイン中なら正本の既読状態を先に更新する。
+    if (typeof notificationId === 'string' && notificationId.length <= 64) {
+      try {
+        await fetch(new URL('/api/notifications/' + encodeURIComponent(notificationId) + '/read', self.location.origin), {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_read: true }),
+        })
+      } catch (error) {
+        console.error('Failed to mark the opened Push notification as read:', error)
+      }
+    }
 
     const windows = await self.clients.matchAll({
       type: 'window',
