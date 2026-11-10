@@ -755,7 +755,7 @@ async function canAccessNotificationTarget(
     }
 
     const access = await env.DB.prepare(
-      "SELECT 1 FROM tasks t "
+      "SELECT 1 FROM tasks t " +
       "LEFT JOIN task_assignees ta ON ta.task_id = t.id " +
       "LEFT JOIN task_roles tr ON tr.task_id = t.id " +
       "LEFT JOIN user_roles ur ON ur.role_id = tr.role_id AND ur.user_id = ? " +
