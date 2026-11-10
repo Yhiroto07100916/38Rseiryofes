@@ -350,13 +350,15 @@ async function openNotification(item: AppNotification) {
 
 async function handleMarkAllRead() {
   const scrollTop = window.scrollY
-  const count = await markAllRead()
-  if (count === null) return
+  const result = await markAllRead()
+  if (result === null) return
   await nextTick()
   window.scrollTo(0, scrollTop)
-  snackbarText.value = count > 0
-    ? count + "件を既読にしました"
-    : "未読の通知はありません"
+  snackbarText.value = result.updatedCount === 0 && result.unreadCount === 0
+    ? "未読の通知はありません"
+    : result.unreadCount === 0
+      ? "すべて既読にしました"
+      : result.updatedCount + "件を既読にしました"
   snackbar.value = true
 }
 </script>
