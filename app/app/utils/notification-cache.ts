@@ -12,6 +12,8 @@ export interface NotificationCacheRecord {
   accountId: string
   version: number
   savedAt: number
+  clientTimeAtSave?: number
+  serverTimeAtSave?: number | null
   unreadCount: number
   notifications: CachedNotification[]
 }
@@ -114,6 +116,8 @@ export async function loadNotificationCache(
     !Array.isArray(record.notifications) ||
     !record.notifications.every(validNotification) ||
     record.savedAt > now + 5 * 60 * 1000 ||
+    (record.clientTimeAtSave !== undefined && !Number.isFinite(record.clientTimeAtSave)) ||
+    (record.serverTimeAtSave !== undefined && record.serverTimeAtSave !== null && !Number.isFinite(record.serverTimeAtSave)) ||
     now - record.savedAt > MAX_CACHE_AGE
 
   if (invalid) {
@@ -141,6 +145,7 @@ export async function saveNotificationCache(
     created_at: string
   }>,
   unreadCount: number,
+  serverTime?: string | null,
 ): Promise<void> {
   if (!accountId) return
 
@@ -174,6 +179,8 @@ export async function saveNotificationCache(
         accountId,
         version: CACHE_VERSION,
         savedAt: Date.now(),
+        clientTimeAtSave: Date.now(),
+        serverTimeAtSave: serverTime ? Date.parse(serverTime) : null,
         unreadCount: Math.max(0, Math.floor(unreadCount)),
         notifications: cachedNotifications,
       } satisfies NotificationCacheRecord)
@@ -191,6 +198,38 @@ export async function saveNotificationCache(
       pendingCacheSaves.delete(accountId)
     }
   }
+}
+
+export async function validateNotificationCacheClock(
+  accountId: string,
+  serverTime: string | undefined,
+): Promise<boolean> {
+  if (!accountId || !serverTime) return true
+  const actualServerTime = Date.parse(serverTime)
+  if (!Number.isFinite(actualServerTime)) return true
+
+  const database = await openDatabase()
+  const record = await new Promise<NotificationCacheRecord | undefined>((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, "readonly")
+    const request = transaction.objectStore(STORE_NAME).get(accountId)
+    request.onsuccess = () => resolve(request.result as NotificationCacheRecord | undefined)
+    request.onerror = () => reject(request.error ?? new Error("Cache clock validation failed"))
+  })
+
+  if (
+    !record ||
+    !Number.isFinite(record.serverTimeAtSave) ||
+    !Number.isFinite(record.clientTimeAtSave)
+  ) return true
+
+  const expectedServerTime = (record.serverTimeAtSave as number) +
+    (Date.now() - (record.clientTimeAtSave as number))
+  const clockDifference = Math.abs(actualServerTime - expectedServerTime)
+
+  if (clockDifference <= 5 * 60 * 1000) return true
+
+  await deleteRecord(database, accountId)
+  return false
 }
 
 export async function deleteNotificationCache(accountId: string): Promise<void> {
