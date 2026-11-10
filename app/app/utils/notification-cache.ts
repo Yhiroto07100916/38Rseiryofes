@@ -164,6 +164,7 @@ export async function saveNotificationCache(
   if (!accountId || cacheDeletionRequested.has(accountId)) return
 
   const previous = pendingCacheSaves.get(accountId)
+  const saveStartedAt = Date.now()
   const operation = (async () => {
     if (previous) {
       try {
@@ -231,6 +232,34 @@ export async function saveNotificationCache(
       transaction.onerror = () => reject(transaction.error ?? new Error("Cache write failed"))
       transaction.onabort = () => reject(transaction.error ?? new Error("Cache write aborted"))
     })
+
+    if (!preserveValidity) {
+      const completedAt = Date.now()
+      const serverTimestamp = serverTime ? Date.parse(serverTime) : Number.NaN
+      const completedServerTime = Number.isFinite(serverTimestamp)
+        ? serverTimestamp + (completedAt - saveStartedAt)
+        : null
+      await new Promise<void>((resolve, reject) => {
+        const transaction = database.transaction(STORE_NAME, "readwrite")
+        const store = transaction.objectStore(STORE_NAME)
+        const request = store.get(accountId)
+        request.onsuccess = () => {
+          const existing = request.result as NotificationCacheRecord | undefined
+          if (existing) {
+            store.put({
+              ...existing,
+              savedAt: completedAt,
+              clientTimeAtSave: completedAt,
+              serverTimeAtSave: completedServerTime,
+              clockOffsetMs: completedServerTime === null ? null : completedServerTime - completedAt,
+            } satisfies NotificationCacheRecord)
+          }
+        }
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () => reject(transaction.error ?? new Error("Cache completion timestamp update failed"))
+        transaction.onabort = () => reject(transaction.error ?? new Error("Cache completion timestamp update aborted"))
+      })
+    }
   })()
 
   pendingCacheSaves.set(accountId, operation)
@@ -260,22 +289,48 @@ export async function validateNotificationCacheClock(
     request.onerror = () => reject(request.error ?? new Error("Cache clock validation failed"))
   })
 
-  if (
-    !record ||
-    typeof record.serverTimeAtSave !== "number" ||
-    !Number.isFinite(record.serverTimeAtSave) ||
-    typeof record.clientTimeAtSave !== "number" ||
-    !Number.isFinite(record.clientTimeAtSave)
-  ) return true
+  if (!record) return true
 
-  const expectedServerTime = (record.serverTimeAtSave as number) +
-    (Date.now() - (record.clientTimeAtSave as number))
+  const currentClientTime = Date.now()
+  const hasSavedServerClock = typeof record.serverTimeAtSave === "number" &&
+    Number.isFinite(record.serverTimeAtSave) &&
+    typeof record.clientTimeAtSave === "number" &&
+    Number.isFinite(record.clientTimeAtSave)
+  const expectedServerTime = hasSavedServerClock
+    ? (record.serverTimeAtSave as number) + (currentClientTime - (record.clientTimeAtSave as number))
+    : currentClientTime
   const clockDifference = Math.abs(actualServerTime - expectedServerTime)
 
-  if (clockDifference <= 5 * 60 * 1000) return true
+  if (clockDifference > 5 * 60 * 1000) {
+    await deleteNotificationCache(accountId, false)
+    return false
+  }
 
-  await deleteNotificationCache(accountId, false)
-  return false
+  if (!hasSavedServerClock) {
+    // サーバー時刻なしで保存されたキャッシュは、初回のサーバー時刻取得時に
+    // 端末時刻との差を検証し、以後の検証に使う基準時刻を記録する。
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(STORE_NAME, "readwrite")
+      const store = transaction.objectStore(STORE_NAME)
+      const request = store.get(accountId)
+      request.onsuccess = () => {
+        const latest = request.result as NotificationCacheRecord | undefined
+        if (latest) {
+          store.put({
+            ...latest,
+            clientTimeAtSave: currentClientTime,
+            serverTimeAtSave: actualServerTime,
+            clockOffsetMs: actualServerTime - currentClientTime,
+          } satisfies NotificationCacheRecord)
+        }
+      }
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error ?? new Error("Cache clock metadata update failed"))
+      transaction.onabort = () => reject(transaction.error ?? new Error("Cache clock metadata update aborted"))
+    })
+  }
+
+  return true
 }
 
 export async function deleteNotificationCache(

@@ -77,10 +77,11 @@ export const useNotifications = () => {
   let pendingUnreadRefresh = false
   let pendingResetFetch = false
   let manualRefreshRequested = false
+  let manualRetryActive = false
   let listFailures = 0
   let unreadFailures = 0
   let hasSuccessfulApiFetch = false
-  const cacheUpdatePromises = new Map<string, Promise<void>>()
+  const cacheUpdatePromises = new Map<string, Promise<boolean>>()
   const pendingCacheSaves = new Map<string, Set<Promise<void>>>()
   const partialCacheUpdates = new Map<string, {
     notifications: AppNotification[]
@@ -227,9 +228,16 @@ export const useNotifications = () => {
     if (!Number.isFinite(serverTimestamp)) return
 
     const currentOffset = serverTimestamp - Date.now()
+    let cacheClockValid = true
+    try {
+      cacheClockValid = await validateNotificationCacheClock(accountId, serverTime)
+    } catch {
+      // キャッシュの時刻検証に失敗しても、APIから取得した最新データの表示は継続する。
+    }
     if (
-      cachedClockOffsetMs !== null &&
-      Math.abs(currentOffset - cachedClockOffsetMs) > 5 * 60 * 1000
+      !cacheClockValid ||
+      (cachedClockOffsetMs !== null &&
+        Math.abs(currentOffset - cachedClockOffsetMs) > 5 * 60 * 1000)
     ) {
       await deleteNotificationCache(accountId, false).catch(() => undefined)
       cachedClockOffsetMs = null
@@ -242,6 +250,7 @@ export const useNotifications = () => {
         hasMore.value = false
       }
     }
+    cachedClockOffsetMs = currentOffset
   }
 
   const fetchCachePage = async (
@@ -276,8 +285,8 @@ export const useNotifications = () => {
     throw new Error("Notification cache page fetch failed")
   }
 
-  const refreshFullCache = (accountId: string) => {
-    if (cacheDeletionRequests.has(accountId)) return Promise.resolve()
+  const refreshFullCache = (accountId: string): Promise<boolean> => {
+    if (cacheDeletionRequests.has(accountId)) return Promise.resolve(false)
     const existing = cacheUpdatePromises.get(accountId)
     if (existing) return existing
 
@@ -325,8 +334,10 @@ export const useNotifications = () => {
         cacheInitialized = true
       }
       partialCacheUpdates.delete(accountId)
+      return true
     })().catch(() => {
       // 不完全な取得結果では既存キャッシュを置き換えない。
+      return false
     }).finally(() => {
       cacheUpdatePromises.delete(accountId)
     })
@@ -374,7 +385,7 @@ export const useNotifications = () => {
   }
 
   const scheduleUnreadRetry = () => {
-    if (unreadRetryHandle || unreadFailures >= MAX_FAILURES) return
+    if (!listActive || unreadRetryHandle || unreadFailures >= MAX_FAILURES) return
     const delay = RETRY_DELAYS[Math.min(unreadFailures - 1, RETRY_DELAYS.length - 1)]
     unreadRetryHandle = setTimeout(() => {
       unreadRetryHandle = undefined
@@ -472,6 +483,7 @@ export const useNotifications = () => {
         void refreshFullCache(requestAccountId)
       }
       listFailures = 0
+      manualRetryActive = false
       clearListRetry()
       error.value = ""
       refreshMessage.value = ""
@@ -483,16 +495,20 @@ export const useNotifications = () => {
       successMessage.value = ""
       if (successHandle) clearTimeout(successHandle)
       successHandle = undefined
-      if (listFailures >= MAX_FAILURES) {
+      const failureLimit = manualRetryActive ? MAX_FAILURES + 1 : MAX_FAILURES
+      if (listFailures >= failureLimit) {
         error.value = cacheExpired.value
           ? "最新情報を取得できませんでした。保存済みの通知を表示しています。手動で再試行してください。"
           : "再取得に失敗しました。手動で再試行してください。"
         refreshMessage.value = ""
         manualRefreshRequested = false
+        manualRetryActive = false
       } else {
-        error.value = cacheExpired.value
-          ? "最新情報を取得できませんでした。保存済みの通知を表示しています。"
-          : "通知を取得できませんでした。通信環境を確認して再試行してください。"
+        error.value = manualRefreshRequested && listFailures === 1
+          ? "更新に失敗しました。再試行してください"
+          : cacheExpired.value
+            ? "最新情報を取得できませんでした。保存済みの通知を表示しています。"
+            : "通知を取得できませんでした。通信環境を確認して再試行してください。"
         scheduleListRetry(reset)
       }
     } finally {
@@ -508,7 +524,26 @@ export const useNotifications = () => {
 
   const refresh = async () => {
     listFailures = 0
+    manualRetryActive = true
     clearListRetry()
+
+    const accountId = auth.user?.id
+    const backgroundUpdate = accountId ? cacheUpdatePromises.get(accountId) : undefined
+    if (backgroundUpdate) {
+      refreshMessage.value = "最新情報を取得しています"
+      const completed = await backgroundUpdate
+      if (auth.user?.id !== accountId) return
+      refreshMessage.value = ""
+      manualRetryActive = false
+      if (completed) {
+        error.value = ""
+        showSuccess("最新情報に更新しました")
+      } else {
+        error.value = "更新に失敗しました。再試行してください"
+      }
+      return
+    }
+
     if (requestInProgress) {
       manualRefreshRequested = true
       refreshMessage.value = "最新情報を取得しています"
@@ -944,6 +979,7 @@ export const useNotifications = () => {
       unreadCountError.value = ""
       listFailures = 0
       unreadFailures = 0
+      manualRetryActive = false
       hasSuccessfulApiFetch = false
       cachedClockOffsetMs = null
       cacheSnapshot = []
