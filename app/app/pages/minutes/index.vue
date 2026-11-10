@@ -191,7 +191,7 @@
 const { confirm } = useConfirmDialog()
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useConfirmDialog } from '~/composables/useConfirmDialog'
-import { formatJstDateTimeLocal, jstDateTimeLocalToIso } from '~/utils/jst'
+import { formatJstDateTimeLocal, jstDateTimeLocalToIso , getDefaultTimeZone} from '~/utils/jst'
 import { useApi } from '~/composables/useApi'
 import { useAuthStore } from '~/stores/auth'
 
@@ -307,7 +307,7 @@ function formatDate(value: string | null): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
+    timeZone: getDefaultTimeZone(),
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -319,7 +319,7 @@ function formatDateTime(value: string | null): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
+    timeZone: getDefaultTimeZone(),
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
