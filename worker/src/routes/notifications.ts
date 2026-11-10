@@ -116,6 +116,7 @@ export async function handleNotifications(
         ? { created_at: last.created_at, id: last.id }
         : null,
       unread_count: unread?.count ?? 0,
+      server_time: new Date().toISOString(),
     })
   }
 
@@ -124,7 +125,7 @@ export async function handleNotifications(
     const result = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM notifications WHERE recipient_user_id = ? AND is_read = 0",
     ).bind(userId).first<{ count: number }>()
-    return Response.json({ unread_count: result?.count ?? 0 })
+    return Response.json({ unread_count: result?.count ?? 0, server_time: new Date().toISOString() })
   }
 
   if (pathParts.length === 1 && pathParts[0] === "read-all" && method === "POST") {
