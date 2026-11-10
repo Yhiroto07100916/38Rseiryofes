@@ -243,7 +243,9 @@ export const useNotifications = () => {
       (cachedClockOffsetMs !== null &&
         Math.abs(currentOffset - cachedClockOffsetMs) > 5 * 60 * 1000)
     ) {
-      await deleteNotificationCache(accountId, false).catch(error => {\n        console.warn("[notifications] cache deletion after clock mismatch failed", error)\n      })
+      await deleteNotificationCache(accountId, false).catch(error => {
+        console.warn("[notifications] cache deletion after clock mismatch failed", error)
+      })
       cachedClockOffsetMs = null
       cacheSnapshot = []
       cacheInitialized = false
@@ -984,7 +986,9 @@ export const useNotifications = () => {
             partialCacheUpdates.delete(previousAccountId)
             cacheDeletionRequests.delete(previousAccountId)
           }
-        })().catch(error => {\n          console.warn("[notifications] cache cleanup after account change failed", error)\n        })
+        })().catch(error => {
+          console.warn("[notifications] cache cleanup after account change failed", error)
+        })
       }
       unreadAbortController?.abort()
       unreadAbortController = undefined
