@@ -1,4 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { createNotificationsForUsers } from "../lib/notifications"
 
 export interface CalendarEvent {
   id: string
@@ -46,6 +47,15 @@ interface CalendarCategoryRow {
   name: string
   color: string
   is_active: number
+}
+
+async function getScheduleViewUserIds(env: Env): Promise<string[]> {
+  const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+  const eligible = await Promise.all(users.results.map(async user => ({
+    id: user.id,
+    allowed: await hasPermission(env, user.id, "schedule.view"),
+  })))
+  return eligible.filter(user => user.allowed).map(user => user.id)
 }
 
 function generateId(): string {
@@ -717,6 +727,25 @@ export async function handleCalendar(
 
     const event = await getCalendarEvent(env, id)
 
+    try {
+      const recipientUserIds = await getScheduleViewUserIds(env)
+      await createNotificationsForUsers(env, {
+        recipientUserIds,
+        eventKey: "calendar.created",
+        category: "calendar",
+        title: "予定が作成されました",
+        body: body.title.trim(),
+        targetUrl: "/calendar",
+        requiredPermission: "schedule.view",
+        actorUserId: auth.user.id,
+        entityType: "calendar_event",
+        entityId: id,
+        dedupeKey: "calendar.created:" + id,
+      })
+    } catch (notificationError) {
+      console.error("Failed to create calendar notifications:", notificationError)
+    }
+
     return Response.json(event, { status: 201 })
   }
 
@@ -870,6 +899,36 @@ export async function handleCalendar(
 
     const event = await getCalendarEvent(env, eventId)
 
+    const meaningfulChanges =
+      title !== existing.title ||
+      description !== existing.description ||
+      startsAt !== existing.starts_at ||
+      endsAt !== existing.ends_at ||
+      isAllDay !== existing.is_all_day ||
+      location !== existing.location ||
+      categoryId !== existing.category_id
+
+    if (meaningfulChanges && event) {
+      try {
+        const recipientUserIds = await getScheduleViewUserIds(env)
+        await createNotificationsForUsers(env, {
+          recipientUserIds,
+          eventKey: "calendar.updated",
+          category: "calendar",
+          title: "予定が更新されました",
+          body: event.title,
+          targetUrl: "/calendar",
+          requiredPermission: "schedule.view",
+          actorUserId: auth.user.id,
+          entityType: "calendar_event",
+          entityId: eventId,
+          dedupeKey: "calendar.updated:" + eventId + ":" + updatedAt,
+        })
+      } catch (notificationError) {
+        console.error("Failed to create calendar update notifications:", notificationError)
+      }
+    }
+
     return Response.json(event)
   }
 
@@ -902,6 +961,23 @@ export async function handleCalendar(
       `)
       .bind(eventId)
       .run()
+
+    try {
+      const recipientUserIds = await getScheduleViewUserIds(env)
+      await createNotificationsForUsers(env, {
+        recipientUserIds,
+        eventKey: "calendar.deleted",
+        category: "calendar",
+        title: "予定が削除されました",
+        body: existing.title,
+        targetUrl: "/calendar",
+        requiredPermission: "schedule.view",
+        actorUserId: auth.user.id,
+        dedupeKey: "calendar.deleted:" + eventId,
+      })
+    } catch (notificationError) {
+      console.error("Failed to create calendar deletion notifications:", notificationError)
+    }
 
     return Response.json({
       success: true,
