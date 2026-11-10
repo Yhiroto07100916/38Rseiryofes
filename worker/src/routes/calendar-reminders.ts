@@ -56,7 +56,7 @@ async function notify(
     category: "calendar",
     title,
     body: event.title,
-    targetUrl: "/calendar",
+    targetUrl: "/calendar/" + event.id,
     requiredPermission: "schedule.view",
     entityType: "calendar_event",
     entityId: event.id,
