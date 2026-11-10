@@ -260,10 +260,12 @@ describe("Notification center API", () => {
       updated_count: number
       updated_ids: string[]
       updated_read_states: Array<{ id: string; read_updated_at: string; read_version: number }>
+      unread_count: number
     }
 
     expect(response.status).toBe(200)
     expect(data.updated_count).toBe(1)
+    expect(data.unread_count).toBe(0)
     expect(data.updated_ids).toEqual([unreadId])
     expect(data.updated_read_states).toHaveLength(1)
     expect(data.updated_read_states[0]?.id).toBe(unreadId)
@@ -291,10 +293,11 @@ describe("Notification center API", () => {
       env,
       ["read-all"],
     )
-    const data = await response.json() as { updated_count: number }
+    const data = await response.json() as { updated_count: number; unread_count: number }
 
     expect(response.status).toBe(200)
     expect(data.updated_count).toBe(0)
+    expect(data.unread_count).toBe(0)
   })
 
   it("searches by the visible Japanese category label", async () => {
