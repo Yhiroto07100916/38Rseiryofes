@@ -7,6 +7,9 @@
   "vars": {
     "API_BASE_URL": "https://api.38r-seiryofes.com"
   },
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA"
+  },
   "triggers": {
     "crons": ["* * * * *"]
   },
