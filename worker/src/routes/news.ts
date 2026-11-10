@@ -395,7 +395,7 @@ export async function handleNews(
   request: Request,
   env: Env,
   pathParts: string[],
-  ctx?: ExecutionContext,
+  _ctx?: ExecutionContext,
 ): Promise<Response> {
   const auth = await requireAuth(request, env)
 
