@@ -288,6 +288,20 @@ export default {
       )
     }
 
+    if (url.pathname === "/api/site-config" && request.method === "GET") {
+      const settings = await readSiteAccessSettings(env)
+      return withCors(request, Response.json({
+        site_name: settings.siteName,
+        site_description: settings.siteDescription,
+        event_name: settings.eventName,
+        event_year: settings.eventYear,
+        timezone: settings.timezone,
+        logo_url: settings.logoUrl,
+        favicon_url: settings.faviconUrl,
+        calendar_default_view: settings.calendarDefaultView,
+      }))
+    }
+
     if (url.pathname === "/api/site-status" && request.method === "GET") {
       const settings = await readSiteAccessSettings(env)
       const user = await getSessionUser(request, env)
@@ -742,6 +756,24 @@ export default {
             { status: 500 },
           ),
         )
+      }
+    }
+
+    if (
+      url.pathname === "/api/admin/settings" ||
+      url.pathname.startsWith("/api/admin/settings/")
+    ) {
+      const suffix = url.pathname.slice("/api/admin/settings".length)
+      const pathParts = suffix.split("/").filter(Boolean)
+      if (pathParts[0] === "roles") pathParts[0] = "important-admins"
+      try {
+        return withCors(
+          request,
+          await handleAccountRoles(request, env, ["settings", ...pathParts]),
+        )
+      } catch (error) {
+        console.error("Admin settings API error:", error)
+        return withCors(request, Response.json({ error: "Internal Server Error" }, { status: 500 }))
       }
     }
 
