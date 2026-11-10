@@ -700,6 +700,34 @@ async function canAccessNotificationTarget(
     if (!decision) return false
   }
 
+  if (delivery.entity_type === "news" && delivery.entity_id) {
+    const news = await env.DB.prepare(
+      "SELECT 1 FROM news WHERE id = ?",
+    ).bind(delivery.entity_id).first()
+    if (!news) return false
+  }
+
+  if (delivery.entity_type === "equipment" && delivery.entity_id) {
+    const equipment = await env.DB.prepare(
+      "SELECT 1 FROM equipment WHERE id = ?",
+    ).bind(delivery.entity_id).first()
+    if (!equipment) return false
+  }
+
+  if (delivery.entity_type === "tool_loan" && delivery.entity_id) {
+    const loan = await env.DB.prepare(
+      "SELECT 1 FROM loans WHERE id = ?",
+    ).bind(Number(delivery.entity_id)).first()
+    if (!loan) return false
+  }
+
+  if (delivery.entity_type === "tool_loan_item" && delivery.entity_id) {
+    const loanItem = await env.DB.prepare(
+      "SELECT 1 FROM loan_items WHERE id = ?",
+    ).bind(Number(delivery.entity_id)).first()
+    if (!loanItem) return false
+  }
+
   if (delivery.entity_type === "wishlist_item" && delivery.entity_id) {
     const item = await env.DB.prepare(
       "SELECT 1 FROM wishlist_items WHERE id = ?",
