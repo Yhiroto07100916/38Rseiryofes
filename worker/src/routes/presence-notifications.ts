@@ -17,7 +17,7 @@ function jstParts(date = new Date()) {
   };
 }
 
-function jstExpiry(status: PresenceStatus, now = new Date()): string | null {
+export function jstExpiry(status: PresenceStatus, now = new Date()): string | null {
   if (status === "unknown") return null;
   const p = jstParts(now);
   const endHour = status === "inside" && (p.hour < 18) ? 18 : 24;
