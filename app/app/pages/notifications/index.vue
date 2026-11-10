@@ -63,7 +63,6 @@
         size="small"
         variant="text"
         prepend-icon="mdi-check-all"
-        :disabled="unreadCount === 0"
         @click="handleMarkAllRead"
       >
         すべて既読にする
