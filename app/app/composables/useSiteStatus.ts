@@ -8,8 +8,12 @@ export interface SiteStatus {
   site_description: string
   event_name: string
   event_year: number
+  timezone: string
+  logo_url: string
+  favicon_url: string
   is_authenticated: boolean
   is_admin: boolean
+  is_important_settings_admin: boolean
 }
 
 export function useSiteStatus() {
