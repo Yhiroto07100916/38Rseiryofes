@@ -503,14 +503,22 @@ export const useNotifications = () => {
   const markAllRead = async () => {
     const requestAccountId = auth.user?.id ?? null
     try {
-      const response = await apiFetch<{ updated_count: number }>("/api/notifications/read-all", {
+      const response = await apiFetch<{ updated_count: number; updated_ids: string[] }>("/api/notifications/read-all", {
         method: "POST",
       })
       if (auth.user?.id !== requestAccountId) return response.updated_count
-      for (const item of notifications.value) item.is_read = 1
-      for (const item of cacheSnapshot) item.is_read = 1
-      unreadCount.value = Math.max(0, unreadCount.value - response.updated_count)
+      const updatedIds = new Set(response.updated_ids)
+      for (const item of notifications.value) {
+        if (updatedIds.has(item.id)) item.is_read = 1
+      }
+      for (const item of cacheSnapshot) {
+        if (updatedIds.has(item.id)) item.is_read = 1
+      }
+      if (readFilter.value === "unread") {
+        notifications.value = notifications.value.filter(item => !updatedIds.has(item.id))
+      }
       void saveCacheSnapshot(requestAccountId)
+      void refreshUnreadCount()
       return response.updated_count
     } catch {
       if (auth.user?.id !== requestAccountId) return null
