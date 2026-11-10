@@ -1,39 +1,31 @@
 export default defineNuxtRouteMiddleware(async (to) => {
-  let requiresLogin = true
+  const siteStatusState = useSiteStatus()
+  siteStatusState.value = null
 
-  {
-    const config = useRuntimeConfig()
-    const apiBaseUrl = String(config.public.apiBaseUrl).replace(/\/$/, "")
+  let siteStatus: SiteStatus | null = null
 
-    try {
-      const siteStatus = await $fetch<{
-        maintenance_mode: boolean
-        maintenance_message: string
-        require_login: boolean
-        site_visibility: "public" | "private"
-        is_admin: boolean
-      }>(`${apiBaseUrl}/api/site-status`, {
-        credentials: "include",
-        headers: import.meta.server ? useRequestHeaders(["cookie"]) : undefined,
-      })
+  try {
+    siteStatus = await refreshSiteStatus()
+  } catch {
+    // Keep login required when the settings endpoint is unavailable.
+  }
 
-      requiresLogin = siteStatus.require_login || siteStatus.site_visibility === "private"
+  const requiresLogin =
+    !siteStatus ||
+    siteStatus.require_login ||
+    siteStatus.site_visibility === "private"
 
-      if (
-        siteStatus.maintenance_mode &&
-        !siteStatus.is_admin &&
-        to.path !== "/maintenance" &&
-        to.path !== "/login"
-      ) {
-        return navigateTo("/maintenance")
-      }
+  if (
+    siteStatus?.maintenance_mode &&
+    !siteStatus.is_admin &&
+    to.path !== "/maintenance" &&
+    to.path !== "/login"
+  ) {
+    return navigateTo("/maintenance")
+  }
 
-      if (to.path === "/maintenance" && siteStatus.is_admin) {
-        return navigateTo("/")
-      }
-    } catch {
-      // The API access guard remains authoritative if the status endpoint is unavailable.
-    }
+  if (to.path === "/maintenance" && siteStatus?.is_admin) {
+    return navigateTo("/")
   }
 
   if (to.path === "/login" || to.path === "/maintenance") {
