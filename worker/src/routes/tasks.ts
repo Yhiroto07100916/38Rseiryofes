@@ -176,6 +176,20 @@ async function getTaskLinks(
   }
 }
 
+async function getTaskNotificationRecipientIds(
+  env: Env,
+  taskId: string,
+): Promise<string[]> {
+  const result = await env.DB.prepare(
+    "SELECT user_id FROM task_assignees WHERE task_id = ? " +
+    "UNION SELECT ur.user_id FROM task_roles tr " +
+    "INNER JOIN user_roles ur ON ur.role_id = tr.role_id " +
+    "WHERE tr.task_id = ?",
+  ).bind(taskId, taskId).all<{ user_id: string }>()
+
+  return [...new Set(result.results.map(row => row.user_id))]
+}
+
 async function getTaskAssignments(
   env: Env,
   taskId: string,
@@ -820,15 +834,10 @@ export async function handleTasks(
       await env.DB.batch(statements)
 
       try {
-        const recipients = await env.DB.prepare(
-          "SELECT user_id FROM task_assignees WHERE task_id = ? " +
-          "UNION SELECT ur.user_id FROM task_roles tr " +
-          "INNER JOIN user_roles ur ON ur.role_id = tr.role_id " +
-          "WHERE tr.task_id = ?",
-        ).bind(id, id).all<{ user_id: string }>()
+        const recipientUserIds = await getTaskNotificationRecipientIds(env, id)
 
         await createNotificationsForUsers(env, {
-          recipientUserIds: recipients.results.map(row => row.user_id),
+          recipientUserIds,
           eventKey: "task.created",
           category: "tasks",
           title: "新しいタスクが割り当てられました",
@@ -927,6 +936,8 @@ export async function handleTasks(
         { status: 403 },
       )
     }
+
+    const previousRecipientIds = await getTaskNotificationRecipientIds(env, id)
 
     let body: UpdateTaskBody
 
@@ -1403,6 +1414,85 @@ export async function handleTasks(
       }
 
       await env.DB.batch(statements)
+
+      try {
+        const updatedTask = await getTask(env, id)
+        const currentRecipientIds = await getTaskNotificationRecipientIds(env, id)
+        const previousSet = new Set(previousRecipientIds)
+        const currentSet = new Set(currentRecipientIds)
+        const addedUserIds = currentRecipientIds.filter(userId => !previousSet.has(userId))
+        const removedUserIds = previousRecipientIds.filter(userId => !currentSet.has(userId))
+        const changeId = crypto.randomUUID()
+
+        if (addedUserIds.length > 0) {
+          await createNotificationsForUsers(env, {
+            recipientUserIds: addedUserIds,
+            eventKey: "task.assignee_added",
+            category: "tasks",
+            title: "タスクの担当に追加されました",
+            body: updatedTask?.title ?? existingTask.title,
+            targetUrl: "/tasks/" + id,
+            actorUserId: auth.user.id,
+            entityType: "task",
+            entityId: id,
+            dedupeKey: "task.assignee_added:" + id + ":" + changeId,
+          })
+        }
+
+        if (removedUserIds.length > 0) {
+          await createNotificationsForUsers(env, {
+            recipientUserIds: removedUserIds,
+            eventKey: "task.assignee_removed",
+            category: "tasks",
+            title: "タスクの担当から外されました",
+            body: existingTask.title,
+            targetUrl: "/tasks",
+            actorUserId: auth.user.id,
+            dedupeKey: "task.assignee_removed:" + id + ":" + changeId,
+          })
+        }
+
+        const statusChanged = body.status !== undefined &&
+          body.status !== existingTask.status
+        const otherFieldsChanged =
+          (body.title !== undefined && body.title.trim() !== existingTask.title) ||
+          (body.description !== undefined &&
+            (typeof body.description === "string" ? body.description.trim() || null : null) !== existingTask.description) ||
+          (body.due_at !== undefined &&
+            (typeof body.due_at === "string" ? body.due_at.trim() || null : null) !== existingTask.due_at) ||
+          (body.priority !== undefined && body.priority !== existingTask.priority) ||
+          body.calendar_event_id !== undefined ||
+          body.file_ids !== undefined ||
+          body.links !== undefined
+
+        if (updatedTask && (statusChanged || otherFieldsChanged)) {
+          const recipients = [...new Set([...currentRecipientIds, existingTask.created_by])]
+          const statusLabel: Record<string, string> = {
+            todo: "未着手",
+            in_progress: "進行中",
+            review: "確認待ち",
+            done: "完了",
+          }
+          const statusOnly = statusChanged && !otherFieldsChanged
+
+          await createNotificationsForUsers(env, {
+            recipientUserIds: recipients,
+            eventKey: statusOnly ? "task.status_changed" : "task.updated",
+            category: "tasks",
+            title: statusOnly ? "タスクの状態が変更されました" : "担当タスクが更新されました",
+            body: statusOnly
+              ? updatedTask.title + "：" + (statusLabel[updatedTask.status] ?? updatedTask.status)
+              : updatedTask.title,
+            targetUrl: "/tasks/" + id,
+            actorUserId: auth.user.id,
+            entityType: "task",
+            entityId: id,
+            dedupeKey: (statusOnly ? "task.status_changed:" : "task.updated:") + id + ":" + changeId,
+          })
+        }
+      } catch (notificationError) {
+        console.error("Failed to create task update notifications:", notificationError)
+      }
     } catch (error) {
       if (isFileLinkConflict(error)) {
         return Response.json(
