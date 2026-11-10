@@ -62,11 +62,12 @@ async function notify(
 export async function processDueCalendarNotifications(env: Env): Promise<void> {
   const now = new Date()
   const nowMinute = minuteKey(now)
+  const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000)
   const windowEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000)
   const events = await env.DB.prepare(
     "SELECT id, title, starts_at, is_all_day, created_by FROM calendar_events " +
     "WHERE datetime(starts_at) >= datetime(?) AND datetime(starts_at) <= datetime(?) ORDER BY starts_at ASC",
-  ).bind(now.toISOString(), windowEnd.toISOString()).all<ReminderEvent>()
+  ).bind(windowStart.toISOString(), windowEnd.toISOString()).all<ReminderEvent>()
 
   if (events.results.length === 0) return
 
