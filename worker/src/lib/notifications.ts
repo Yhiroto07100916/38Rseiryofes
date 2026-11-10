@@ -12,6 +12,7 @@ export interface CreateNotificationsInput {
   entityType?: string | null
   entityId?: string | null
   dedupeKey: string
+  includeActor?: boolean
 }
 
 export async function createNotificationsForUsers(
@@ -19,7 +20,7 @@ export async function createNotificationsForUsers(
   input: CreateNotificationsInput,
 ): Promise<number> {
   const recipientIds = [...new Set(input.recipientUserIds)]
-    .filter(userId => userId && userId !== input.actorUserId)
+    .filter(userId => userId && (input.includeActor === true || userId !== input.actorUserId))
 
   if (recipientIds.length === 0) return 0
 
