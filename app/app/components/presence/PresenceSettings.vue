@@ -16,6 +16,7 @@
       <v-alert v-if="error" type="warning" variant="tonal" density="comfortable" class="mb-3">{{ error }}</v-alert>
       <div v-if="!enabled" class="d-flex flex-column ga-2">
         <v-btn color="primary" block :loading="busy" :disabled="busy" @click="enable">位置情報を許可して自動判定を有効にする</v-btn>
+        <v-btn variant="outlined" block :loading="busy" :disabled="busy" @click="manualRegister">手動で在校登録</v-btn>
         <v-btn variant="outlined" block :loading="busy" :disabled="busy" @click="manualRegister">GPSを使わず手動で在校登録</v-btn>
         <div class="text-caption text-medium-emphasis">自動判定を有効にすると、サイトを開いたとき・前面に戻ったときに位置情報を確認します。手動登録は当日中のみ有効で、GPSで校外と判定された場合は校外が優先されます。</div>
       </div>
