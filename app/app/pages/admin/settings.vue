@@ -80,11 +80,18 @@ async function loadSettings() {
       )
       isImportantSettingsAdmin.value = true
       importantAdmins.value = adminResponse.users
-
-      const userResponse = await api.apiFetch<{ users: UserOption[] }>('/api/users')
-      users.value = userResponse.users
     } catch {
       isImportantSettingsAdmin.value = false
+    }
+
+    if (isImportantSettingsAdmin.value) {
+      try {
+        const userResponse = await api.apiFetch<{ users: UserOption[] }>('/api/users')
+        users.value = userResponse.users
+      } catch (error) {
+        console.error(error)
+        errorMessage.value = 'ユーザー一覧を取得できませんでした。'
+      }
     }
   } catch (error) {
     console.error(error)
