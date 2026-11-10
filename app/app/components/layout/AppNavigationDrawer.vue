@@ -110,7 +110,7 @@
       <nav class="drawer-navigation">
         <template v-for="item in items" :key="item.title">
           <NuxtLink
-            v-if="(!item.permission || auth.hasPermission(item.permission)) && (!item.permissions || item.permissions.some(permission => auth.hasPermission(permission)))"
+            v-if="(item.to !== '/notifications' || auth.isLoggedIn) && (!item.permission || auth.hasPermission(item.permission)) && (!item.permissions || item.permissions.some(permission => auth.hasPermission(permission)))"
             :to="item.to"
             class="drawer-item"
             :class="{ 'is-active': route.path === item.to }"
@@ -158,6 +158,7 @@ const isclassrepresentative = computed(() =>
 )
 
 const items: NavigationItem[] = [
+{ icon: "mdi-bell-outline", title: "通知", to: "/notifications" },
 { icon: "mdi-bullhorn", title: "NEWS", to: "/news" },
 { icon: "mdi-clipboard-check-outline", title: "提出物管理", to: "/submissions", permission: "submissions.view" },
 { icon: "mdi-cart-outline", title: "ほしい物リスト", to: "/wishlist" },
