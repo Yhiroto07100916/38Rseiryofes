@@ -5,6 +5,7 @@
     @touchend.passive="handleTouchEnd"
   >
     <div class="d-flex align-center mb-1">
+      <LayoutBackButton />
       <div class="flex-grow-1">
         <h1 class="text-h5 font-weight-bold">通知</h1>
         <div class="text-body-2 text-medium-emphasis mt-1">
