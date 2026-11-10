@@ -55,7 +55,11 @@ async function open(item: typeof items.value[number]) {
   await navigateTo(item.target_url || "/");
 }
 function formatDate(value: string) {
-  return new Date(value).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+  const normalized = value.includes("T") ? value : `${value.replace(' ', 'T')}Z`;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
 }
 onMounted(load);
 </script>
