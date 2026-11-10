@@ -141,7 +141,7 @@ export async function handleAvatarMutation(
       Number.isFinite(contentLength) &&
       contentLength > maxAvatarSize + MAX_MULTIPART_OVERHEAD
     ) {
-      return json({ error: "画像は${maxAvatarSizeLabel}MB以下にしてください" }, 413)
+      return json({ error: `画像は${maxAvatarSizeLabel}MB以下にしてください` }, 413)
     }
 
     let form: FormData
@@ -159,7 +159,7 @@ export async function handleAvatarMutation(
     }
 
     if (file.size === 0 || file.size > maxAvatarSize) {
-      return json({ error: "画像は${maxAvatarSizeLabel}MB以下にしてください" }, 413)
+      return json({ error: `画像は${maxAvatarSizeLabel}MB以下にしてください` }, 413)
     }
 
     const buffer = await file.arrayBuffer()
