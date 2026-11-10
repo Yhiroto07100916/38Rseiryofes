@@ -1,5 +1,5 @@
 import { buildPushHTTPRequest } from "@pushforge/builder"
-import { requireAuth } from "../lib/authz"
+import { hasPermission, requireAuth } from "../lib/authz"
 
 interface PushSubscriptionRecord {
   id: string
@@ -271,40 +271,39 @@ export async function enqueueNewsPushDeliveries(
 export async function reenqueueNewsPushDeliveries(
   env: Env,
   news: { id: string },
+  operatorUserId?: string,
 ): Promise<{ configured: boolean; queued: number }> {
   if (!isPushConfigured(env)) {
     return { configured: false, queued: 0 }
   }
 
-  const result = await env.DB
-    .prepare(`
-      INSERT INTO push_notification_deliveries (
-        id,
-        news_id,
-        subscription_id,
-        status,
-        attempt_count,
-        next_attempt_at
-      )
-      SELECT
-        lower(hex(randomblob(16))),
-        ?,
-        id,
-        'pending',
-        0,
-        CURRENT_TIMESTAMP
-      FROM push_subscriptions
-      WHERE 1
-      ON CONFLICT(news_id, subscription_id) DO UPDATE SET
-        status = 'pending',
-        attempt_count = 0,
-        next_attempt_at = CURRENT_TIMESTAMP,
-        lease_until = NULL,
-        last_error = NULL,
-        updated_at = CURRENT_TIMESTAMP
-    `)
-    .bind(news.id)
-    .run()
+  const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+  const eligible = await Promise.all(users.results.map(async user => ({
+    id: user.id,
+    allowed: user.id !== operatorUserId && await hasPermission(env, user.id, "news.view"),
+  })))
+  const recipientIds = eligible.filter(user => user.allowed).map(user => user.id)
+
+  if (recipientIds.length === 0) {
+    return { configured: true, queued: 0 }
+  }
+
+  const placeholders = recipientIds.map(() => "?").join(", ")
+  const result = await env.DB.prepare(
+    "INSERT INTO push_notification_deliveries (" +
+    "id, news_id, subscription_id, status, attempt_count, next_attempt_at" +
+    ") SELECT lower(hex(randomblob(16))), ?, s.id, 'pending', 0, CURRENT_TIMESTAMP " +
+    "FROM push_subscriptions s " +
+    "LEFT JOIN notification_user_settings us ON us.user_id = s.user_id " +
+    "LEFT JOIN notification_category_settings cs " +
+    "ON cs.user_id = s.user_id AND cs.category = 'news' " +
+    "WHERE s.user_id IN (" + placeholders + ") " +
+    "AND COALESCE(us.global_push_enabled, 1) = 1 " +
+    "AND COALESCE(cs.push_enabled, 1) = 1 " +
+    "ON CONFLICT(news_id, subscription_id) DO UPDATE SET " +
+    "status = 'pending', attempt_count = 0, next_attempt_at = CURRENT_TIMESTAMP, " +
+    "lease_until = NULL, last_error = NULL, updated_at = CURRENT_TIMESTAMP",
+  ).bind(news.id, ...recipientIds).run()
 
   return {
     configured: true,
