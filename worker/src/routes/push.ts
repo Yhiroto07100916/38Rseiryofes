@@ -564,7 +564,7 @@ export async function processDuePushDeliveries(env: Env): Promise<void> {
     "recipient_user_id IS NULL OR EXISTS (" +
     "SELECT 1 FROM push_subscriptions s " +
     "WHERE s.id = push_notification_deliveries.subscription_id " +
-    "AND s.user_id <> push_notification_deliveries.recipient_user_id))",
+    "AND (s.user_id IS NULL OR s.user_id <> push_notification_deliveries.recipient_user_id)))",
   ).run()
 
   const result = await env.DB
