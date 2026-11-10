@@ -55,31 +55,34 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue"
+
 interface TaskLink {
   title: string
   url: string
 }
 
-const { modelValue, addLabel, helpText } = withDefaults(defineProps<{
+const props = defineProps<{
   modelValue: TaskLink[]
   addLabel?: string
   helpText?: string
-}>(), {
-  addLabel: "追加",
-  helpText: "最大20件。タイトルとURLを両方入力してください。",
-})
+}>()
+
+const modelValue = computed(() => props.modelValue)
+const addLabel = computed(() => props.addLabel ?? "追加")
+const helpText = computed(() => props.helpText ?? "最大20件。タイトルとURLを両方入力してください。")
 
 const emit = defineEmits<{
   "update:modelValue": [value: TaskLink[]]
 }>()
 
 const addLink = () => {
-  if (modelValue.length >= 20) return
-  emit("update:modelValue", [...modelValue, { title: "", url: "" }])
+  if (props.modelValue.length >= 20) return
+  emit("update:modelValue", [...props.modelValue, { title: "", url: "" }])
 }
 
 const updateLink = (index: number, field: keyof TaskLink, value: string | null) => {
-  const links = modelValue.map((link, currentIndex) => (
+  const links = props.modelValue.map((link, currentIndex) => (
     currentIndex === index
       ? { ...link, [field]: value ?? "" }
       : link
@@ -91,6 +94,6 @@ const updateTitle = (index: number, value: string | null) => updateLink(index, "
 const updateUrl = (index: number, value: string | null) => updateLink(index, "url", value)
 
 const removeLink = (index: number) => {
-  emit("update:modelValue", modelValue.filter((_, currentIndex) => currentIndex !== index))
+  emit("update:modelValue", props.modelValue.filter((_, currentIndex) => currentIndex !== index))
 }
 </script>
