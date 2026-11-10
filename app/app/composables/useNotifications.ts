@@ -208,6 +208,8 @@ export const useNotifications = () => {
     ) {
       await deleteNotificationCache(accountId).catch(() => undefined)
       cachedClockOffsetMs = null
+      cacheSnapshot = []
+      cacheInitialized = false
       if (!hasSuccessfulApiFetch) {
         notifications.value = []
         unreadCount.value = 0
