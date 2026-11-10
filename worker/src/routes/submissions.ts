@@ -213,6 +213,78 @@ function readFileIds(value: unknown): string[] | null {
   return value.map((item: string) => item.trim())
 }
 
+export async function processDueSubmissionNotifications(env: Env): Promise<void> {
+  const result = await env.DB.prepare(
+    "SELECT id, title, due_at, assigned_role_id, status " +
+    "FROM submissions WHERE due_at IS NOT NULL " +
+    "AND status NOT IN ('completed', 'cancelled')",
+  ).all<{
+    id: string
+    title: string
+    due_at: string
+    assigned_role_id: string | null
+    status: SubmissionStatus
+  }>()
+
+  const now = Date.now()
+  const localDay = new Date(now + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+  for (const submission of result.results) {
+    const dueAt = Date.parse(submission.due_at)
+    if (!Number.isFinite(dueAt)) continue
+    const hoursRemaining = (dueAt - now) / 3_600_000
+    const recipients = await getSubmissionRoleMemberIds(env, submission.assigned_role_id)
+    if (recipients.length === 0) continue
+
+    const reminders: Array<{
+      eventKey: string
+      title: string
+      dedupeKey: string
+    }> = []
+
+    if (hoursRemaining <= 24 && hoursRemaining > 23) {
+      reminders.push({
+        eventKey: "submissions.deadline_reminder_24h",
+        title: "提出物の期限まで24時間です",
+        dedupeKey: "submissions.deadline_reminder_24h:" + submission.id + ":" + submission.due_at,
+      })
+    }
+    if (hoursRemaining <= 1 && hoursRemaining > 0) {
+      reminders.push({
+        eventKey: "submissions.deadline_reminder_1h",
+        title: "提出物の期限まで1時間です",
+        dedupeKey: "submissions.deadline_reminder_1h:" + submission.id + ":" + submission.due_at,
+      })
+    }
+    if (hoursRemaining <= 0) {
+      reminders.push({
+        eventKey: "submissions.deadline_overdue_daily",
+        title: "提出物の期限を過ぎています",
+        dedupeKey: "submissions.deadline_overdue_daily:" + submission.id + ":" + localDay,
+      })
+    }
+
+    for (const reminder of reminders) {
+      try {
+        await createNotificationsForUsers(env, {
+          recipientUserIds: recipients,
+          eventKey: reminder.eventKey,
+          category: "submissions",
+          title: reminder.title,
+          body: submission.title,
+          targetUrl: "/submissions/" + submission.id,
+          requiredPermission: "submissions.view",
+          entityType: "submission",
+          entityId: submission.id,
+          dedupeKey: reminder.dedupeKey,
+        })
+      } catch (notificationError) {
+        console.error("Failed to create submission deadline notifications:", notificationError)
+      }
+    }
+  }
+}
+
 export async function handleSubmissions(
   request: Request,
   env: Env,
