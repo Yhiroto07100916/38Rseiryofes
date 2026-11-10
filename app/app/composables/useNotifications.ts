@@ -169,8 +169,8 @@ export const useNotifications = () => {
     if (cacheDeletionRequests.has(accountId)) return
     try {
       const cached = await loadNotificationCache(accountId)
-      // API取得が先に完了していた場合、遅れて返った古いキャッシュで最新状態を上書きしない。
-      if (!cached || auth.user?.id !== accountId || hasSuccessfulApiFetch) return
+      // API取得または完全キャッシュ更新が先に完了していた場合、古いキャッシュで最新状態を上書きしない。
+      if (!cached || auth.user?.id !== accountId || hasSuccessfulApiFetch || cacheInitialized) return
       cachedClockOffsetMs = cached.clockOffsetMs
       cacheSnapshot = cached.notifications.map(mapCachedNotification)
       cacheInitialized = true
