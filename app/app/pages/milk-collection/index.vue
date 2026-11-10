@@ -450,10 +450,10 @@
             auto-grow
           />
 
-          <v-text-field
+          <CommonJstDateTimePicker
             v-model="scheduledAt"
             label="回収予定日時（任意）"
-            type="datetime-local"
+            clearable
           />
 
           <v-text-field
