@@ -338,6 +338,9 @@ onMounted(loadSettings)
             label="ログイン機能を有効にする"
             hide-details
           />
+          <v-alert type="info" variant="tonal" density="compact" class="mt-3">
+            無効にすると一般ユーザーの新規ログインを停止します。管理者は設定を復旧できるよう、引き続きログインできます。
+          </v-alert>
           <v-switch
             v-model="settings.require_login"
             color="primary"
