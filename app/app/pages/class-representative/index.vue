@@ -59,67 +59,6 @@
       </v-col>
     </v-row>
 
-    <div class="section-header">
-      <div>
-        <div class="section-eyebrow">
-          COMING SOON
-        </div>
-
-        <h2 class="section-title">
-          今後実装する機能
-        </h2>
-
-        <p class="section-description">
-          クラス運営のために今後追加予定の機能です。
-        </p>
-      </div>
-    </div>
-
-    <v-row class="mt-4">
-      <v-col
-        v-for="item in plannedFeatures"
-        :key="item.title"
-        cols="12"
-        sm="6"
-        md="4"
-      >
-        <v-card
-          rounded="xl"
-          variant="outlined"
-          class="feature-card planned-card"
-        >
-          <v-card-item>
-            <template #prepend>
-              <v-icon
-                :icon="item.icon"
-                size="32"
-                color="medium-emphasis"
-              />
-            </template>
-
-            <v-card-title>
-              {{ item.title }}
-            </v-card-title>
-
-            <v-card-subtitle>
-              {{ item.description }}
-            </v-card-subtitle>
-          </v-card-item>
-
-          <v-card-actions>
-            <v-spacer />
-
-            <v-chip
-              size="small"
-              variant="tonal"
-              color="grey"
-            >
-              未実装
-            </v-chip>
-          </v-card-actions>
-        </v-card>
-      </v-col>
-    </v-row>
   </v-container>
 </template>
 
@@ -160,6 +99,12 @@ const implementedFeatures = [
     to: '/files',
   },
   {
+    title: '出欠管理',
+    description: 'GPSと連携して日ごとの出欠を名簿で管理',
+    icon: 'mdi-account-check-outline',
+    to: '/class-representative/attendance',
+  },
+  {
     title: '会計',
     description: '38Rの予算・支出などを管理',
     icon: 'mdi-cash-multiple',
@@ -176,14 +121,6 @@ const implementedFeatures = [
     description: 'クラスで決定した内容や経緯を記録',
     icon: 'mdi-notebook-check-outline',
     to: '/decisions',
-  },
-]
-
-const plannedFeatures = [
-  {
-    title: '出欠管理',
-    description: '星陵祭準備の出欠・参加状況を管理',
-    icon: 'mdi-account-check-outline',
   },
 ]
 

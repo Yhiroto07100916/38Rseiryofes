@@ -68,6 +68,12 @@ describe("presence API", () => {
     expect(stored?.status).toBe("inside")
     expect(stored?.method).toBe("gps")
     expect(stored?.expires_at).toBeTruthy()
+
+    const attendance = await env.DB.prepare(
+      "SELECT status, source, gps_checked_in_at FROM attendance_records WHERE user_id = ? AND local_date = ?",
+    ).bind(userId, stored?.local_date).first<{ status: string; source: string; gps_checked_in_at: string }>()
+    expect(attendance).toMatchObject({ status: "present", source: "gps" })
+    expect(attendance?.gps_checked_in_at).toBeTruthy()
   })
 
   it("lets GPS outside override manual inside and rejects a later manual override", async () => {
