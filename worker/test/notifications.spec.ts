@@ -104,6 +104,31 @@ describe("Notification center API", () => {
     expect(data.notifications[0]).toMatchObject({ id: firstId, title: "自分宛て" })
   })
 
+  it("returns current read states for loaded notifications even when filters exclude them", async () => {
+    const user = await createUser()
+    const id = await insertNotification(user.userId)
+
+    const updated = await handleNotifications(
+      request("PATCH", "/" + id + "/read", user.cookie, { is_read: true }),
+      env,
+      [id, "read"],
+    )
+    expect(updated.status).toBe(200)
+
+    const response = await handleNotifications(
+      request("GET", "?read=unread&known_ids=" + id, user.cookie),
+      env,
+      [],
+    )
+    const data = await response.json() as {
+      notifications: Array<{ id: string }>
+      known_notifications: Array<{ id: string; is_read: number }>
+    }
+
+    expect(data.notifications).toHaveLength(0)
+    expect(data.known_notifications).toContainEqual({ id, is_read: 1 })
+  })
+
   it("returns notifications newest first and limits each page to 20", async () => {
     const user = await createUser()
     for (let i = 0; i < 22; i += 1) {
