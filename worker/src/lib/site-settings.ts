@@ -42,7 +42,7 @@ export async function isFeaturePermissionEnabled(
   const feature = rawFeature[category]
   if (feature?.enabled === false) return false
 
-  const action = parts[parts.length - 1]
+  const action = parts.at(-1) ?? ""
   if (feature && ["view", "create", "edit", "delete", "assign", "comment", "approve", "respond", "export", "share", "revoke"].includes(action)) {
     if (feature[action] === false) return false
   }
