@@ -564,7 +564,7 @@
           <v-card-text class="px-5 pb-5">
             <v-progress-linear v-if="notificationSettingsLoading" indeterminate class="mb-3" />
             <v-switch
-              v-model="globalPushEnabled"
+              :model-value="globalPushEnabled"
               color="primary"
               inset
               hide-details
