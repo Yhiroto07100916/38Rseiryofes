@@ -133,13 +133,6 @@ async function handleLogin(
   request: Request,
   env: Env,
 ): Promise<Response> {
-  if (!(await isLoginEnabled(env))) {
-    return Response.json(
-      { error: "Login is currently disabled" },
-      { status: 403 },
-    )
-  }
-
   let body: LoginBody
 
   try {
@@ -204,6 +197,23 @@ async function handleLogin(
       { error: "Invalid student number or password" },
       { status: 401 },
     )
+  }
+
+  if (!(await isLoginEnabled(env))) {
+    const isAdmin = await env.DB.prepare(`
+      SELECT 1
+      FROM user_account_roles uar
+      INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+      WHERE uar.user_id = ? AND ar.name = 'admin'
+      LIMIT 1
+    `).bind(user.id).first()
+
+    if (!isAdmin) {
+      return Response.json(
+        { error: "Login is currently disabled for regular users" },
+        { status: 403 },
+      )
+    }
   }
 
   const sessionId = await createSession(
