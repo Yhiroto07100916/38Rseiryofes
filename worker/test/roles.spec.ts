@@ -202,6 +202,17 @@ async function createImportantAdminSession() {
 describe("site settings authorization", () => {
   it("hides critical settings and rejects critical updates for regular admins", async () => {
     const cookie = await createAdminSession()
+    const sessionId = cookie.slice("session_id=".length)
+    const session = await env.DB.prepare(
+      "SELECT user_id FROM sessions WHERE id = ?",
+    ).bind(sessionId).first<{ user_id: string }>()
+    if (!session) throw new Error("Test session was not found")
+
+    await env.DB.prepare(`
+      INSERT INTO site_setting_logs (
+        id, setting_key, old_value, new_value, changed_by
+      ) VALUES (?, 'site_visibility', '"public"', '"private"', ?)
+    `).bind(crypto.randomUUID(), session.user_id).run()
 
     const getResponse = await SELF.fetch(
       "http://example.com/api/account-roles/settings",
