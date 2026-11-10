@@ -160,6 +160,12 @@ const implementedFeatures = [
     to: '/files',
   },
   {
+    title: '出欠管理',
+    description: 'GPSと連携して日ごとの出欠を名簿で管理',
+    icon: 'mdi-account-check-outline',
+    to: '/class-representative/attendance',
+  },
+  {
     title: '会計',
     description: '38Rの予算・支出などを管理',
     icon: 'mdi-cash-multiple',
@@ -179,13 +185,7 @@ const implementedFeatures = [
   },
 ]
 
-const plannedFeatures = [
-  {
-    title: '出欠管理',
-    description: '星陵祭準備の出欠・参加状況を管理',
-    icon: 'mdi-account-check-outline',
-  },
-]
+const plannedFeatures = []
 
 </script>
 
