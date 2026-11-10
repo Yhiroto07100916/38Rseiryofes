@@ -62,6 +62,7 @@ export const useNotifications = () => {
   const readFilter = ref<"all" | "unread" | "read">("all")
   const selectedCategories = ref<NotificationCategory[]>([])
   const search = ref("")
+  const cacheExpired = ref(false)
   let pollHandle: ReturnType<typeof setInterval> | undefined
   let listRetryHandle: ReturnType<typeof setTimeout> | undefined
   let unreadRetryHandle: ReturnType<typeof setTimeout> | undefined
@@ -137,6 +138,7 @@ export const useNotifications = () => {
       const cached = await loadNotificationCache(accountId)
       if (!cached || hasSuccessfulApiFetch || auth.user?.id !== accountId) return
       cachedClockOffsetMs = cached.clockOffsetMs
+      cacheExpired.value = cached.expired
       cacheSnapshot = cached.notifications.map(mapCachedNotification)
 
       const term = String(search.value ?? "").trim().toLocaleLowerCase()
@@ -360,6 +362,7 @@ export const useNotifications = () => {
       await validateServerClock(requestAccountId, response.server_time)
       hasSuccessfulApiFetch = true
       applyResponse(response, reset)
+      cacheExpired.value = false
       if (
         reset &&
         requestAccountId &&
@@ -381,11 +384,15 @@ export const useNotifications = () => {
       if (successHandle) clearTimeout(successHandle)
       successHandle = undefined
       if (listFailures >= MAX_FAILURES) {
-        error.value = "再取得に失敗しました。手動で再試行してください。"
+        error.value = cacheExpired.value
+          ? "最新情報を取得できませんでした。保存済みの通知を表示しています。手動で再試行してください。"
+          : "再取得に失敗しました。手動で再試行してください。"
         refreshMessage.value = ""
         manualRefreshRequested = false
       } else {
-        error.value = "通知を取得できませんでした。通信環境を確認して再試行してください。"
+        error.value = cacheExpired.value
+          ? "最新情報を取得できませんでした。保存済みの通知を表示しています。"
+          : "通知を取得できませんでした。通信環境を確認して再試行してください。"
         scheduleListRetry(reset)
       }
     } finally {
@@ -541,6 +548,7 @@ export const useNotifications = () => {
       listFailures = 0
       clearListRetry()
       error.value = ""
+      cacheExpired.value = false
       refreshMessage.value = ""
       if (manualRefreshRequested) {
         manualRefreshRequested = false
@@ -612,6 +620,7 @@ export const useNotifications = () => {
       }
 
       notifications.value = []
+      cacheExpired.value = false
       unreadCount.value = 0
       cursor.value = null
       hasMore.value = false
