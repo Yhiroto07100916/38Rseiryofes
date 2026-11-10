@@ -353,20 +353,15 @@ describe("site settings authorization", () => {
       })
       expect(regularLogin.status).toBe(403)
 
-      const adminCookie = await createAdminSession()
-      const adminSessionId = adminCookie.slice("session_id=".length)
-      const adminSession = await env.DB.prepare(
-        "SELECT user_id FROM sessions WHERE id = ?",
-      ).bind(adminSessionId).first<{ user_id: string }>()
-      if (!adminSession) throw new Error("Admin test session was not found")
+      const { userId: importantAdminUserId } = await createImportantAdminSession()
 
       await env.DB.prepare(
         "UPDATE users SET password_hash = ? WHERE id = ?",
-      ).bind(await hashPassword("admin-password"), adminSession.user_id).run()
+      ).bind(await hashPassword("admin-password"), importantAdminUserId).run()
 
       const adminUser = await env.DB.prepare(
         "SELECT student_number FROM users WHERE id = ?",
-      ).bind(adminSession.user_id).first<{ student_number: string }>()
+      ).bind(importantAdminUserId).first<{ student_number: string }>()
 
       const adminLogin = await SELF.fetch("http://example.com/api/auth/login", {
         method: "POST",
@@ -483,7 +478,7 @@ describe("site settings authorization", () => {
     }
   })
 
-  it("restricts maintenance mode to administrators while allowing the login flow", async () => {
+  it("restricts maintenance mode to important settings admins while allowing the login flow", async () => {
     await env.DB.prepare(
       "UPDATE site_settings SET value = 'true' WHERE key = 'maintenance_mode'",
     ).run()
@@ -500,10 +495,15 @@ describe("site settings authorization", () => {
         error: "Maintenance mode",
       })
 
-      const admin = await SELF.fetch("http://example.com/api/not-a-real-route", {
+      const regularAdmin = await SELF.fetch("http://example.com/api/not-a-real-route", {
         headers: { Cookie: await createAdminSession() },
       })
-      expect(admin.status).toBe(404)
+      expect(regularAdmin.status).toBe(503)
+
+      const importantAdmin = await SELF.fetch("http://example.com/api/not-a-real-route", {
+        headers: { Cookie: (await createImportantAdminSession()).cookie },
+      })
+      expect(importantAdmin.status).toBe(404)
 
       const login = await SELF.fetch("http://example.com/api/auth/login", {
         method: "POST",
