@@ -539,3 +539,221 @@ export async function processDuePushDeliveries(env: Env): Promise<void> {
     )
   }
 }
+
+
+interface NotificationPushDeliveryRecord {
+  delivery_id: string
+  notification_id: string
+  subscription_id: string
+  attempt_count: number
+  endpoint: string
+  p256dh: string
+  auth: string
+  title: string
+  body: string
+  target_url: string | null
+}
+
+export async function enqueueNotificationPushDeliveries(
+  env: Env,
+  notificationId: string,
+): Promise<number> {
+  if (!isPushConfigured(env)) return 0
+
+  const result = await env.DB.prepare(
+    "INSERT OR IGNORE INTO notification_push_deliveries (" +
+    "id, notification_id, subscription_id, status, attempt_count, next_attempt_at" +
+    ") SELECT lower(hex(randomblob(16))), n.id, s.id, 'pending', 0, CURRENT_TIMESTAMP " +
+    "FROM notifications n " +
+    "INNER JOIN push_subscriptions s ON s.user_id = n.recipient_user_id " +
+    "LEFT JOIN notification_user_settings us ON us.user_id = n.recipient_user_id " +
+    "LEFT JOIN notification_category_settings cs " +
+    "ON cs.user_id = n.recipient_user_id AND cs.category = n.category " +
+    "WHERE n.id = ? " +
+    "AND COALESCE(us.global_push_enabled, 1) = 1 " +
+    "AND COALESCE(cs.push_enabled, 1) = 1",
+  ).bind(notificationId).run()
+
+  return result.meta?.changes ?? 0
+}
+
+async function updateNotificationDelivery(
+  env: Env,
+  deliveryId: string,
+  values: {
+    status: "pending" | "sent" | "failed"
+    attemptCount: number
+    retryDelayMinutes?: number
+    error?: string | null
+  },
+): Promise<void> {
+  await env.DB.prepare(
+    "UPDATE notification_push_deliveries SET " +
+    "status = ?, attempt_count = ?, " +
+    "next_attempt_at = CASE WHEN ? IS NULL THEN next_attempt_at " +
+    "ELSE datetime('now', '+' || ? || ' minutes') END, " +
+    "lease_until = NULL, last_error = ?, updated_at = CURRENT_TIMESTAMP " +
+    "WHERE id = ?",
+  ).bind(
+    values.status,
+    values.attemptCount,
+    values.retryDelayMinutes ?? null,
+    values.retryDelayMinutes ?? null,
+    values.error ?? null,
+    deliveryId,
+  ).run()
+}
+
+async function sendNotificationPush(
+  env: Env,
+  delivery: NotificationPushDeliveryRecord,
+): Promise<Response> {
+  if (!env.VAPID_PRIVATE_KEY) {
+    throw new Error("VAPID_PRIVATE_KEY is not configured")
+  }
+
+  const targetUrl = delivery.target_url &&
+    delivery.target_url.startsWith("/") &&
+    !delivery.target_url.startsWith("//")
+    ? delivery.target_url
+    : "/notifications"
+
+  const { endpoint, headers, body } = await buildPushHTTPRequest({
+    privateJWK: JSON.parse(env.VAPID_PRIVATE_KEY),
+    subscription: {
+      endpoint: delivery.endpoint,
+      keys: {
+        p256dh: delivery.p256dh,
+        auth: delivery.auth,
+      },
+    },
+    message: {
+      payload: {
+        title: delivery.title,
+        body: formatPushBody(delivery.body || "新しい通知があります。"),
+        icon: "/pwa-192x192.png",
+        badge: "/pwa-64x64.png",
+        tag: delivery.notification_id,
+        url: targetUrl,
+      },
+      adminContact: env.VAPID_SUBJECT || "https://38r-seiryofes.com",
+      options: {
+        ttl: 86400,
+        urgency: "normal",
+        topic: delivery.notification_id.replace(/-/g, "").slice(0, 32),
+      },
+    },
+  })
+
+  return fetch(endpoint, { method: "POST", headers, body })
+}
+
+async function processOneNotificationDelivery(
+  env: Env,
+  delivery: NotificationPushDeliveryRecord,
+): Promise<void> {
+  if (delivery.attempt_count >= MAX_ATTEMPTS) {
+    await updateNotificationDelivery(env, delivery.delivery_id, {
+      status: "failed",
+      attemptCount: MAX_ATTEMPTS,
+      error: "Maximum attempts reached after an interrupted send",
+    })
+    return
+  }
+
+  const attemptNumber = delivery.attempt_count + 1
+  const claimed = await env.DB.prepare(
+    "UPDATE notification_push_deliveries SET status = 'sending', " +
+    "attempt_count = attempt_count + 1, lease_until = datetime('now', '+2 minutes'), " +
+    "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (" +
+    "(status = 'pending' AND next_attempt_at <= CURRENT_TIMESTAMP) OR " +
+    "(status = 'sending' AND lease_until <= CURRENT_TIMESTAMP))",
+  ).bind(delivery.delivery_id).run()
+
+  if ((claimed.meta?.changes ?? 0) !== 1) return
+
+  try {
+    const response = await sendNotificationPush(env, delivery)
+
+    if (response.ok) {
+      await updateNotificationDelivery(env, delivery.delivery_id, {
+        status: "sent",
+        attemptCount: attemptNumber,
+      })
+      return
+    }
+
+    if (response.status === 404 || response.status === 410) {
+      await env.DB.prepare(
+        "DELETE FROM push_subscriptions WHERE id = ?",
+      ).bind(delivery.subscription_id).run()
+      return
+    }
+
+    if (response.status === 429 || response.status >= 500) {
+      if (attemptNumber >= MAX_ATTEMPTS) {
+        await updateNotificationDelivery(env, delivery.delivery_id, {
+          status: "failed",
+          attemptCount: attemptNumber,
+          error: "Push service returned " + response.status,
+        })
+      } else {
+        await updateNotificationDelivery(env, delivery.delivery_id, {
+          status: "pending",
+          attemptCount: attemptNumber,
+          retryDelayMinutes: RETRY_DELAYS_MINUTES[attemptNumber - 1],
+          error: "Push service returned " + response.status,
+        })
+      }
+      return
+    }
+
+    await updateNotificationDelivery(env, delivery.delivery_id, {
+      status: "failed",
+      attemptCount: attemptNumber,
+      error: "Push service returned " + response.status,
+    })
+
+    if (response.status === 401 || response.status === 403) {
+      console.error("Web Push authentication/configuration error:", response.status)
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown push error"
+    if (attemptNumber >= MAX_ATTEMPTS) {
+      await updateNotificationDelivery(env, delivery.delivery_id, {
+        status: "failed",
+        attemptCount: attemptNumber,
+        error: message.slice(0, 300),
+      })
+    } else {
+      await updateNotificationDelivery(env, delivery.delivery_id, {
+        status: "pending",
+        attemptCount: attemptNumber,
+        retryDelayMinutes: RETRY_DELAYS_MINUTES[attemptNumber - 1],
+        error: message.slice(0, 300),
+      })
+    }
+  }
+}
+
+export async function processDueNotificationPushDeliveries(env: Env): Promise<void> {
+  if (!isPushConfigured(env)) return
+
+  const result = await env.DB.prepare(
+    "SELECT d.id AS delivery_id, d.notification_id, d.subscription_id, " +
+    "d.attempt_count, s.endpoint, s.p256dh, s.auth, n.title, n.body, n.target_url " +
+    "FROM notification_push_deliveries d " +
+    "INNER JOIN push_subscriptions s ON s.id = d.subscription_id " +
+    "INNER JOIN notifications n ON n.id = d.notification_id " +
+    "WHERE (d.status = 'pending' AND d.next_attempt_at <= CURRENT_TIMESTAMP) " +
+    "OR (d.status = 'sending' AND d.lease_until <= CURRENT_TIMESTAMP) " +
+    "ORDER BY d.created_at ASC LIMIT ?",
+  ).bind(MAX_BATCH_SIZE).all<NotificationPushDeliveryRecord>()
+
+  for (let offset = 0; offset < result.results.length; offset += 10) {
+    const batch = result.results.slice(offset, offset + 10)
+    await Promise.all(batch.map(delivery =>
+      processOneNotificationDelivery(env, delivery),
+    ))
+  }
+}
