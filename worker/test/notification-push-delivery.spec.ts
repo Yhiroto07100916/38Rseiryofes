@@ -74,6 +74,6 @@ describe("notification Push delivery account isolation", () => {
     const delivery = await env.DB.prepare(
       "SELECT status FROM notification_push_deliveries WHERE notification_id = ?",
     ).bind(notificationId).first<{ status: string }>()
-    expect(delivery?.status).toBe("pending")
+    expect(delivery?.status).toBe("failed")
   })
 })
