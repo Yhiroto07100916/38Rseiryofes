@@ -568,6 +568,8 @@ interface NotificationPushDeliveryRecord {
   recipient_user_id: string
   category: string
   required_permission: string | null
+  entity_type: string | null
+  entity_id: string | null
 }
 
 export async function enqueueNotificationPushDeliveries(
@@ -664,6 +666,38 @@ async function sendNotificationPush(
   return fetch(endpoint, { method: "POST", headers, body })
 }
 
+async function canAccessNotificationTarget(
+  env: Env,
+  delivery: NotificationPushDeliveryRecord,
+): Promise<boolean> {
+  if (
+    delivery.required_permission !== null &&
+    !(await hasPermission(env, delivery.recipient_user_id, delivery.required_permission))
+  ) {
+    return false
+  }
+
+  if (delivery.entity_type === "task" && delivery.entity_id) {
+    const access = await env.DB.prepare(
+      "SELECT 1 FROM tasks t " +
+      "LEFT JOIN task_assignees ta ON ta.task_id = t.id " +
+      "LEFT JOIN task_roles tr ON tr.task_id = t.id " +
+      "LEFT JOIN user_roles ur ON ur.role_id = tr.role_id AND ur.user_id = ? " +
+      "WHERE t.id = ? AND (t.created_by = ? OR ta.user_id = ? OR ur.user_id IS NOT NULL) " +
+      "LIMIT 1",
+    ).bind(
+      delivery.recipient_user_id,
+      delivery.entity_id,
+      delivery.recipient_user_id,
+      delivery.recipient_user_id,
+    ).first<{ 1: number }>()
+
+    return Boolean(access)
+  }
+
+  return true
+}
+
 async function processOneNotificationDelivery(
   env: Env,
   delivery: NotificationPushDeliveryRecord,
@@ -703,8 +737,7 @@ async function processOneNotificationDelivery(
     if (
       effectivePreferences.global_enabled !== 1 ||
       effectivePreferences.category_enabled !== 1 ||
-      (delivery.required_permission !== null &&
-        !(await hasPermission(env, delivery.recipient_user_id, delivery.required_permission)))
+      !(await canAccessNotificationTarget(env, delivery))
     ) {
       await updateNotificationDelivery(env, delivery.delivery_id, {
         status: "failed",
@@ -783,7 +816,7 @@ export async function processDueNotificationPushDeliveries(env: Env): Promise<vo
   const result = await env.DB.prepare(
     "SELECT d.id AS delivery_id, d.notification_id, d.subscription_id, " +
     "d.attempt_count, s.endpoint, s.p256dh, s.auth, n.title, n.body, n.target_url, " +
-    "n.recipient_user_id, n.category, n.required_permission " +
+    "n.recipient_user_id, n.category, n.required_permission, n.entity_type, n.entity_id " +
     "FROM notification_push_deliveries d " +
     "INNER JOIN push_subscriptions s ON s.id = d.subscription_id " +
     "INNER JOIN notifications n ON n.id = d.notification_id " +
