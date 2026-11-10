@@ -702,10 +702,10 @@ export async function handleUserAccountRoles(
   env: Env,
   pathParts: string[],
 ): Promise<Response> {
-  const authError = await requireAdmin(request, env)
+  const admin = await requireAdmin(request, env)
 
-  if (authError) {
-    return authError
+  if (admin instanceof Response) {
+    return admin
   }
 
   const userId = pathParts[0]
