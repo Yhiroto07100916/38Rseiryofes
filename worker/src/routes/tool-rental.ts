@@ -399,10 +399,10 @@ export async function handleToolRental(
               targetUrl: "/tool-rental/loans/history",
               userIds: [matchingUsers.results[0].id],
               insideOnly: true,
-            }
+            })
           } catch (error) {
             console.error("Failed to enqueue tool return notification:", error)
-          })
+          }
         }
       }
       return json({ success: true })
