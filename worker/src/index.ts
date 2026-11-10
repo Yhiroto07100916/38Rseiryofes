@@ -22,7 +22,7 @@ import { handleDecisions } from "./routes/decisions"
 import { handleMinutes } from "./routes/minutes"
 import { handleMilkCollection } from "./routes/milk-collection"
 import { handleAvatarImage, handleAvatarMutation, processQueuedAvatarDeletions } from "./routes/avatars"
-import { handleSubmissions } from "./routes/submissions"
+import { handleSubmissions, processDueSubmissionNotifications } from "./routes/submissions"
 import { handleWishlist } from "./routes/wishlist"
 
 function getCorsHeaders(request: Request): Headers {
@@ -869,6 +869,12 @@ export default {
       await processDueNotificationPushDeliveries(env)
     } catch (error) {
       console.error("Scheduled notification push delivery failed:", error)
+    }
+
+    try {
+      await processDueSubmissionNotifications(env)
+    } catch (error) {
+      console.error("Scheduled submission deadline notification processing failed:", error)
     }
 
     try {
