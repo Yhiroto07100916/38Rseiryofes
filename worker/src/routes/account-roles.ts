@@ -30,13 +30,14 @@ const IMPORTANT_SETTINGS_ROLE = "important_settings_admin"
 const SETTING_RULES: Record<string, {
   type: "string" | "boolean" | "integer"
   maxLength?: number
+  minLength?: number
   min?: number
   max?: number
   critical?: boolean
 }> = {
-  site_name: { type: "string", maxLength: 80 },
+  site_name: { type: "string", minLength: 1, maxLength: 80 },
   site_description: { type: "string", maxLength: 300 },
-  event_name: { type: "string", maxLength: 80 },
+  event_name: { type: "string", minLength: 1, maxLength: 80 },
   event_year: { type: "integer", min: 2020, max: 2100 },
   site_visibility: { type: "string", maxLength: 10, critical: true },
   maintenance_mode: { type: "boolean", critical: true },
@@ -225,7 +226,7 @@ async function handleSiteSettings(
         return Response.json({ error: `Setting requires important settings administrator: ${key}` }, { status: 403 })
       }
       if (
-        (rule.type === "string" && (typeof value !== "string" || value.length > (rule.maxLength ?? 1000))) ||
+        (rule.type === "string" && (typeof value !== "string" || value.length < (rule.minLength ?? 0) || value.length > (rule.maxLength ?? 1000))) ||
         (rule.type === "boolean" && typeof value !== "boolean") ||
         (rule.type === "integer" && (!Number.isInteger(value) || (value as number) < (rule.min ?? -Infinity) || (value as number) > (rule.max ?? Infinity))) ||
         (key === "site_visibility" && value !== "public" && value !== "private")
