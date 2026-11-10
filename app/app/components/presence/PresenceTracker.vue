@@ -8,8 +8,7 @@ let visibilityHandler: (() => void) | undefined;
 
 onMounted(async () => {
   await refresh();
-  if (!enabled.value) return;
-  await checkLocation();
+  if (enabled.value) await checkLocation();
   pageShowHandler = () => { void checkLocation(); };
   visibilityHandler = () => {
     if (document.visibilityState === "visible") void checkLocation();
