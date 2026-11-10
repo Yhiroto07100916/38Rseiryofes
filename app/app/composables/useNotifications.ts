@@ -80,6 +80,7 @@ export const useNotifications = () => {
   const cacheUpdatePromises = new Map<string, Promise<void>>()
   let cachedClockOffsetMs: number | null = null
   let cacheSnapshot: AppNotification[] = []
+  let listActive = true
 
   const saveCacheSnapshot = async (accountId: string | null, serverTime?: string) => {
     if (!accountId || auth.user?.id !== accountId || cacheSnapshot.length === 0) return
@@ -309,7 +310,7 @@ export const useNotifications = () => {
   }
 
   const scheduleListRetry = (reset: boolean) => {
-    if (listRetryHandle || listFailures >= MAX_FAILURES) return
+    if (!listActive || listRetryHandle || listFailures >= MAX_FAILURES) return
     const delay = RETRY_DELAYS[Math.min(listFailures - 1, RETRY_DELAYS.length - 1)]
     refreshMessage.value = "最新情報を再取得しています"
     listRetryHandle = setTimeout(() => {
@@ -380,6 +381,7 @@ export const useNotifications = () => {
       if (manualRefreshRequested || (isRetry && reset)) showSuccess("最新情報に更新しました")
       manualRefreshRequested = false
     } catch {
+      if (auth.user?.id !== requestAccountId || !listActive) return
       listFailures += 1
       successMessage.value = ""
       if (successHandle) clearTimeout(successHandle)
@@ -448,6 +450,7 @@ export const useNotifications = () => {
       unreadCountError.value = ""
       if (recovered) showUnreadSuccess("未読件数を更新しました")
     } catch {
+      if (auth.user?.id !== requestAccountId) return
       unreadFailures += 1
       unreadCountSuccess.value = ""
       if (unreadSuccessHandle) clearTimeout(unreadSuccessHandle)
@@ -596,6 +599,7 @@ export const useNotifications = () => {
         showSuccess("最新情報に更新しました")
       }
     } catch {
+      if (auth.user?.id !== requestAccountId || !listActive) return
       listFailures += 1
       successMessage.value = ""
       if (successHandle) clearTimeout(successHandle)
@@ -620,6 +624,7 @@ export const useNotifications = () => {
 
   const startPolling = () => {
     stopPolling()
+    listActive = true
     pollHandle = setInterval(() => {
       if (listFailures === 0 && !listRetryHandle) void pollLatest()
       if (unreadFailures === 0 && !unreadRetryHandle) void refreshUnreadCount()
@@ -627,6 +632,7 @@ export const useNotifications = () => {
   }
 
   const stopPolling = () => {
+    listActive = false
     if (pollHandle) clearInterval(pollHandle)
     pollHandle = undefined
     clearListRetry()
