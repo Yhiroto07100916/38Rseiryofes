@@ -421,13 +421,8 @@ export const useNotifications = () => {
       hasSuccessfulApiFetch = true
       applyResponse(response, reset, requestStartedAt)
       cacheExpired.value = false
-      if (
-        reset &&
-        requestAccountId &&
-        readFilter.value === "all" &&
-        selectedCategories.value.length === 0 &&
-        !String(search.value ?? "").trim()
-      ) {
+      if (reset && requestAccountId) {
+        // 表示中の検索・フィルターに関係なく、キャッシュは常に最新100件を保持する。
         void refreshFullCache(requestAccountId)
       }
       listFailures = 0
