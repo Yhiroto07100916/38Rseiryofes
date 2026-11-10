@@ -98,7 +98,7 @@ function jsonError(message: string, status: number): Response {
   return Response.json({ error: message }, { status })
 }
 
-function parseJstDateTime(value: string): number {
+export function parseJstDateTime(value: string): number {
   const normalized = value.trim().replace(" ", "T")
   const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(normalized)
   return Date.parse(hasTimezone ? normalized : normalized + "+09:00")
