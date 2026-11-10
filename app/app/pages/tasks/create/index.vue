@@ -42,7 +42,7 @@
             <div class="text-subtitle-1 font-weight-medium">関連リンク</div>
             <v-btn size="small" variant="tonal" prepend-icon="mdi-plus" @click="form.links.push({ title: '', url: '' })">リンクを追加</v-btn>
           </div>
-          <div v-for="taskLink in form.links" :key="link.title + '|' + link.url" class="d-flex align-start ga-2 mb-2">
+          <div v-for="taskLink in formLinks" :key="taskLink.title + '|' + taskLink.url" class="d-flex align-start ga-2 mb-2">
             <div class="flex-grow-1">
               <v-text-field v-model="taskLink.title" label="表示タイトル" placeholder="例：資料・参考ページ" variant="outlined" density="comfortable" hide-details class="mb-2" />
               <v-text-field v-model="taskLink.url" label="URL" placeholder="https://example.com" variant="outlined" density="comfortable" hide-details />
@@ -184,7 +184,7 @@
 
 <script setup lang="ts">
 import { jstDateKey, jstDateTimeLocalToIso } from '~/utils/jst'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
 import { useSnackbar } from '~/composables/useSnackbar'
 import { useAuthStore } from '~/stores/auth'
@@ -226,6 +226,8 @@ const form = ref({
   fileIds: [] as string[],
   links: [] as { title: string; url: string }[],
 })
+
+const formLinks = computed(() => form.value.links)
 
 const users = ref<UserItem[]>([])
 const roles = ref<TaskAssignmentRole[]>([])
