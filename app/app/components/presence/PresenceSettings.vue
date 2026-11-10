@@ -15,13 +15,14 @@
       </p>
       <v-alert v-if="error" type="warning" variant="tonal" density="comfortable" class="mb-3">{{ error }}</v-alert>
       <div v-if="!enabled" class="d-flex flex-column ga-2">
-        <v-btn color="primary" block :loading="busy" @click="enable">位置情報を許可して自動判定を有効にする</v-btn>
-        <div class="text-caption text-medium-emphasis">有効にすると、サイトを開いたとき・前面に戻ったときに位置情報を確認します。</div>
+        <v-btn color="primary" block :loading="busy" :disabled="busy" @click="enable">位置情報を許可して自動判定を有効にする</v-btn>
+        <v-btn variant="outlined" block :loading="busy" :disabled="busy" @click="manualRegister">GPSを使わず手動で在校登録</v-btn>
+        <div class="text-caption text-medium-emphasis">自動判定を有効にすると、サイトを開いたとき・前面に戻ったときに位置情報を確認します。手動登録は当日中のみ有効で、GPSで校外と判定された場合は校外が優先されます。</div>
       </div>
       <div v-else class="d-flex flex-wrap ga-2">
-        <v-btn color="primary" variant="tonal" :loading="busy" @click="checkLocation">今すぐ再判定</v-btn>
-        <v-btn variant="outlined" :loading="busy" @click="manualRegister">手動で在校登録</v-btn>
-        <v-btn color="error" variant="text" :loading="busy" @click="disable">位置情報の利用を停止</v-btn>
+        <v-btn color="primary" variant="tonal" :loading="busy" :disabled="busy" @click="checkLocation">今すぐ再判定</v-btn>
+        <v-btn variant="outlined" :loading="busy" :disabled="busy" @click="manualRegister">手動で在校登録</v-btn>
+        <v-btn color="error" variant="text" :loading="busy" :disabled="busy" @click="disable">位置情報の利用を停止</v-btn>
       </div>
     </v-card-text>
   </v-card>
