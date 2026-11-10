@@ -1,7 +1,7 @@
 import { onMounted, onUnmounted, ref, watch } from "vue"
 import { useApi } from "~/composables/useApi"
 import { useAuthStore } from "~/stores/auth"
-import { loadNotificationCache, saveNotificationCache } from "~/utils/notification-cache"
+import { loadNotificationCache, saveNotificationCache, validateNotificationCacheClock } from "~/utils/notification-cache"
 
 export type NotificationCategory =
   | "tasks"
@@ -37,6 +37,7 @@ interface NotificationListResponse {
   notifications: AppNotification[]
   next_cursor: { created_at: string; id: string } | null
   unread_count: number
+  server_time?: string
 }
 
 const PAGE_SIZE = 20
@@ -222,9 +223,10 @@ export const useNotifications = () => {
         ...all.filter(item => !latestIds.has(item.id)),
       ]
       unread = latest.unread_count
+      await validateNotificationCacheClock(accountId, latest.server_time)
 
       // ここから先は取得完了済み。ログアウト後も元アカウントの領域にだけ保存する。
-      await saveNotificationCache(accountId, merged.slice(0, 100), unread)
+      await saveNotificationCache(accountId, merged.slice(0, 100), unread, latest.server_time)
     })().catch(() => {
       // 不完全な取得結果では既存キャッシュを置き換えない。
     }).finally(() => {
