@@ -1,4 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { getSiteSetting } from "../lib/site-settings"
 
 type Env = {
   DB: D1Database
@@ -60,6 +61,21 @@ export async function handleReceiptOcr(
     )
   }
 
+  const operationSettings = await getSiteSetting<{ upload_max_file_size_mb?: number }>(
+    env,
+    "operation_settings",
+    { upload_max_file_size_mb: 25 },
+  )
+  const maxFileSize = Math.min(
+    MAX_FILE_SIZE,
+    Math.max(1, Math.min(100, Number(operationSettings.upload_max_file_size_mb) || 25)) * 1024 * 1024,
+  )
+
+  const contentLength = Number(request.headers.get("Content-Length"))
+  if (Number.isFinite(contentLength) && contentLength > maxFileSize + 64 * 1024) {
+    return json({ message: "画像サイズがサイトのアップロード上限を超えています" }, 413)
+  }
+
   try {
     const form = await request.formData()
     const file = form.get("file")
@@ -68,8 +84,8 @@ export async function handleReceiptOcr(
       return json({ message: "レシート画像を選択してください" }, 400)
     }
 
-    if (file.size > MAX_FILE_SIZE) {
-      return json({ message: "画像は10MB以下にしてください" }, 413)
+    if (file.size > maxFileSize) {
+      return json({ message: "画像サイズがサイトのアップロード上限を超えています" }, 413)
     }
 
     const allowedTypes = new Set([
