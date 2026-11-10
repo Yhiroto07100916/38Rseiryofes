@@ -4,7 +4,7 @@ import { handleAdminSetPassword, handleAuth } from "./routes/auth"
 import { handleRoles, handleUserRole, handleUserRoles } from "./routes/roles"
 import { handleAccountRoles, handleUserAccountRoles } from "./routes/account-roles"
 import { handlePermissions } from "./routes/permissions"
-import { handleTasks } from "./routes/tasks"
+import { handleTasks, processDueTaskNotifications } from "./routes/tasks"
 import { handleCalendar } from "./routes/calendar"
 import { handleCalendarCategories } from "./routes/calendar-categories"
 import { handleNews } from "./routes/news"
@@ -869,6 +869,12 @@ export default {
       await processDueNotificationPushDeliveries(env)
     } catch (error) {
       console.error("Scheduled notification push delivery failed:", error)
+    }
+
+    try {
+      await processDueTaskNotifications(env)
+    } catch (error) {
+      console.error("Scheduled task deadline notification processing failed:", error)
     }
 
     try {
