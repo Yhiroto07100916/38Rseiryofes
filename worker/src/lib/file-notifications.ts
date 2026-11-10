@@ -9,7 +9,7 @@ const FILE_FEATURE_PERMISSIONS = [
 ] as const
 
 export async function notifyFileLinked(
-  env: Env,
+  env: { DB: D1Database },
   fileId: string,
   actorUserId: string,
 ): Promise<void> {
@@ -33,12 +33,12 @@ export async function notifyFileLinked(
   const eligible = await Promise.all(users.results.map(async user => {
     if (user.id === actorUserId) return false
     for (const permission of permissions) {
-      if (await hasPermission(env, user.id, permission)) return true
+      if (await hasPermission(env as Env, user.id, permission)) return true
     }
     return false
   }))
 
-  await createNotificationsForUsers(env, {
+  await createNotificationsForUsers(env as Env, {
     recipientUserIds: users.results.filter((_, index) => eligible[index]).map(user => user.id),
     eventKey: "files.uploaded",
     category: "files",
