@@ -97,6 +97,17 @@ async function handleSiteSettings(
         .bind(body.user_id).first<{ id: string }>()
       if (!user) return Response.json({ error: "User not found" }, { status: 404 })
 
+      const targetIsAdmin = await env.DB.prepare(`
+        SELECT 1
+        FROM user_account_roles uar
+        INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+        WHERE uar.user_id = ? AND ar.name = 'admin'
+        LIMIT 1
+      `).bind(user.id).first()
+      if (!targetIsAdmin) {
+        return Response.json({ error: "Important settings administrators must also have the admin account role" }, { status: 400 })
+      }
+
       const role = await env.DB.prepare("SELECT id FROM account_roles WHERE name = ?")
         .bind(IMPORTANT_SETTINGS_ROLE).first<{ id: string }>()
       if (!role) return Response.json({ error: "Important settings role is not configured" }, { status: 500 })
@@ -866,6 +877,21 @@ export async function handleUserAccountRoles(
       return Response.json({
         error: "Use the dedicated site settings administrator management endpoint",
       }, { status: 403 })
+    }
+
+    if (accountRole?.name === "admin") {
+      const isImportantAdmin = await env.DB.prepare(`
+        SELECT 1
+        FROM user_account_roles uar
+        INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+        WHERE uar.user_id = ? AND ar.name = ?
+        LIMIT 1
+      `).bind(userId, IMPORTANT_SETTINGS_ROLE).first()
+      if (isImportantAdmin) {
+        return Response.json({
+          error: "Remove the important settings administrator role before removing the admin role",
+        }, { status: 409 })
+      }
     }
 
     await env.DB
