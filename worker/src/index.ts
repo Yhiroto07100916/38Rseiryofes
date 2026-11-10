@@ -25,6 +25,7 @@ import { handleMilkCollection } from "./routes/milk-collection"
 import { handleAvatarImage, handleAvatarMutation, processQueuedAvatarDeletions } from "./routes/avatars"
 import { handleSubmissions, processDueSubmissionNotifications } from "./routes/submissions"
 import { handleWishlist } from "./routes/wishlist"
+import { processDueCalendarNotifications } from "./routes/calendar-reminders"
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -903,6 +904,12 @@ export default {
       await processDueSurveyNotifications(env)
     } catch (error) {
       console.error("Scheduled survey notification processing failed:", error)
+    }
+
+    try {
+      await processDueCalendarNotifications(env)
+    } catch (error) {
+      console.error("Scheduled calendar notification processing failed:", error)
     }
   },
 } satisfies ExportedHandler<Env>
