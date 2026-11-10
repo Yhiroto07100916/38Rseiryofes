@@ -735,7 +735,10 @@ export const useNotifications = () => {
     unreadFailures = 0
     manualRefreshRequested = false
     const accountId = auth.user?.id
-    if (accountId) void loadCache(accountId)
+    if (accountId) {
+      void loadCache(accountId)
+      void refreshFullCache(accountId)
+    }
     void fetchPage(true)
     void refreshUnreadCount()
     startPolling()
@@ -785,6 +788,7 @@ export const useNotifications = () => {
 
       if (accountId) {
         void loadCache(accountId)
+        void refreshFullCache(accountId)
         void fetchPage(true)
         void refreshUnreadCount()
         startPolling()
