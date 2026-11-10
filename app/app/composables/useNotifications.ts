@@ -1,7 +1,7 @@
 import { onMounted, onUnmounted, ref, watch } from "vue"
 import { useApi } from "~/composables/useApi"
 import { useAuthStore } from "~/stores/auth"
-import { loadNotificationCache, saveNotificationCache, validateNotificationCacheClock } from "~/utils/notification-cache"
+import { deleteNotificationCache, loadNotificationCache, saveNotificationCache, validateNotificationCacheClock } from "~/utils/notification-cache"
 
 export type NotificationCategory =
   | "tasks"
@@ -607,6 +607,9 @@ export const useNotifications = () => {
     () => auth.user?.id,
     (accountId, previousAccountId) => {
       if (accountId === previousAccountId) return
+      if (previousAccountId) {
+        void deleteNotificationCache(previousAccountId).catch(() => undefined)
+      }
 
       notifications.value = []
       unreadCount.value = 0
