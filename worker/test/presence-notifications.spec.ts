@@ -9,7 +9,7 @@ describe("presence state expiry (JST)", () => {
 
   it("keeps a new inside result at exactly 18:00 valid until the end of the JST day", () => {
     expect(jstExpiry("inside", new Date("2026-11-10T09:00:00.000Z")))
-      .toBe("2026-11-11T15:00:00.000Z")
+      .toBe("2026-11-10T15:00:00.000Z")
   })
 
   it("keeps a new inside result after 18:00 valid until the end of the JST day", () => {
