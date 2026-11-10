@@ -1083,9 +1083,6 @@ export async function handleSubmissions(
 
     try {
       const roleMembers = await getSubmissionRoleMemberIds(env, current.assigned_role_id)
-      const reviewers = action === "start_review"
-        ? await getUsersWithPermission(env, "submissions.review")
-        : []
       const latestSubmitter = await env.DB.prepare(
         "SELECT submitted_by FROM submission_records WHERE submission_id = ? ORDER BY attempt_number DESC LIMIT 1",
       ).bind(id).first<{ submitted_by: string }>()
@@ -1111,7 +1108,7 @@ export async function handleSubmissions(
       }
 
       await createNotificationsForUsers(env, {
-        recipientUserIds: action === "start_review" ? [...new Set([...recipientUserIds, ...(latestSubmitter ? [latestSubmitter.submitted_by] : [])])] : recipientUserIds,
+        recipientUserIds,
         eventKey: eventKeyByAction[action],
         category: "submissions",
         title: titleByAction[action],
