@@ -714,6 +714,10 @@ async function canAccessNotificationTarget(
   }
 
   if (delivery.entity_type === "task" && delivery.entity_id) {
+    if (delivery.event_key === "task.assignee_removed") {
+      return hasPermission(env, delivery.recipient_user_id, "tasks.view")
+    }
+
     const access = await env.DB.prepare(
       "SELECT 1 FROM tasks t " +
       "LEFT JOIN task_assignees ta ON ta.task_id = t.id " +
