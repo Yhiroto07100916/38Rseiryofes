@@ -670,6 +670,18 @@ export const useNotifications = () => {
         const result = await apiFetch<{ notification: AppNotification }>(
           "/api/notifications/" + encodeURIComponent(known.id),
         )
+        if (
+          result.notification.read_version < known.read_version ||
+          (result.notification.read_version === known.read_version &&
+            result.notification.is_read !== known.is_read)
+        ) {
+          return {
+            id: known.id,
+            is_read: known.is_read,
+            read_updated_at: known.read_updated_at,
+            read_version: known.read_version,
+          }
+        }
         return result.notification
       } catch {
         // 個別再取得に失敗した場合は、一覧取得後に確認した既読状態を採用する。
