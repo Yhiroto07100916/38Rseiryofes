@@ -346,7 +346,7 @@ onMounted(loadSettings)
             class="mt-2"
           />
           <v-alert type="info" variant="tonal" class="mt-4">
-            これらの設定値は保存できます。実際のアクセス制御への反映は、別途各API・画面への適用が必要です。
+            公開状態は未ログイン利用者のAPIアクセスを制限し、メンテナンス中は管理者以外のAPIアクセスを停止します。ログイン必須設定もサイト全体のAPIと画面に反映されます。
           </v-alert>
         </v-card-text>
         <v-card-text v-else class="text-medium-emphasis">
