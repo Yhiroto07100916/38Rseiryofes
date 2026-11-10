@@ -556,13 +556,24 @@ export async function processDuePushDeliveries(env: Env): Promise<void> {
     return
   }
 
+  await env.DB.prepare(
+    "UPDATE push_notification_deliveries SET status = 'failed', " +
+    "lease_until = NULL, last_error = 'Subscription owner no longer matches the queued recipient', " +
+    "updated_at = CURRENT_TIMESTAMP " +
+    "WHERE status IN ('pending', 'sending') AND (" +
+    "recipient_user_id IS NULL OR EXISTS (" +
+    "SELECT 1 FROM push_subscriptions s " +
+    "WHERE s.id = push_notification_deliveries.subscription_id " +
+    "AND s.user_id <> push_notification_deliveries.recipient_user_id))",
+  ).run()
+
   const result = await env.DB
     .prepare(`
       SELECT
         d.id AS delivery_id,
         d.news_id,
         d.subscription_id,
-        s.user_id AS recipient_user_id,
+        d.recipient_user_id,
         d.attempt_count,
         s.endpoint,
         s.p256dh,
@@ -570,7 +581,7 @@ export async function processDuePushDeliveries(env: Env): Promise<void> {
         n.title,
         n.detail
       FROM push_notification_deliveries d
-      INNER JOIN push_subscriptions s ON s.id = d.subscription_id
+      INNER JOIN push_subscriptions s ON s.id = d.subscription_id AND s.user_id = d.recipient_user_id
       INNER JOIN news n ON n.id = d.news_id
       WHERE
         (d.status = 'pending' AND d.next_attempt_at <= CURRENT_TIMESTAMP)
