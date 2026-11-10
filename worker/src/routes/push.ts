@@ -567,6 +567,7 @@ interface NotificationPushDeliveryRecord {
   target_url: string | null
   recipient_user_id: string
   category: string
+  event_key: string
   required_permission: string | null
   entity_type: string | null
   entity_id: string | null
@@ -695,6 +696,47 @@ async function canAccessNotificationTarget(
     return Boolean(access)
   }
 
+  if (delivery.entity_type === "survey" && delivery.entity_id) {
+    const survey = await env.DB.prepare(
+      "SELECT status, deadline_at FROM surveys WHERE id = ?",
+    ).bind(delivery.entity_id).first<{
+      status: string
+      deadline_at: string | null
+    }>()
+
+    if (!survey) return false
+
+    if (
+      (delivery.event_key === "surveys.published" || delivery.event_key === "surveys.opened") &&
+      survey.status !== "published"
+    ) {
+      return false
+    }
+
+    if (delivery.event_key === "surveys.closed" && survey.status !== "closed") {
+      return false
+    }
+
+    if (
+      delivery.event_key === "surveys.response_reminder_24h" ||
+      delivery.event_key === "surveys.response_reminder_1h"
+    ) {
+      if (
+        survey.status !== "published" ||
+        !survey.deadline_at ||
+        Date.parse(survey.deadline_at) <= Date.now()
+      ) {
+        return false
+      }
+
+      const participation = await env.DB.prepare(
+        "SELECT 1 FROM survey_participation WHERE survey_id = ? AND user_id = ? LIMIT 1",
+      ).bind(delivery.entity_id, delivery.recipient_user_id).first()
+
+      if (participation) return false
+    }
+  }
+
   return true
 }
 
@@ -816,7 +858,7 @@ export async function processDueNotificationPushDeliveries(env: Env): Promise<vo
   const result = await env.DB.prepare(
     "SELECT d.id AS delivery_id, d.notification_id, d.subscription_id, " +
     "d.attempt_count, s.endpoint, s.p256dh, s.auth, n.title, n.body, n.target_url, " +
-    "n.recipient_user_id, n.category, n.required_permission, n.entity_type, n.entity_id " +
+    "n.recipient_user_id, n.category, n.event_key, n.required_permission, n.entity_type, n.entity_id " +
     "FROM notification_push_deliveries d " +
     "INNER JOIN push_subscriptions s ON s.id = d.subscription_id " +
     "INNER JOIN notifications n ON n.id = d.notification_id " +
