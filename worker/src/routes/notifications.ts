@@ -130,29 +130,13 @@ export async function handleNotifications(
   if (pathParts.length === 1 && pathParts[0] === "read-all" && method === "POST") {
     await purgeExpiredNotifications(env, userId)
 
-    // 開始時点の対象IDを固定し、処理中に新着した通知を一括既読の対象に含めない。
-    const targets = await env.DB.prepare(
-      "SELECT id FROM notifications WHERE recipient_user_id = ? AND is_read = 0 ORDER BY created_at, id",
-    ).bind(userId).all<{ id: string }>()
+    // 1つのUPDATEで処理し、実行中に新着通知が割り込む余地と部分更新をなくす。
+    const result = await env.DB.prepare(
+      "UPDATE notifications SET is_read = 1 " +
+      "WHERE recipient_user_id = ? AND is_read = 0",
+    ).bind(userId).run()
 
-    if (targets.results.length === 0) {
-      return Response.json({ updated_count: 0 })
-    }
-
-    let updatedCount = 0
-    for (let offset = 0; offset < targets.results.length; offset += 90) {
-      const batch = targets.results.slice(offset, offset + 90)
-      const results = await env.DB.batch(
-        batch.map(target => env.DB.prepare(
-          "UPDATE notifications SET is_read = 1 WHERE id = ? AND recipient_user_id = ? AND is_read = 0",
-        ).bind(target.id, userId)),
-      )
-      updatedCount += results.reduce(
-        (total, result) => total + (result.meta?.changes ?? 0),
-        0,
-      )
-    }
-    return Response.json({ updated_count: updatedCount })
+    return Response.json({ updated_count: result.meta?.changes ?? 0 })
   }
 
   if (pathParts.length === 1 && pathParts[0] === "settings" && method === "GET") {
