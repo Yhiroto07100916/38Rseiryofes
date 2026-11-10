@@ -11,6 +11,7 @@ interface FeatureConfig {
   create: boolean
   edit: boolean
   delete: boolean
+  [action: string]: boolean
 }
 
 interface SiteSettings {
