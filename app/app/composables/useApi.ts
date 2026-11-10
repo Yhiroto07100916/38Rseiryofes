@@ -458,6 +458,15 @@ export const useApi = () => {
     )
   }
 
+  const renotifyNews = (newsId: string) => {
+    return apiFetch<{ queued: number }>(
+      `/api/news/${newsId}/notify`,
+      {
+        method: 'POST',
+      },
+    )
+  }
+
   const deleteNews = (newsId: string) => {
     return apiFetch<{ success: boolean; id: string }>(
       `/api/news/${newsId}`,
@@ -591,6 +600,7 @@ export const useApi = () => {
     getNewsById,
     createNews,
     updateNews,
+    renotifyNews,
     deleteNews,
   }
 }
