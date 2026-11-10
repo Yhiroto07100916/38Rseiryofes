@@ -133,7 +133,7 @@ export async function loadNotificationCache(
     now - record.savedAt > MAX_CACHE_AGE
 
   if (invalid) {
-    await deleteRecord(database, accountId)
+    await deleteNotificationCache(accountId, false)
     return null
   }
 
@@ -274,7 +274,7 @@ export async function validateNotificationCacheClock(
 
   if (clockDifference <= 5 * 60 * 1000) return true
 
-  await deleteRecord(database, accountId)
+  await deleteNotificationCache(accountId, false)
   return false
 }
 
