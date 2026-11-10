@@ -154,7 +154,14 @@ export async function saveNotificationCache(
   if (!accountId) return
 
   const previous = pendingCacheSaves.get(accountId)
-  const operation = Promise.resolve(previous).then(() => undefined, () => undefined).then(async () => {
+  const operation = (async () => {
+    if (previous) {
+      try {
+        await previous
+      } catch {
+        // 直前の保存失敗に引きずられず、新しいスナップショットを保存する。
+      }
+    }
     const database = await openDatabase()
     const cachedNotifications = [...notifications]
       .sort((a, b) => {
