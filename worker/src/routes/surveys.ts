@@ -120,14 +120,21 @@ async function readBody<T>(request: Request): Promise<T | null> {
   }
 }
 
-async function getSurveyRecipientUserIds(env: Env): Promise<string[]> {
+async function getSurveyRecipientUserIds(
+  env: Env,
+  includeViewOnly = false,
+): Promise<string[]> {
   const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
-  const eligible = await Promise.all(users.results.map(async user => ({
-    id: user.id,
-    allowed:
-      await permitted(env, user.id, "surveys.view") &&
-      await permitted(env, user.id, "surveys.respond"),
-  })))
+  const eligible = await Promise.all(users.results.map(async user => {
+    const [canView, canRespond] = await Promise.all([
+      permitted(env, user.id, "surveys.view"),
+      permitted(env, user.id, "surveys.respond"),
+    ])
+    return {
+      id: user.id,
+      allowed: includeViewOnly ? canView || canRespond : canRespond,
+    }
+  }))
   return eligible.filter(user => user.allowed).map(user => user.id)
 }
 
@@ -138,7 +145,7 @@ async function notifySurveyRecipients(
   eventKey: "surveys.published" | "surveys.opened" | "surveys.closed",
   operationId: string,
 ): Promise<void> {
-  const recipientUserIds = await getSurveyRecipientUserIds(env)
+  const recipientUserIds = await getSurveyRecipientUserIds(env, eventKey === "surveys.closed")
   const title = eventKey === "surveys.closed"
     ? "アンケートが終了しました"
     : eventKey === "surveys.opened"
@@ -152,7 +159,7 @@ async function notifySurveyRecipients(
     title,
     body: survey.title,
     targetUrl: "/surveys?open=" + encodeURIComponent(survey.id),
-    requiredPermission: "surveys.view",
+    requiredPermission: null,
     actorUserId,
     entityType: "survey",
     entityId: survey.id,
