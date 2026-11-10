@@ -674,7 +674,7 @@ async function sendNotificationPush(
   return fetch(endpoint, { method: "POST", headers, body })
 }
 
-async function canAccessNotificationTarget(
+export async function canAccessNotificationTarget(
   env: Env,
   delivery: NotificationPushDeliveryRecord,
 ): Promise<boolean> {
