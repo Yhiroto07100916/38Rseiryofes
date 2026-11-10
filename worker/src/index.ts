@@ -327,6 +327,7 @@ export default {
         logo_url: settings.logoUrl,
         favicon_url: settings.faviconUrl,
         calendar_default_view: settings.calendarDefaultView,
+        feature_enabled: settings.featureEnabled,
       }))
     }
 
