@@ -76,7 +76,7 @@
       variant="tonal"
       closable
       class="mb-4"
-      @click:close="error = ''"
+      @click:close="clearError"
     >
       {{ error }}
       <template #append>
@@ -205,6 +205,10 @@ const categoryOptions = [
   { title: "ほしい物リスト", value: "wishlist" },
   { title: "アカウント", value: "account_admin" },
 ]
+
+function clearError() {
+  error.value = ""
+}
 
 function categoryLabel(category: NotificationCategory): string {
   return categoryOptions.find(item => item.value === category)?.title || "その他"
