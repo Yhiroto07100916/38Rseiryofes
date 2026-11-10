@@ -77,6 +77,21 @@ export const useNotifications = () => {
   let hasSuccessfulApiFetch = false
   const cacheUpdatePromises = new Map<string, Promise<void>>()
   let cachedClockOffsetMs: number | null = null
+  let cacheSnapshot: AppNotification[] = []
+
+  const saveCacheSnapshot = async (accountId: string | null, serverTime?: string) => {
+    if (!accountId || auth.user?.id !== accountId || cacheSnapshot.length === 0) return
+    const effectiveServerTime = serverTime ?? (
+      cachedClockOffsetMs !== null
+        ? new Date(Date.now() + cachedClockOffsetMs).toISOString()
+        : undefined
+    )
+    try {
+      await saveNotificationCache(accountId, cacheSnapshot, unreadCount.value, effectiveServerTime)
+    } catch {
+      // キャッシュ保存失敗は通知操作に影響させない。
+    }
+  }
 
   const buildQuery = (includeCursor: boolean) => {
     const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
@@ -122,6 +137,7 @@ export const useNotifications = () => {
       const cached = await loadNotificationCache(accountId)
       if (!cached || hasSuccessfulApiFetch || auth.user?.id !== accountId) return
       cachedClockOffsetMs = cached.clockOffsetMs
+      cacheSnapshot = cached.notifications.map(mapCachedNotification)
 
       const term = String(search.value ?? "").trim().toLocaleLowerCase()
       const categoryLabels: Record<string, string> = {
@@ -249,7 +265,8 @@ export const useNotifications = () => {
       await validateNotificationCacheClock(accountId, latest.server_time)
 
       // ここから先は取得完了済み。ログアウト後も元アカウントの領域にだけ保存する。
-      await saveNotificationCache(accountId, merged.slice(0, 100), unread, latest.server_time)
+      cacheSnapshot = merged.slice(0, 100)
+      await saveNotificationCache(accountId, cacheSnapshot, unread, latest.server_time)
     })().catch(() => {
       // 不完全な取得結果では既存キャッシュを置き換えない。
     }).finally(() => {
@@ -416,6 +433,7 @@ export const useNotifications = () => {
       if (auth.user?.id !== requestAccountId) return
       await validateServerClock(requestAccountId, response.server_time)
       unreadCount.value = response.unread_count
+      void saveCacheSnapshot(requestAccountId, response.server_time)
       const recovered = unreadFailures > 0 || Boolean(unreadCountError.value)
       unreadFailures = 0
       clearUnreadRetry()
@@ -462,6 +480,9 @@ export const useNotifications = () => {
         body: { is_read: isRead },
       })
       if (auth.user?.id !== requestAccountId) return true
+      const cachedItem = cacheSnapshot.find(notification => notification.id === id)
+      if (cachedItem) cachedItem.is_read = isRead ? 1 : 0
+      void saveCacheSnapshot(requestAccountId)
       await refreshUnreadCount()
       return true
     } catch {
@@ -480,7 +501,9 @@ export const useNotifications = () => {
       })
       if (auth.user?.id !== requestAccountId) return response.updated_count
       for (const item of notifications.value) item.is_read = 1
+      for (const item of cacheSnapshot) item.is_read = 1
       unreadCount.value = Math.max(0, unreadCount.value - response.updated_count)
+      void saveCacheSnapshot(requestAccountId)
       return response.updated_count
     } catch {
       if (auth.user?.id !== requestAccountId) return null
@@ -507,6 +530,14 @@ export const useNotifications = () => {
         ...notifications.value.filter(item => !incomingIds.has(item.id)),
       ]
       unreadCount.value = response.unread_count
+      const cachedById = new Map(cacheSnapshot.map(item => [item.id, item]))
+      for (const item of response.notifications) {
+        cachedById.set(item.id, item)
+      }
+      cacheSnapshot = [...cachedById.values()]
+        .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.id.localeCompare(a.id))
+        .slice(0, 100)
+      void saveCacheSnapshot(requestAccountId, response.server_time)
       listFailures = 0
       clearListRetry()
       error.value = ""
@@ -587,6 +618,7 @@ export const useNotifications = () => {
       unreadFailures = 0
       hasSuccessfulApiFetch = false
       cachedClockOffsetMs = null
+      cacheSnapshot = []
       manualRefreshRequested = false
       pendingResetFetch = false
       pendingUnreadRefresh = Boolean(accountId && unreadRequestInProgress)
