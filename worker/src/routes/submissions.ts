@@ -1,5 +1,6 @@
 import { hasPermission, requireAuth } from "../lib/authz"
 import { createNotificationsForUsers } from "../lib/notifications"
+import { notifyFileLinked } from "../lib/file-notifications"
 
 type Env = {
   DB: D1Database
@@ -973,6 +974,12 @@ export async function handleSubmissions(
         { error: "別のユーザーによって提出状態が変更されています。再読み込みしてください" },
         409,
       )
+    }
+
+    try {
+      for (const fileId of fileIds) await notifyFileLinked(env, fileId, auth.user.id)
+    } catch (notificationError) {
+      console.error("Failed to create linked-file notifications:", notificationError)
     }
 
     try {
