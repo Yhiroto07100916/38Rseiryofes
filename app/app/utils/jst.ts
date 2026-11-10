@@ -1,5 +1,9 @@
 let DEFAULT_TIME_ZONE = 'Asia/Tokyo'
 
+export function getDefaultTimeZone(): string {
+  return DEFAULT_TIME_ZONE
+}
+
 export function setDefaultTimeZone(timeZone?: string): void {
   if (!timeZone) {
     DEFAULT_TIME_ZONE = 'Asia/Tokyo'
