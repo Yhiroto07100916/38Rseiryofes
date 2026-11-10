@@ -147,6 +147,18 @@
             />
           </v-col>
         </v-row>
+        <v-switch
+          v-model="notifyUpload"
+          color="primary"
+          density="compact"
+          hide-details
+          :disabled="uploading"
+          label="アップロードを通知する"
+          class="mt-2"
+        />
+        <div class="text-caption text-medium-emphasis">
+          ONにすると、書類を閲覧できるユーザーへ通知します。初期設定はOFFです。
+        </div>
       </v-card-text>
     </v-card>
 
@@ -498,6 +510,7 @@ const uploading = ref(false)
 const search = ref('')
 const categoryFilter = ref<string | null>(null)
 const uploadCategory = ref('uploads')
+const notifyUpload = ref(false)
 const showArchived = ref(false)
 const selectedFile = ref<File | File[] | null>(null)
 const files = ref<ManagedFile[]>([])
@@ -659,6 +672,7 @@ const uploadFile = async () => {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('category', uploadCategory.value)
+    formData.append('notify', notifyUpload.value ? 'true' : 'false')
 
     await apiFetch('/api/files', {
       method: 'POST',
@@ -666,6 +680,7 @@ const uploadFile = async () => {
     })
 
     selectedFile.value = null
+    notifyUpload.value = false
     snackbarMessage.value = 'アップロードしました。'
     snackbar.value = true
     await loadFiles()
