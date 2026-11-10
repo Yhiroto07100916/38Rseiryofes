@@ -1059,12 +1059,13 @@ const loadEvents = async () => {
 
   try {
     const now = new Date()
-    const [year = now.getFullYear(), month = now.getMonth() + 1, day = now.getDate()] = jstDateKey(now).split('-').map(Number)
+    const [year = now.getFullYear(), month = now.getMonth() + 1, day = now.getDate()] = jstDateKey(now, siteStatus.value?.timezone || 'Asia/Tokyo').split('-').map(Number)
     const toDate = new Date(Date.UTC(year, month - 1, day + 14))
 
     const from = now.toISOString()
     const to = jstDateTimeLocalToIso(
-      `${jstDateKey(toDate)}T23:59:59.999`,
+      `${jstDateKey(toDate, siteStatus.value?.timezone || 'Asia/Tokyo')}T23:59:59.999`,
+      siteStatus.value?.timezone || 'Asia/Tokyo',
     )
 
     const response = await getCalendarEvents(from, to)
@@ -1126,12 +1127,13 @@ const loadAttendance = async () => {
 
   try {
     const now = new Date()
-    const [year = now.getFullYear(), month = now.getMonth() + 1, day = now.getDate()] = jstDateKey(now).split('-').map(Number)
+    const [year = now.getFullYear(), month = now.getMonth() + 1, day = now.getDate()] = jstDateKey(now, siteStatus.value?.timezone || 'Asia/Tokyo').split('-').map(Number)
     const toDate = new Date(Date.UTC(year, month - 1, day + 14))
 
     const from = now.toISOString()
     const to = jstDateTimeLocalToIso(
-      `${jstDateKey(toDate)}T23:59:59.999`,
+      `${jstDateKey(toDate, siteStatus.value?.timezone || 'Asia/Tokyo')}T23:59:59.999`,
+      siteStatus.value?.timezone || 'Asia/Tokyo',
     )
 
     const response = await getCalendarEvents(from, to)
