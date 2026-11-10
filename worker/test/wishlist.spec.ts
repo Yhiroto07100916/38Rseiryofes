@@ -98,6 +98,14 @@ describe("Wishlist API permissions", () => {
     expect(reviewResponse.status).toBe(200);
     const updated = await reviewResponse.json() as { status: string };
     expect(updated.status).toBe("planned");
+
+    const notification = await env.DB.prepare(
+      "SELECT event_key, target_url FROM notifications WHERE recipient_user_id = ? AND entity_id = ? AND event_key = 'wishlist.status_changed'",
+    ).bind(submitter.userId, created.id).first<{ event_key: string; target_url: string }>();
+    expect(notification).toEqual({
+      event_key: "wishlist.status_changed",
+      target_url: "/wishlist?open=" + created.id,
+    });
   });
 
   it("requires wishlist.view to list items", async () => {
