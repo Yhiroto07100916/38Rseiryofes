@@ -12,6 +12,24 @@
           マイページ
         </h1>
       </div>
+
+      <v-btn
+        icon
+        variant="text"
+        color="primary"
+        aria-label="通知を開く"
+        to="/notifications"
+        class="ml-2"
+      >
+        <v-badge
+          :content="unreadCount > 99 ? '99+' : unreadCount"
+          :model-value="unreadCount > 0"
+          color="error"
+          floating
+        >
+          <v-icon icon="mdi-bell-outline" size="24" />
+        </v-badge>
+      </v-btn>
     </div>
 
     <v-row>
@@ -815,6 +833,16 @@ interface RelevantNews extends News {
 
 const auth = useAuthStore()
 const snackbar = useSnackbar()
+const unreadCount = ref(0)
+
+const loadUnreadCount = async () => {
+  try {
+    const response = await apiFetch<{ unread_count: number }>('/api/notifications/unread-count')
+    unreadCount.value = response.unread_count
+  } catch (error) {
+    console.warn('[me] failed to load unread notification count', error)
+  }
+}
 
 const {
   status: pushStatus,
@@ -1480,6 +1508,7 @@ onMounted(async () => {
     loadNews(),
     refreshPushStatus(),
     loadNotificationSettings(),
+    loadUnreadCount(),
   ])
 })
 </script>
