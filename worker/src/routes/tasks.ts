@@ -1,6 +1,7 @@
 import { isFileLinkConflict } from "../lib/file-link-errors"
 import { hasPermission, requireAuth } from "../lib/authz"
 import { createNotificationsForUsers } from "../lib/notifications"
+import { notifyFileLinked } from "../lib/file-notifications"
 
 export interface Task {
   id: string
@@ -893,6 +894,12 @@ export async function handleTasks(
       await env.DB.batch(statements)
 
       try {
+        for (const fileId of fileIds) await notifyFileLinked(env, fileId, auth.user.id)
+      } catch (notificationError) {
+        console.error("Failed to create linked-file notifications:", notificationError)
+      }
+
+      try {
         const recipientUserIds = await getTaskNotificationRecipientIds(env, id)
 
         await createNotificationsForUsers(env, {
@@ -1473,6 +1480,14 @@ export async function handleTasks(
       }
 
       await env.DB.batch(statements)
+
+      if (hasFileUpdate) {
+        try {
+          for (const fileId of requestedFileIds) await notifyFileLinked(env, fileId, auth.user.id)
+        } catch (notificationError) {
+          console.error("Failed to create linked-file notifications:", notificationError)
+        }
+      }
 
       try {
         const updatedTask = await getTask(env, id)
