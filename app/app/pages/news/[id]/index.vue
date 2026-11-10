@@ -250,7 +250,7 @@
 
         <v-divider />
 
-        <v-card-actions class="pa-4">
+        <v-card-actions class="news-card-actions pa-4">
           <v-btn
             variant="text"
             prepend-icon="mdi-arrow-left"
@@ -563,6 +563,29 @@ onMounted(() => {
 <style scoped>
 .attachment-name {
   overflow-wrap: anywhere;
+}
+
+.news-card-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 600px) {
+  .news-card-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .news-card-actions :deep(.v-spacer) {
+    display: none;
+  }
+
+  .news-card-actions :deep(.v-btn) {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+  }
 }
 
 
