@@ -91,8 +91,8 @@ export async function processDueToolRentalNotifications(env: Env): Promise<void>
   const dueSoon = await env.DB.prepare(
     "SELECT id, tool_name_snapshot, due_at FROM loans " +
     "WHERE status = 'borrowed' AND due_at IS NOT NULL " +
-    "AND due_at >= datetime('now', '+9 hours', '+9 minutes') " +
-    "AND due_at <= datetime('now', '+9 hours', '+11 minutes') " +
+    "AND due_at >= datetime('now', '+9 hours', '+4 minutes') " +
+    "AND due_at <= datetime('now', '+9 hours', '+6 minutes') " +
     "AND presence_due_soon_notified_at IS NULL",
   ).all<{ id: number; tool_name_snapshot: string | null; due_at: string }>()
 
@@ -123,8 +123,8 @@ export async function processDueToolRentalNotifications(env: Env): Promise<void>
     "INNER JOIN tool_items ti ON ti.id = li.tool_item_id " +
     "WHERE li.returned_at IS NULL AND l.status = 'borrowed' " +
     "AND l.due_at IS NOT NULL " +
-    "AND l.due_at >= datetime('now', '+9 hours', '+4 minutes') " +
-    "AND l.due_at <= datetime('now', '+9 hours', '+6 minutes') " +
+    "AND l.due_at <= datetime('now', '+9 hours') " +
+    "AND l.due_at > datetime('now', '+9 hours', '-2 minutes') " +
     "AND li.timer_alarm_notified_at IS NULL",
   ).all<{ loan_item_id: number; loan_id: number; tool_name_snapshot: string | null; management_number: string }>()
 
@@ -152,7 +152,7 @@ export async function processDueToolRentalNotifications(env: Env): Promise<void>
   const overdue = await env.DB.prepare(
     "SELECT id, tool_name_snapshot, due_at FROM loans " +
     "WHERE status = 'borrowed' AND due_at IS NOT NULL " +
-    "AND due_at <= datetime('now', '+9 hours') " +
+    "AND due_at <= datetime('now', '+9 hours', '-5 minutes') " +
     "AND presence_overdue_notified_at IS NULL",
   ).all<{ id: number; tool_name_snapshot: string | null; due_at: string }>()
 
