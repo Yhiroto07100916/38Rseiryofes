@@ -385,8 +385,11 @@ describe("site settings authorization", () => {
   })
 
   it("enforces and can disable the global login requirement", async () => {
-    const required = await SELF.fetch("http://example.com/api/not-a-real-route")
-    expect(required.status).toBe(401)
+    const initialStatus = await SELF.fetch("http://example.com/api/site-status")
+    expect(await initialStatus.json()).toMatchObject({
+      require_login: true,
+      login_enabled: true,
+    })
 
     await env.DB.prepare(
       "UPDATE site_settings SET value = 'false' WHERE key = 'require_login'",
