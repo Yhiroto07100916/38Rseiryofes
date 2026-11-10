@@ -791,6 +791,30 @@ async function canAccessNotificationTarget(
     }
   }
 
+  if (
+    delivery.entity_type === "tool_loan" &&
+    delivery.entity_id &&
+    (delivery.event_key.startsWith("tool_rental.due_soon:") ||
+      delivery.event_key.startsWith("tool_rental.overdue:"))
+  ) {
+    const loan = await env.DB.prepare(
+      "SELECT status FROM loans WHERE id = ?",
+    ).bind(Number(delivery.entity_id)).first<{ status: string }>()
+    if (!loan || loan.status !== "borrowed") return false
+  }
+
+  if (
+    delivery.entity_type === "tool_loan_item" &&
+    delivery.event_key.startsWith("tool_rental.timer_end:") &&
+    delivery.entity_id
+  ) {
+    const item = await env.DB.prepare(
+      "SELECT li.returned_at, l.status FROM loan_items li " +
+      "INNER JOIN loans l ON l.id = li.loan_id WHERE li.id = ?",
+    ).bind(Number(delivery.entity_id)).first<{ returned_at: string | null; status: string }>()
+    if (!item || item.returned_at !== null || item.status !== "borrowed") return false
+  }
+
   if (delivery.entity_type === "survey" && delivery.entity_id) {
     const survey = await env.DB.prepare(
       "SELECT status, deadline_at FROM surveys WHERE id = ?",
