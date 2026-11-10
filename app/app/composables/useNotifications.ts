@@ -464,6 +464,7 @@ export const useNotifications = () => {
     const requestAccountId = auth.user?.id ?? null
     const requestStartedAt = Date.now()
     requestInProgress = true
+    if (reset && !isRetry) clearListRetry()
     if (reset) loading.value = true
     else loadingMore.value = true
     if (!isRetry) error.value = ""
@@ -491,12 +492,15 @@ export const useNotifications = () => {
         void refreshFullCache(requestAccountId)
       }
       listFailures = 0
-      manualRetryActive = false
-      clearListRetry()
-      error.value = ""
-      refreshMessage.value = ""
-      if (manualRefreshRequested || (isRetry && reset)) showSuccess("最新情報に更新しました")
-      manualRefreshRequested = false
+      const manualRefreshQueued = pendingResetFetch && manualRefreshRequested
+      if (!manualRefreshQueued) {
+        manualRetryActive = false
+        clearListRetry()
+        error.value = ""
+        refreshMessage.value = ""
+        if (manualRefreshRequested || (isRetry && reset)) showSuccess("最新情報に更新しました")
+        manualRefreshRequested = false
+      }
     } catch {
       if (auth.user?.id !== requestAccountId || !listActive) return
       listFailures += 1
@@ -538,29 +542,6 @@ export const useNotifications = () => {
     listFailures = 0
     manualRetryActive = true
     clearListRetry()
-
-    const accountId = auth.user?.id
-    const backgroundUpdate = accountId ? cacheUpdatePromises.get(accountId) : undefined
-    if (backgroundUpdate) {
-      refreshMessage.value = "最新情報を取得しています"
-      const completed = await backgroundUpdate
-      if (auth.user?.id !== accountId) return
-      refreshMessage.value = ""
-      manualRetryActive = false
-      if (completed) {
-        error.value = ""
-        showSuccess("最新情報に更新しました")
-      } else {
-        error.value = "更新に失敗しました。再試行してください"
-      }
-      return
-    }
-
-    if (requestInProgress) {
-      manualRefreshRequested = true
-      refreshMessage.value = "最新情報を取得しています"
-      return
-    }
     manualRefreshRequested = true
     await fetchPage(true)
   }
