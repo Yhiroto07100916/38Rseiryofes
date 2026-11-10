@@ -9,7 +9,7 @@ import { handleCalendar } from "./routes/calendar"
 import { handleCalendarCategories } from "./routes/calendar-categories"
 import { handleNews } from "./routes/news"
 import { handlePush, processDuePushDeliveries, processDueNotificationPushDeliveries } from "./routes/push"
-import { handleNotifications } from "./routes/notifications"
+import { handleNotifications, purgeAllExpiredNotifications } from "./routes/notifications"
 import { handlePresence } from "./routes/presence"
 import { handleScripts } from "./routes/scripts"
 import { handleEquipment } from "./routes/equipment"
@@ -910,6 +910,12 @@ export default {
       await processDueCalendarNotifications(env)
     } catch (error) {
       console.error("Scheduled calendar notification processing failed:", error)
+    }
+
+    try {
+      await purgeAllExpiredNotifications(env)
+    } catch (error) {
+      console.error("Scheduled expired notification cleanup failed:", error)
     }
   },
 } satisfies ExportedHandler<Env>
