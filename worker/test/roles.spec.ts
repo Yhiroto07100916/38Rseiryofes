@@ -354,6 +354,30 @@ describe("site settings authorization", () => {
     }
   })
 
+  it("enforces and can disable the global login requirement", async () => {
+    const required = await SELF.fetch("http://example.com/api/not-a-real-route")
+    expect(required.status).toBe(401)
+
+    await env.DB.prepare(
+      "UPDATE site_settings SET value = 'false' WHERE key = 'require_login'",
+    ).run()
+
+    try {
+      const publicAccess = await SELF.fetch("http://example.com/api/not-a-real-route")
+      expect(publicAccess.status).toBe(404)
+
+      const status = await SELF.fetch("http://example.com/api/site-status")
+      expect(await status.json()).toMatchObject({
+        require_login: false,
+        login_enabled: true,
+      })
+    } finally {
+      await env.DB.prepare(
+        "UPDATE site_settings SET value = 'true' WHERE key = 'require_login'",
+      ).run()
+    }
+  })
+
   it("requires a session when the site is private", async () => {
     await env.DB.prepare(
       "UPDATE site_settings SET value = ? WHERE key = 'site_visibility'",
