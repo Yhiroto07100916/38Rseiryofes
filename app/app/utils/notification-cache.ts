@@ -255,5 +255,11 @@ export async function deleteNotificationCache(accountId: string): Promise<void> 
   }
 
   const database = await openDatabase()
+  // DBオープン待ちの間に保存が開始された場合も、保存完了後のキャッシュを保持する。
+  const saveStartedWhileOpening = pendingCacheSaves.get(accountId)
+  if (saveStartedWhileOpening) {
+    await saveStartedWhileOpening
+    return
+  }
   await deleteRecord(database, accountId)
 }
