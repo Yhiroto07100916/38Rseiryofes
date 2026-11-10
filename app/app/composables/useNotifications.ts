@@ -384,14 +384,36 @@ export const useNotifications = () => {
 
   const preserveRecentReadState = (incoming: AppNotification, requestStartedAt: number): AppNotification => {
     const pending = pendingReadOperations.get(incoming.id)
-    const current = notifications.value.find(item => item.id === incoming.id)
+    const current = notifications.value.find(item => item.id === incoming.id) ??
+      cacheSnapshot.find(item => item.id === incoming.id)
     const completedAt = readStateWriteCompletedAt.get(incoming.id)
 
     if (pending) return { ...incoming, is_read: pending.isRead ? 1 : 0 }
     if (completedAt !== undefined && completedAt > requestStartedAt && current) {
-      return { ...incoming, is_read: current.is_read, read_updated_at: current.read_updated_at }
+      return {
+        ...incoming,
+        is_read: current.is_read,
+        read_updated_at: current.read_updated_at,
+        read_version: current.read_version,
+      }
     }
     if (completedAt !== undefined) readStateWriteCompletedAt.delete(incoming.id)
+
+    if (current) {
+      const incomingTime = Date.parse(incoming.read_updated_at ?? incoming.created_at)
+      const currentTime = Date.parse(current.read_updated_at ?? current.created_at)
+      const incomingIsNewer = incoming.read_version > current.read_version ||
+        (incoming.read_version === current.read_version &&
+          Number.isFinite(incomingTime) && Number.isFinite(currentTime) && incomingTime >= currentTime)
+      if (!incomingIsNewer) {
+        return {
+          ...incoming,
+          is_read: current.is_read,
+          read_updated_at: current.read_updated_at,
+          read_version: current.read_version,
+        }
+      }
+    }
     return incoming
   }
 
