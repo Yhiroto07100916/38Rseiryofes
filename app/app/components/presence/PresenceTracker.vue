@@ -12,7 +12,11 @@ let visibilityHandler: (() => void) | undefined;
 watch(
   () => [auth.initialized, auth.isLoggedIn, auth.user?.id] as const,
   async ([initialized, loggedIn]) => {
-    if (!initialized || !loggedIn) return;
+    if (!initialized) return;
+    if (!loggedIn) {
+      await refresh();
+      return;
+    }
     await refresh();
     if (enabled.value) await checkLocation();
   },
