@@ -238,6 +238,7 @@
 </template>
 
 <script setup lang="ts">
+import { getDefaultTimeZone } from '~/utils/jst'
 import {
   useSubmissionApi,
   type Submission,
@@ -349,7 +350,7 @@ const formatDate = (value: string | null) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
+    timeZone: getDefaultTimeZone(),
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
