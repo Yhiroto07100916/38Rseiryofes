@@ -154,7 +154,7 @@ export async function saveNotificationCache(
   if (!accountId) return
 
   const previous = pendingCacheSaves.get(accountId)
-  const operation = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async () => {
+  const operation = Promise.resolve(previous).then(() => undefined, () => undefined).then(async () => {
     const database = await openDatabase()
     const cachedNotifications = [...notifications]
       .sort((a, b) => {
