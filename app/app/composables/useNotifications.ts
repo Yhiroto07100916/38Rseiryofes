@@ -674,8 +674,12 @@ export const useNotifications = () => {
         cacheDeletionRequests.add(previousAccountId)
         const pendingCacheUpdate = cacheUpdatePromises.get(previousAccountId)
         void (async () => {
-          if (pendingCacheUpdate) await pendingCacheUpdate
-          await deleteNotificationCache(previousAccountId)
+          try {
+            if (pendingCacheUpdate) await pendingCacheUpdate
+            await deleteNotificationCache(previousAccountId)
+          } finally {
+            cacheDeletionRequests.delete(previousAccountId)
+          }
         })().catch(() => undefined)
       }
       unreadAbortController?.abort()
