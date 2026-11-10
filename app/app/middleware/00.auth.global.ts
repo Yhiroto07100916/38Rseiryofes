@@ -47,6 +47,10 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo("/login")
   }
 
+  if (auth.user?.must_change_password && to.path !== "/me") {
+    return navigateTo("/me")
+  }
+
   const routeMeta = to.meta as typeof to.meta & {
     permissions?: string[]
   }
