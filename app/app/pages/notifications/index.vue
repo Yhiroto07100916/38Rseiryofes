@@ -31,9 +31,17 @@
         <v-btn size="small" variant="text" to="/me">設定方法</v-btn>
       </template>
     </v-alert>
-    <div v-if="refreshMessage" class="text-caption text-medium-emphasis mb-3">
+    <v-alert
+      v-if="refreshMessage"
+      type="info"
+      variant="tonal"
+      density="compact"
+      closable
+      class="mb-3"
+      @click:close="clearRefreshMessage"
+    >
       {{ refreshMessage }}
-    </div>
+    </v-alert>
     <v-alert
       v-if="unreadCountError"
       type="error"
@@ -380,6 +388,10 @@ async function updateCategoryPush(category: string, value: boolean | null) {
 
 function clearError() {
   error.value = ""
+}
+
+function clearRefreshMessage() {
+  refreshMessage.value = ""
 }
 
 function categoryLabel(category: NotificationCategory): string {
