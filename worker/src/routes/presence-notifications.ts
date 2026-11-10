@@ -299,7 +299,7 @@ export async function processNotificationPushDeliveries(env: Env) {
 export async function processScheduledToolRentalNotifications(env: Env) {
   const now = new Date();
   const nowIso = now.toISOString();
-  const dueSoonMinutes = Math.min(1440, Math.max(5, Number(env.TOOL_LOAN_DUE_SOON_MINUTES) || 60));
+  const dueSoonMinutes = Math.min(1440, Math.max(5, Number(env.TOOL_LOAN_DUE_SOON_MINUTES) || 10));
   const dueSoon = await env.DB.prepare(`
     SELECT id, tool_name_snapshot, due_at FROM loans
     WHERE status = 'borrowed' AND due_at IS NOT NULL
