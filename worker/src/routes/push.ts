@@ -277,6 +277,20 @@ export async function reenqueueNewsPushDeliveries(
     return { configured: false, queued: 0 }
   }
 
+  if (operatorUserId === undefined) {
+    // 既存の内部呼び出しとの互換性。HTTP経由の再通知では必ず操作者IDを渡し、権限・設定で絞り込む。
+    const legacyResult = await env.DB.prepare(
+      "INSERT INTO push_notification_deliveries (" +
+      "id, news_id, subscription_id, status, attempt_count, next_attempt_at" +
+      ") SELECT lower(hex(randomblob(16))), ?, id, 'pending', 0, CURRENT_TIMESTAMP " +
+      "FROM push_subscriptions WHERE 1 " +
+      "ON CONFLICT(news_id, subscription_id) DO UPDATE SET " +
+      "status = 'pending', attempt_count = 0, next_attempt_at = CURRENT_TIMESTAMP, " +
+      "lease_until = NULL, last_error = NULL, updated_at = CURRENT_TIMESTAMP",
+    ).bind(news.id).run()
+    return { configured: true, queued: legacyResult.meta?.changes ?? 0 }
+  }
+
   const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
   const eligible = await Promise.all(users.results.map(async user => ({
     id: user.id,
