@@ -121,6 +121,21 @@ export const useNotifications = () => {
       if (!cached || hasSuccessfulApiFetch || auth.user?.id !== accountId) return
 
       const term = String(search.value ?? "").trim().toLocaleLowerCase()
+      const categoryLabels: Record<string, string> = {
+        tasks: "タスク",
+        calendar: "カレンダー",
+        submissions: "提出物",
+        news: "お知らせ",
+        surveys: "アンケート",
+        decisions: "意思決定",
+        equipment: "備品",
+        tool_rental: "工具貸出",
+        accounting: "会計",
+        files: "ファイル",
+        milk_collection: "牛乳パック",
+        wishlist: "ほしい物リスト",
+        account_admin: "アカウント",
+      }
       const filtered = cached.notifications.filter(item => {
         if (readFilter.value === "unread" && item.is_read) return false
         if (readFilter.value === "read" && !item.is_read) return false
@@ -128,7 +143,7 @@ export const useNotifications = () => {
           selectedCategories.value.length > 0 &&
           !selectedCategories.value.includes(item.category as NotificationCategory)
         ) return false
-        if (term && ![item.title, item.body, item.category].some(value =>
+        if (term && ![item.title, item.body, item.category, categoryLabels[item.category] ?? ""].some(value =>
           value.toLocaleLowerCase().includes(term),
         )) return false
         return true
@@ -201,10 +216,10 @@ export const useNotifications = () => {
       }
 
       const latest = await fetchCachePage(accountId, null)
-      const ids = new Set(all.map(item => item.id))
+      const latestIds = new Set(latest.notifications.map(item => item.id))
       const merged = [
         ...latest.notifications,
-        ...all.filter(item => !ids.has(item.id)),
+        ...all.filter(item => !latestIds.has(item.id)),
       ]
       unread = latest.unread_count
 
