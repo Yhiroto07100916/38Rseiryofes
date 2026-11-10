@@ -1,7 +1,7 @@
 type SessionEnv = Pick<Env, "DB">
 
 const SESSION_COOKIE_NAME = "session_id"
-const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000
+const DEFAULT_SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000
 const PRODUCTION_COOKIE_DOMAIN = ".38r-seiryofes.com"
 
 export interface SessionUser {
@@ -61,10 +61,11 @@ export function getSessionCookieDomain(request: Request): string | undefined {
 export async function createSession(
   env: SessionEnv,
   userId: string,
+  durationMs = DEFAULT_SESSION_DURATION_MS,
 ): Promise<string> {
   const sessionId = crypto.randomUUID()
   const expiresAt = new Date(
-    Date.now() + SESSION_DURATION_MS,
+    Date.now() + durationMs,
   ).toISOString()
 
   await env.DB
@@ -86,9 +87,10 @@ export function createSessionCookie(
   sessionId: string,
   secure: boolean,
   domain?: string,
+  durationMs = DEFAULT_SESSION_DURATION_MS,
 ): string {
   const maxAge = Math.floor(
-    SESSION_DURATION_MS / 1000,
+    durationMs / 1000,
   )
 
   return [
@@ -121,12 +123,13 @@ export function createLoginSessionHeaders(
   sessionId: string,
   secure: boolean,
   domain?: string,
+  durationMs = DEFAULT_SESSION_DURATION_MS,
 ): Headers {
   const headers = new Headers()
   headers.append("Set-Cookie", createExpiredSessionCookie(secure))
   headers.append(
     "Set-Cookie",
-    createSessionCookie(sessionId, secure, domain),
+    createSessionCookie(sessionId, secure, domain, durationMs),
   )
   return headers
 }
