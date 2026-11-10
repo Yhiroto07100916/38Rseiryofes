@@ -80,6 +80,8 @@ export const useNotifications = () => {
   let hasSuccessfulApiFetch = false
   const cacheUpdatePromises = new Map<string, Promise<void>>()
   const cacheDeletionRequests = new Set<string>()
+  const pendingReadOperations = new Map<string, { isRead: boolean; previous: number }>()
+  const readStateWriteCompletedAt = new Map<string, number>()
   let cachedClockOffsetMs: number | null = null
   let cacheSnapshot: AppNotification[] = []
   let listActive = true
@@ -332,14 +334,32 @@ export const useNotifications = () => {
     }, delay)
   }
 
-  const applyResponse = (response: NotificationListResponse, reset: boolean) => {
+  const preserveRecentReadState = (incoming: AppNotification, requestStartedAt: number): AppNotification => {
+    const pending = pendingReadOperations.get(incoming.id)
+    const current = notifications.value.find(item => item.id === incoming.id)
+    const completedAt = readStateWriteCompletedAt.get(incoming.id)
+
+    if (pending) return { ...incoming, is_read: pending.isRead ? 1 : 0 }
+    if (completedAt !== undefined && completedAt > requestStartedAt && current) {
+      return { ...incoming, is_read: current.is_read }
+    }
+    if (completedAt !== undefined) readStateWriteCompletedAt.delete(incoming.id)
+    return incoming
+  }
+
+  const applyResponse = (
+    response: NotificationListResponse,
+    reset: boolean,
+    requestStartedAt: number,
+  ) => {
+    const incoming = response.notifications.map(item => preserveRecentReadState(item, requestStartedAt))
     if (reset) {
-      notifications.value = response.notifications
+      notifications.value = incoming
     } else {
       const existing = new Set(notifications.value.map(item => item.id))
       notifications.value = [
         ...notifications.value,
-        ...response.notifications.filter(item => !existing.has(item.id)),
+        ...incoming.filter(item => !existing.has(item.id)),
       ]
     }
     unreadCount.value = response.unread_count
@@ -354,6 +374,7 @@ export const useNotifications = () => {
     }
 
     const requestAccountId = auth.user?.id ?? null
+    const requestStartedAt = Date.now()
     requestInProgress = true
     if (reset) loading.value = true
     else loadingMore.value = true
@@ -367,7 +388,7 @@ export const useNotifications = () => {
       if (auth.user?.id !== requestAccountId) return
       await validateServerClock(requestAccountId, response.server_time)
       hasSuccessfulApiFetch = true
-      applyResponse(response, reset)
+      applyResponse(response, reset, requestStartedAt)
       cacheExpired.value = false
       if (
         reset &&
@@ -492,6 +513,8 @@ export const useNotifications = () => {
     if (!item || Boolean(item.is_read) === isRead) return true
 
     const previous = item.is_read
+    const operation = { isRead, previous }
+    pendingReadOperations.set(id, operation)
     item.is_read = isRead ? 1 : 0
 
     try {
@@ -500,6 +523,11 @@ export const useNotifications = () => {
         body: { is_read: isRead },
       })
       if (auth.user?.id !== requestAccountId) return true
+      if (pendingReadOperations.get(id) !== operation) return true
+      pendingReadOperations.delete(id)
+      readStateWriteCompletedAt.set(id, Date.now())
+      const currentItem = notifications.value.find(notification => notification.id === id)
+      if (currentItem) currentItem.is_read = isRead ? 1 : 0
       const cachedItem = cacheSnapshot.find(notification => notification.id === id)
       if (cachedItem) cachedItem.is_read = isRead ? 1 : 0
       unreadCount.value = Math.max(0, unreadCount.value + (isRead ? -1 : 1))
@@ -508,7 +536,11 @@ export const useNotifications = () => {
       return true
     } catch {
       if (auth.user?.id !== requestAccountId) return true
-      item.is_read = previous
+      if (pendingReadOperations.get(id) !== operation) return true
+      pendingReadOperations.delete(id)
+      readStateWriteCompletedAt.delete(id)
+      const currentItem = notifications.value.find(notification => notification.id === id)
+      if (currentItem) currentItem.is_read = previous
       error.value = "既読状態を保存できませんでした。"
       return false
     }
@@ -522,6 +554,8 @@ export const useNotifications = () => {
       })
       if (auth.user?.id !== requestAccountId) return response.updated_count
       const updatedIds = new Set(response.updated_ids)
+      const completedAt = Date.now()
+      for (const id of updatedIds) readStateWriteCompletedAt.set(id, completedAt)
       for (const item of notifications.value) {
         if (updatedIds.has(item.id)) item.is_read = 1
       }
@@ -544,6 +578,7 @@ export const useNotifications = () => {
   const pollLatest = async () => {
     if (requestInProgress) return
     const requestAccountId = auth.user?.id ?? null
+    const requestStartedAt = Date.now()
     requestInProgress = true
     try {
       const params = new URLSearchParams(buildQuery(false))
@@ -575,11 +610,18 @@ export const useNotifications = () => {
           .some(value => value.toLocaleLowerCase().includes(term))
       }
       const updatedExisting = notifications.value
-        .map(item => currentReadStates.has(item.id)
-          ? { ...item, is_read: currentReadStates.get(item.id)! }
-          : item)
+        .map(item => {
+          const pending = pendingReadOperations.get(item.id)
+          const completedAt = readStateWriteCompletedAt.get(item.id)
+          if (pending) return { ...item, is_read: pending.isRead ? 1 : 0 }
+          if (completedAt !== undefined && completedAt > requestStartedAt) return item
+          if (completedAt !== undefined) readStateWriteCompletedAt.delete(item.id)
+          return currentReadStates.has(item.id)
+            ? { ...item, is_read: currentReadStates.get(item.id)! }
+            : item
+        })
         .filter(matchesCurrentFilters)
-      const merged = response.notifications
+      const merged = response.notifications.map(item => preserveRecentReadState(item, requestStartedAt))
       const incomingIds = new Set(merged.map(item => item.id))
       notifications.value = [
         ...merged,
@@ -699,6 +741,8 @@ export const useNotifications = () => {
       hasSuccessfulApiFetch = false
       cachedClockOffsetMs = null
       cacheSnapshot = []
+      pendingReadOperations.clear()
+      readStateWriteCompletedAt.clear()
       manualRefreshRequested = false
       pendingResetFetch = false
       pendingUnreadRefresh = Boolean(accountId && unreadRequestInProgress)
