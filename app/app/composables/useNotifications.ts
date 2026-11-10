@@ -29,6 +29,7 @@ export interface AppNotification {
   entity_type: string | null
   entity_id: string | null
   is_read: number
+  read_updated_at: string | null
   created_at: string
   expires_at: string
 }
@@ -38,7 +39,7 @@ interface NotificationListResponse {
   next_cursor: { created_at: string; id: string } | null
   unread_count: number
   server_time?: string
-  known_notifications?: Array<{ id: string; is_read: number }>
+  known_notifications?: Array<{ id: string; is_read: number; read_updated_at: string }>
 }
 
 const PAGE_SIZE = 20
@@ -142,6 +143,7 @@ export const useNotifications = () => {
     entity_type: null,
     entity_id: null,
     is_read: item.is_read,
+    read_updated_at: null,
     created_at: item.created_at,
     expires_at: new Date(Date.parse(item.created_at) + 90 * 24 * 60 * 60 * 1000).toISOString(),
   })
@@ -373,7 +375,7 @@ export const useNotifications = () => {
 
     if (pending) return { ...incoming, is_read: pending.isRead ? 1 : 0 }
     if (completedAt !== undefined && completedAt > requestStartedAt && current) {
-      return { ...incoming, is_read: current.is_read }
+      return { ...incoming, is_read: current.is_read, read_updated_at: current.read_updated_at }
     }
     if (completedAt !== undefined) readStateWriteCompletedAt.delete(incoming.id)
     return incoming
@@ -598,6 +600,57 @@ export const useNotifications = () => {
     }
   }
 
+  const resolveReadStateConflicts = async (
+    response: NotificationListResponse,
+  ): Promise<NotificationListResponse> => {
+    const listed = new Map(response.notifications.map(item => [item.id, item]))
+    const local = new Map(notifications.value.map(item => [item.id, item]))
+    const conflicts = (response.known_notifications ?? []).filter(known => {
+      const listedItem = listed.get(known.id)
+      const localItem = local.get(known.id)
+      return Boolean(
+        (listedItem && listedItem.is_read !== known.is_read) ||
+        (localItem && localItem.is_read !== known.is_read &&
+          Date.parse(known.read_updated_at) > Date.parse(localItem.read_updated_at ?? localItem.created_at)),
+      )
+    })
+
+    if (conflicts.length === 0) return response
+
+    const resolved = await Promise.all(conflicts.map(async known => {
+      try {
+        const result = await apiFetch<{ notification: AppNotification }>(
+          "/api/notifications/" + encodeURIComponent(known.id),
+        )
+        return result.notification
+      } catch {
+        // 個別再取得に失敗した場合は、一覧取得後に確認した既読状態を採用する。
+        return {
+          id: known.id,
+          is_read: known.is_read,
+          read_updated_at: known.read_updated_at,
+        }
+      }
+    }))
+    const resolvedById = new Map(resolved.map(item => [item.id, item]))
+
+    return {
+      ...response,
+      notifications: response.notifications.map(item => {
+        const latest = resolvedById.get(item.id)
+        return latest
+          ? { ...item, is_read: latest.is_read, read_updated_at: latest.read_updated_at }
+          : item
+      }),
+      known_notifications: (response.known_notifications ?? []).map(item => {
+        const latest = resolvedById.get(item.id)
+        return latest
+          ? { id: item.id, is_read: latest.is_read, read_updated_at: latest.read_updated_at ?? item.read_updated_at }
+          : item
+      }),
+    }
+  }
+
   const pollLatest = async () => {
     if (requestInProgress) return
     const requestAccountId = auth.user?.id ?? null
@@ -607,9 +660,11 @@ export const useNotifications = () => {
       const params = new URLSearchParams(buildQuery(false))
       const knownIds = notifications.value.slice(0, 100).map(item => item.id)
       if (knownIds.length > 0) params.set("known_ids", knownIds.join(","))
-      const response = await apiFetch<NotificationListResponse>(
+      let response = await apiFetch<NotificationListResponse>(
         "/api/notifications?" + params.toString(),
       )
+      if (auth.user?.id !== requestAccountId) return
+      response = await resolveReadStateConflicts(response)
       if (auth.user?.id !== requestAccountId) return
       await validateServerClock(requestAccountId, response.server_time)
       hasSuccessfulApiFetch = true
@@ -654,7 +709,7 @@ export const useNotifications = () => {
         const cachedById = new Map(cacheSnapshot.map(item => [item.id, item]))
         for (const item of response.known_notifications ?? []) {
           const cachedItem = cachedById.get(item.id)
-          if (cachedItem) cachedById.set(item.id, { ...cachedItem, is_read: item.is_read })
+          if (cachedItem) cachedById.set(item.id, { ...cachedItem, is_read: item.is_read, read_updated_at: item.read_updated_at })
         }
         for (const item of response.notifications) {
           cachedById.set(item.id, item)
