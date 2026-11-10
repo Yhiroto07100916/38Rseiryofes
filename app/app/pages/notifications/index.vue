@@ -259,7 +259,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue"
+import { nextTick, onMounted, ref, watch } from "vue"
 import { useApi } from "~/composables/useApi"
 import { useNotifications, type AppNotification, type NotificationCategory } from "~/composables/useNotifications"
 
@@ -459,8 +459,11 @@ async function openNotification(item: AppNotification) {
 }
 
 async function handleMarkAllRead() {
+  const scrollTop = window.scrollY
   const count = await markAllRead()
   if (count === null) return
+  await nextTick()
+  window.scrollTo(0, scrollTop)
   snackbarText.value = count > 0
     ? count + "件を既読にしました"
     : "未読の通知はありません"
