@@ -22,6 +22,7 @@ export interface LoadedNotificationCache {
   notifications: CachedNotification[]
   unreadCount: number
   savedAt: number
+  clockOffsetMs: number | null
   expired: boolean
 }
 
@@ -113,6 +114,7 @@ export async function loadNotificationCache(
     record.version !== CACHE_VERSION ||
     !Number.isFinite(record.savedAt) ||
     !Number.isFinite(record.unreadCount) ||
+    (record.clockOffsetMs !== null && !Number.isFinite(record.clockOffsetMs)) ||
     !Array.isArray(record.notifications) ||
     !record.notifications.every(validNotification) ||
     record.savedAt > now + 5 * 60 * 1000 ||
@@ -129,6 +131,7 @@ export async function loadNotificationCache(
     notifications: record.notifications,
     unreadCount: record.unreadCount,
     savedAt: record.savedAt,
+    clockOffsetMs: record.clockOffsetMs ?? null,
     expired: now - record.savedAt > CACHE_TTL,
   }
 }
