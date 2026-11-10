@@ -98,6 +98,12 @@ function jsonError(message: string, status: number): Response {
   return Response.json({ error: message }, { status })
 }
 
+function parseJstDateTime(value: string): number {
+  const normalized = value.trim().replace(" ", "T")
+  const hasTimezone = /(?:Z|[+-]\\d{2}:\\d{2})$/i.test(normalized)
+  return Date.parse(hasTimezone ? normalized : normalized + "+09:00")
+}
+
 export async function handlePush(
   request: Request,
   env: Env,
@@ -728,12 +734,12 @@ async function canAccessNotificationTarget(
       if (!outstanding) return false
 
       if (delivery.event_key.startsWith("tool_rental.due_soon")) {
-        const dueAt = Date.parse(loan.due_at)
+        const dueAt = parseJstDateTime(loan.due_at)
         if (
           delivery.event_key !== "tool_rental.due_soon:" + delivery.entity_id + ":" + loan.due_at ||
           !Number.isFinite(dueAt) || dueAt <= Date.now() || dueAt > Date.now() + 11 * 60_000
         ) return false
-      } else if (Date.parse(loan.due_at) > Date.now()) {
+      } else if (parseJstDateTime(loan.due_at) > Date.now()) {
         return false
       }
     }
@@ -750,7 +756,7 @@ async function canAccessNotificationTarget(
     }>()
     if (!loanItem) return false
     if (delivery.event_key.startsWith("tool_rental.timer_end")) {
-      const dueAt = loanItem.due_at ? Date.parse(loanItem.due_at) : Number.NaN
+      const dueAt = loanItem.due_at ? parseJstDateTime(loanItem.due_at) : Number.NaN
       if (
         loanItem.returned_at !== null || loanItem.status !== "borrowed" ||
         !Number.isFinite(dueAt) || dueAt <= Date.now() || dueAt > Date.now() + 6 * 60_000
