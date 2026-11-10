@@ -1,7 +1,7 @@
 export default defineNuxtRouteMiddleware(async (to) => {
   let requiresLogin = true
 
-  if (import.meta.client) {
+  {
     const config = useRuntimeConfig()
     const apiBaseUrl = String(config.public.apiBaseUrl).replace(/\/$/, "")
 
@@ -14,6 +14,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
         is_admin: boolean
       }>(`${apiBaseUrl}/api/site-status`, {
         credentials: "include",
+        headers: import.meta.server ? useRequestHeaders(["cookie"]) : undefined,
       })
 
       requiresLogin = siteStatus.require_login || siteStatus.site_visibility === "private"
