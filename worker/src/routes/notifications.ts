@@ -66,10 +66,10 @@ export async function handleNotifications(
     const limit = Number.isFinite(requestedLimit)
       ? Math.max(1, Math.min(20, Math.floor(requestedLimit)))
       : 20
-    const categoryValues = url.searchParams.getAll("category")
+    const categoryValues = [...new Set(url.searchParams.getAll("category")
       .flatMap(value => value.split(","))
       .map(value => value.trim())
-      .filter(isCategory)
+      .filter(isCategory))]
     const readState = url.searchParams.get("read")
     const search = (url.searchParams.get("search") || "").trim().slice(0, 100)
     const beforeCreatedAt = url.searchParams.get("before_created_at")
@@ -139,16 +139,19 @@ export async function handleNotifications(
       return Response.json({ updated_count: 0 })
     }
 
-    const results = await env.DB.batch(
-      targets.results.map(target => env.DB.prepare(
-        "UPDATE notifications SET is_read = 1 WHERE id = ? AND recipient_user_id = ?",
-      ).bind(target.id, userId)),
-    )
-
-    const updatedCount = results.reduce(
-      (total, result) => total + (result.meta?.changes ?? 0),
-      0,
-    )
+    let updatedCount = 0
+    for (let offset = 0; offset < targets.results.length; offset += 90) {
+      const batch = targets.results.slice(offset, offset + 90)
+      const results = await env.DB.batch(
+        batch.map(target => env.DB.prepare(
+          "UPDATE notifications SET is_read = 1 WHERE id = ? AND recipient_user_id = ?",
+        ).bind(target.id, userId)),
+      )
+      updatedCount += results.reduce(
+        (total, result) => total + (result.meta?.changes ?? 0),
+        0,
+      )
+    }
     return Response.json({ updated_count: updatedCount })
   }
 
