@@ -209,4 +209,19 @@ describe("Notification center API", () => {
     ).bind(user.userId).first<{ count: number }>()
     expect(count?.count).toBe(0)
   })
+  it("returns zero when mark-all-read is pressed with no unread notifications", async () => {
+    const user = await createUser()
+    await insertNotification(user.userId, { isRead: 1 })
+
+    const response = await handleNotifications(
+      request("POST", "/read-all", user.cookie),
+      env,
+      ["read-all"],
+    )
+    const data = await response.json() as { updated_count: number }
+
+    expect(response.status).toBe(200)
+    expect(data.updated_count).toBe(0)
+  })
+
 })
