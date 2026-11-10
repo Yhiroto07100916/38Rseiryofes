@@ -594,4 +594,50 @@ describe("site settings authorization", () => {
     expect(sessions?.count ?? 0).toBe(0)
   })
 
+  it("locks repeated failed login attempts using the configured threshold", async () => {
+    const userId = await createUser("ログインロックテスト")
+    const studentNumber = `role-test-${userId}`
+    const password = "valid-test-password"
+    await env.DB.prepare(
+      "UPDATE users SET password_hash = ? WHERE id = ?",
+    ).bind(await hashPassword(password), userId).run()
+
+    const previous = await env.DB.prepare(
+      "SELECT value FROM site_settings WHERE key = 'security_settings'",
+    ).first<{ value: string }>()
+    const securitySettings = previous ? JSON.parse(previous.value) : {}
+    await env.DB.prepare(
+      "UPDATE site_settings SET value = ? WHERE key = 'security_settings'",
+    ).bind(JSON.stringify({
+      ...securitySettings,
+      login_attempt_limit: 3,
+      login_lock_minutes: 5,
+    })).run()
+
+    try {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const failed = await SELF.fetch("http://example.com/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ student_number: studentNumber, password: "wrong-password" }),
+        })
+        expect(failed.status).toBe(401)
+      }
+
+      const locked = await SELF.fetch("http://example.com/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ student_number: studentNumber, password }),
+      })
+      expect(locked.status).toBe(429)
+      expect(locked.headers.get("Retry-After")).toBeTruthy()
+    } finally {
+      if (previous) {
+        await env.DB.prepare(
+          "UPDATE site_settings SET value = ? WHERE key = 'security_settings'",
+        ).bind(previous.value).run()
+      }
+    }
+  })
+
 })
