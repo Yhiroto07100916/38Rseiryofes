@@ -567,6 +567,7 @@
               inset
               hide-details
               :loading="notificationSettingsSaving"
+              :disabled="notificationSettingsLoading || notificationSettingsSaving"
               label="すべてのプッシュ通知を受け取る"
               @update:model-value="saveGlobalPushEnabled"
             />
