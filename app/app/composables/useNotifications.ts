@@ -758,6 +758,9 @@ export const useNotifications = () => {
           } finally {
             partialCacheUpdates.delete(previousAccountId)
             cacheDeletionRequests.delete(previousAccountId)
+            if (auth.user?.id === previousAccountId) {
+              void refreshFullCache(previousAccountId)
+            }
           }
         })().catch(() => undefined)
       }
