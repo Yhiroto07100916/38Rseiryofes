@@ -872,14 +872,15 @@ const loadNotificationSettings = async () => {
   }
 }
 
-const saveGlobalPushEnabled = async (value: boolean) => {
-  const previous = !value
+const saveGlobalPushEnabled = async (value: boolean | null) => {
+  const nextValue = value === true
+  const previous = globalPushEnabled.value
   notificationSettingsSaving.value = true
-  globalPushEnabled.value = value
+  globalPushEnabled.value = nextValue
   try {
     await apiFetch('/api/notifications/settings', {
       method: 'PATCH',
-      body: { global_push_enabled: value },
+      body: { global_push_enabled: nextValue },
     })
   } catch {
     globalPushEnabled.value = previous
@@ -889,17 +890,18 @@ const saveGlobalPushEnabled = async (value: boolean) => {
   }
 }
 
-const saveCategoryPushEnabled = async (category: string, value: boolean) => {
+const saveCategoryPushEnabled = async (category: string, value: boolean | null) => {
+  const nextValue = value === true
   const previous = notificationCategorySettings.value[category] !== false
   notificationCategorySettings.value = {
     ...notificationCategorySettings.value,
-    [category]: value,
+    [category]: nextValue,
   }
   notificationSettingsSaving.value = true
   try {
     await apiFetch('/api/notifications/settings', {
       method: 'PATCH',
-      body: { categories: { [category]: value } },
+      body: { categories: { [category]: nextValue } },
     })
   } catch {
     notificationCategorySettings.value = {
