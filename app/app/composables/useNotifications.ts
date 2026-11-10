@@ -481,10 +481,7 @@ export const useNotifications = () => {
   }
 
   const refreshUnreadCount = async (manual = false) => {
-    if (unreadRequestInProgress) {
-      pendingUnreadRefresh = true
-      return
-    }
+    if (unreadRequestInProgress) return
     if (manual) {
       unreadFailures = 0
       clearUnreadRetry()
