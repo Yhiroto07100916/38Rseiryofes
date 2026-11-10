@@ -53,6 +53,7 @@ export const useNotifications = () => {
   const search = ref("")
   let pollHandle: ReturnType<typeof setInterval> | undefined
   let requestInProgress = false
+  let pendingResetFetch = false
 
   const buildQuery = (includeCursor: boolean) => {
     const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
@@ -82,7 +83,10 @@ export const useNotifications = () => {
   }
 
   const fetchPage = async (reset = true) => {
-    if (requestInProgress) return
+    if (requestInProgress) {
+      if (reset) pendingResetFetch = true
+      return
+    }
     requestInProgress = true
     if (reset) loading.value = true
     else loadingMore.value = true
@@ -100,6 +104,10 @@ export const useNotifications = () => {
       requestInProgress = false
       loading.value = false
       loadingMore.value = false
+      if (pendingResetFetch) {
+        pendingResetFetch = false
+        void fetchPage(true)
+      }
     }
   }
 
@@ -159,7 +167,6 @@ export const useNotifications = () => {
       const response = await apiFetch<NotificationListResponse>(
         "/api/notifications?" + buildQuery(false),
       )
-      const existing = new Map(notifications.value.map(item => [item.id, item]))
       const merged = response.notifications
       const incomingIds = new Set(merged.map(item => item.id))
       notifications.value = [
@@ -171,6 +178,10 @@ export const useNotifications = () => {
       // ポーリング失敗時は現在の一覧を維持する。
     } finally {
       requestInProgress = false
+      if (pendingResetFetch) {
+        pendingResetFetch = false
+        void fetchPage(true)
+      }
     }
   }
 
