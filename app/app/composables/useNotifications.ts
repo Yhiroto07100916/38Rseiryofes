@@ -231,7 +231,7 @@ export const useNotifications = () => {
       cachedClockOffsetMs !== null &&
       Math.abs(currentOffset - cachedClockOffsetMs) > 5 * 60 * 1000
     ) {
-      await deleteNotificationCache(accountId).catch(() => undefined)
+      await deleteNotificationCache(accountId, false).catch(() => undefined)
       cachedClockOffsetMs = null
       cacheSnapshot = []
       cacheInitialized = false
