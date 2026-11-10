@@ -298,6 +298,28 @@ const categoryPushEnabled = ref<Record<string, boolean>>({})
 const settingsLoading = ref(false)
 const settingsSaving = ref(false)
 const settingsError = ref("")
+let touchStartY: number | null = null
+let touchStartX = 0
+
+function handleTouchStart(event: TouchEvent) {
+  if (event.touches.length !== 1 || window.scrollY > 0 || loading.value) {
+    touchStartY = null
+    return
+  }
+  touchStartY = event.touches[0]?.clientY ?? null
+  touchStartX = event.touches[0]?.clientX ?? 0
+}
+
+function handleTouchEnd(event: TouchEvent) {
+  if (touchStartY === null) return
+  const touch = event.changedTouches[0]
+  const distanceY = (touch?.clientY ?? touchStartY) - touchStartY
+  const distanceX = (touch?.clientX ?? touchStartX) - touchStartX
+  touchStartY = null
+  if (distanceY >= 80 && Math.abs(distanceX) < 50 && window.scrollY <= 0 && !loading.value) {
+    void refresh()
+  }
+}
 
 onMounted(() => {
   pushPermissionDenied.value = import.meta.client &&
