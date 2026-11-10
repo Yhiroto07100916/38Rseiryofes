@@ -93,6 +93,134 @@ async function getScheduleViewUserIds(env: Env): Promise<string[]> {
   return eligible.filter(user => user.allowed).map(user => user.id)
 }
 
+
+function getJstDateParts(date: Date): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date)
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]))
+  return { year: Number(values.year), month: Number(values.month), day: Number(values.day) }
+}
+
+function jstDateTimeToUtc(date: { year: number; month: number; day: number }, hour: number): number {
+  return Date.UTC(date.year, date.month - 1, date.day, hour - 9)
+}
+
+function shiftJstDate(date: { year: number; month: number; day: number }, amount: number) {
+  const shifted = new Date(Date.UTC(date.year, date.month - 1, date.day + amount))
+  return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1, day: shifted.getUTCDate() }
+}
+
+function isCalendarReminderDue(targetAt: number, now: number): boolean {
+  return targetAt <= now && targetAt > now - 5 * 60_000
+}
+
+export async function processDueCalendarNotifications(env: Env): Promise<void> {
+  const now = Date.now()
+  const events = await env.DB.prepare(
+    "SELECT id, title, starts_at, is_all_day FROM calendar_events " +
+    "WHERE julianday(starts_at) BETWEEN julianday('now', '-2 days') AND julianday('now', '+2 days')",
+  ).all<{ id: string; title: string; starts_at: string; is_all_day: number }>()
+
+  if (events.results.length === 0) return
+  const scheduleUsers = await getScheduleViewUserIds(env)
+  if (scheduleUsers.length === 0) return
+
+  for (const event of events.results) {
+    const startsAt = Date.parse(event.starts_at)
+    if (!Number.isFinite(startsAt)) continue
+
+    const eventDate = getJstDateParts(new Date(startsAt))
+    const attendanceRows = await env.DB.prepare(
+      "SELECT user_id, status FROM calendar_event_attendance WHERE event_id = ?",
+    ).bind(event.id).all<{ user_id: string; status: string }>()
+    const answeredUsers = new Set(
+      attendanceRows.results
+        .filter(row => row.status === "attending" || row.status === "not_attending")
+        .map(row => row.user_id),
+    )
+    const attendanceRecipients = scheduleUsers.filter(userId => !answeredUsers.has(userId))
+    const reminders: Array<{ eventKey: string; title: string; targetAt: number; recipients: string[] }> = []
+
+    const due24h = startsAt - 24 * 60 * 60_000
+    if (isCalendarReminderDue(due24h, now)) {
+      reminders.push({
+        eventKey: "calendar.reminder_24h",
+        title: "予定まであと24時間です",
+        targetAt: due24h,
+        recipients: scheduleUsers,
+      })
+      reminders.push({
+        eventKey: "calendar.attendance_reminder_24h",
+        title: "予定の出欠を回答してください",
+        targetAt: due24h,
+        recipients: attendanceRecipients,
+      })
+    }
+
+    const due1h = startsAt - 60 * 60_000
+    if (isCalendarReminderDue(due1h, now)) {
+      reminders.push({
+        eventKey: "calendar.reminder_1h",
+        title: "予定まであと1時間です",
+        targetAt: due1h,
+        recipients: scheduleUsers,
+      })
+      reminders.push({
+        eventKey: "calendar.attendance_reminder_1h",
+        title: "予定の出欠を回答してください",
+        targetAt: due1h,
+        recipients: attendanceRecipients,
+      })
+    }
+
+    if (event.is_all_day === 1) {
+      const previousEvening = jstDateTimeToUtc(shiftJstDate(eventDate, -1), 18)
+      const sameDayMorning = jstDateTimeToUtc(eventDate, 8)
+
+      if (isCalendarReminderDue(previousEvening, now)) {
+        reminders.push({
+          eventKey: "calendar.all_day_reminder_previous_18",
+          title: "明日は終日予定があります",
+          targetAt: previousEvening,
+          recipients: scheduleUsers,
+        })
+      }
+      if (isCalendarReminderDue(sameDayMorning, now)) {
+        reminders.push({
+          eventKey: "calendar.all_day_reminder_same_day_08",
+          title: "本日は終日予定があります",
+          targetAt: sameDayMorning,
+          recipients: scheduleUsers,
+        })
+      }
+    }
+
+    for (const reminder of reminders) {
+      if (reminder.recipients.length === 0) continue
+      try {
+        await createNotificationsForUsers(env, {
+          recipientUserIds: reminder.recipients,
+          eventKey: reminder.eventKey,
+          category: "calendar",
+          title: reminder.title,
+          body: event.title,
+          targetUrl: "/calendar",
+          requiredPermission: "schedule.view",
+          entityType: "calendar_event",
+          entityId: event.id,
+          dedupeKey: reminder.eventKey + ":" + event.id + ":" + event.starts_at,
+        })
+      } catch (notificationError) {
+        console.error("Failed to create calendar reminder notifications:", notificationError)
+      }
+    }
+  }
+}
+
 function generateId(): string {
   return crypto.randomUUID()
 }
