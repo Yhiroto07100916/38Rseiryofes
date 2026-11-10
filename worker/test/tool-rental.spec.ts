@@ -358,7 +358,7 @@ describe("38R tool inventory and lending ledger", () => {
     })
     expect(checkout.status).toBe(201)
     const checkoutBody = await checkout.json() as { loan_id: number }
-    await env.DB.prepare("UPDATE loans SET due_at = datetime('now', '+9 hours', '+10 minutes') WHERE id = ?")
+    await env.DB.prepare("UPDATE loans SET due_at = datetime('now', '+9 hours', '-6 minutes') WHERE id = ?")
       .bind(checkoutBody.loan_id).run()
     const loan = await env.DB.prepare("SELECT due_at FROM loans WHERE id = ?")
       .bind(checkoutBody.loan_id).first<{ due_at: string }>()
