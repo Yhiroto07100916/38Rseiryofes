@@ -38,6 +38,7 @@ interface NotificationListResponse {
   next_cursor: { created_at: string; id: string } | null
   unread_count: number
   server_time?: string
+  known_notifications?: Array<{ id: string; is_read: number }>
 }
 
 const PAGE_SIZE = 20
@@ -533,20 +534,51 @@ export const useNotifications = () => {
     const requestAccountId = auth.user?.id ?? null
     requestInProgress = true
     try {
+      const params = new URLSearchParams(buildQuery(false))
+      const knownIds = notifications.value.slice(0, 100).map(item => item.id)
+      if (knownIds.length > 0) params.set("known_ids", knownIds.join(","))
       const response = await apiFetch<NotificationListResponse>(
-        "/api/notifications?" + buildQuery(false),
+        "/api/notifications?" + params.toString(),
       )
       if (auth.user?.id !== requestAccountId) return
       await validateServerClock(requestAccountId, response.server_time)
       hasSuccessfulApiFetch = true
+      const currentReadStates = new Map(
+        (response.known_notifications ?? []).map(item => [item.id, item.is_read]),
+      )
+      const matchesCurrentFilters = (item: AppNotification) => {
+        if (readFilter.value === "unread" && item.is_read) return false
+        if (readFilter.value === "read" && !item.is_read) return false
+        if (selectedCategories.value.length > 0 && !selectedCategories.value.includes(item.category)) return false
+        const term = search.value.trim().toLocaleLowerCase()
+        if (!term) return true
+        const labels: Record<string, string> = {
+          tasks: "タスク", calendar: "カレンダー", submissions: "提出物",
+          news: "お知らせ", surveys: "アンケート", decisions: "意思決定",
+          equipment: "備品", tool_rental: "工具貸出", accounting: "会計",
+          files: "ファイル", milk_collection: "牛乳パック",
+          wishlist: "ほしい物リスト", account_admin: "アカウント",
+        }
+        return [item.title, item.body, item.category, labels[item.category] ?? ""]
+          .some(value => value.toLocaleLowerCase().includes(term))
+      }
+      const updatedExisting = notifications.value
+        .map(item => currentReadStates.has(item.id)
+          ? { ...item, is_read: currentReadStates.get(item.id)! }
+          : item)
+        .filter(matchesCurrentFilters)
       const merged = response.notifications
       const incomingIds = new Set(merged.map(item => item.id))
       notifications.value = [
         ...merged,
-        ...notifications.value.filter(item => !incomingIds.has(item.id)),
+        ...updatedExisting.filter(item => !incomingIds.has(item.id)),
       ]
       unreadCount.value = response.unread_count
       const cachedById = new Map(cacheSnapshot.map(item => [item.id, item]))
+      for (const item of response.known_notifications ?? []) {
+        const cachedItem = cachedById.get(item.id)
+        if (cachedItem) cachedById.set(item.id, { ...cachedItem, is_read: item.is_read })
+      }
       for (const item of response.notifications) {
         cachedById.set(item.id, item)
       }
