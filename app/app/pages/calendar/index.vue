@@ -438,8 +438,9 @@ const { mobile } = useDisplay()
 const router = useRouter()
 const siteStatus = useSiteStatus()
 const calendarView = ref<"month" | "list">(siteStatus.value?.calendar_default_view ?? "month")
+const getSiteTimeZone = () => siteStatus.value?.timezone || "Asia/Tokyo"
 
-const now = parseDateKey(jstDateKey(new Date()))
+const now = parseDateKey(jstDateKey(new Date(), getSiteTimeZone()))
 
 const currentDate = ref(
   new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
@@ -576,17 +577,17 @@ function getMonthRange() {
   to.setUTCDate(to.getUTCDate() + 7)
 
   return {
-    from: jstDateTimeLocalToIso(`${formatDateKey(from)}T00:00`),
-    to: jstDateTimeLocalToIso(`${formatDateKey(to)}T00:00`),
+    from: jstDateTimeLocalToIso(`${formatDateKey(from)}T00:00`, getSiteTimeZone()),
+    to: jstDateTimeLocalToIso(`${formatDateKey(to)}T00:00`, getSiteTimeZone()),
   }
 }
 
 function getEventsForDate(dateKey: string): CalendarEvent[] {
-  const dayStart = new Date(jstDateTimeLocalToIso(`${dateKey}T00:00`))
+  const dayStart = new Date(jstDateTimeLocalToIso(`${dateKey}T00:00`, getSiteTimeZone()))
   const nextDate = parseDateKey(dateKey)
   nextDate.setUTCDate(nextDate.getUTCDate() + 1)
   const dayEnd = new Date(
-    new Date(jstDateTimeLocalToIso(`${formatDateKey(nextDate)}T00:00`)).getTime() - 1,
+    new Date(jstDateTimeLocalToIso(`${formatDateKey(nextDate)}T00:00`, getSiteTimeZone())).getTime() - 1,
   )
 
   return events.value
@@ -605,11 +606,11 @@ function getEventsForDate(dateKey: string): CalendarEvent[] {
 }
 
 function getTaskDeadlinesForDate(dateKey: string): Task[] {
-  const dayStart = new Date(jstDateTimeLocalToIso(`${dateKey}T00:00`))
+  const dayStart = new Date(jstDateTimeLocalToIso(`${dateKey}T00:00`, getSiteTimeZone()))
   const nextDate = parseDateKey(dateKey)
   nextDate.setUTCDate(nextDate.getUTCDate() + 1)
   const dayEnd = new Date(
-    new Date(jstDateTimeLocalToIso(`${formatDateKey(nextDate)}T00:00`)).getTime() - 1,
+    new Date(jstDateTimeLocalToIso(`${formatDateKey(nextDate)}T00:00`, getSiteTimeZone())).getTime() - 1,
   )
 
   return tasks.value
@@ -705,7 +706,7 @@ function changeMonth(offset: number) {
 }
 
 function goToday() {
-  const today = parseDateKey(jstDateKey(new Date()))
+  const today = parseDateKey(jstDateKey(new Date(), getSiteTimeZone()))
 
   currentDate.value = new Date(Date.UTC(
     today.getUTCFullYear(),
@@ -736,7 +737,7 @@ function selectDate(dateKey: string) {
 }
 
 function toDateTimeLocal(value: string | Date): string {
-  return formatJstDateTimeLocal(value)
+  return formatJstDateTimeLocal(value, getSiteTimeZone())
 }
 
 function openCreateDialog(dateKey: string) {
@@ -758,7 +759,7 @@ function openEvent(event: CalendarEvent) {
 }
 
 function toISOStringFromLocal(value: string): string {
-  return jstDateTimeLocalToIso(value)
+  return jstDateTimeLocalToIso(value, getSiteTimeZone())
 }
 
 async function saveEvent() {
