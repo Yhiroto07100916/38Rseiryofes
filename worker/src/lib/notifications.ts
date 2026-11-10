@@ -7,6 +7,7 @@ export interface CreateNotificationsInput {
   title: string
   body?: string
   targetUrl?: string | null
+  requiredPermission?: string | null
   actorUserId?: string | null
   entityType?: string | null
   entityId?: string | null
@@ -25,8 +26,8 @@ export async function createNotificationsForUsers(
   const results = await env.DB.batch(
     recipientIds.map(userId => env.DB.prepare(
       "INSERT OR IGNORE INTO notifications (" +
-      "id, recipient_user_id, event_key, category, title, body, target_url, actor_user_id, entity_type, entity_id, dedupe_key, expires_at" +
-      ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+90 days'))",
+      "id, recipient_user_id, event_key, category, title, body, target_url, required_permission, actor_user_id, entity_type, entity_id, dedupe_key, expires_at" +
+      ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+90 days'))",
     ).bind(
       crypto.randomUUID(),
       userId,
@@ -35,6 +36,7 @@ export async function createNotificationsForUsers(
       input.title,
       input.body ?? "",
       input.targetUrl ?? null,
+      input.requiredPermission ?? null,
       input.actorUserId ?? null,
       input.entityType ?? null,
       input.entityId ?? null,
