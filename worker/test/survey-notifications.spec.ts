@@ -112,7 +112,7 @@ describe("Survey notification events", () => {
       event_key: "surveys.published",
       recipient_user_id: respondent.userId,
       title: "アンケートが公開されました",
-      target_url: "/surveys/" + surveyId,
+      target_url: "/surveys?open=" + surveyId,
     })
 
     const creatorNotification = await env.DB.prepare(
