@@ -272,19 +272,34 @@ export async function handleNotifications(
       return jsonError("is_read must be a boolean", 400)
     }
 
-    const result = await env.DB.prepare(
+    const desiredReadState = body.is_read ? 1 : 0
+    const updated = await env.DB.prepare(
       "UPDATE notifications SET is_read = ?, " +
       "read_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), read_version = read_version + 1 " +
-      "WHERE id = ? AND recipient_user_id = ? RETURNING read_updated_at, read_version",
-    ).bind(body.is_read ? 1 : 0, notificationId, userId).first<{ read_updated_at: string; read_version: number }>()
+      "WHERE id = ? AND recipient_user_id = ? AND is_read <> ? " +
+      "RETURNING is_read, read_updated_at, read_version",
+    ).bind(desiredReadState, notificationId, userId, desiredReadState).first<{
+      is_read: number
+      read_updated_at: string
+      read_version: number
+    }>()
 
-    if (!result) return jsonError("Notification not found", 404)
+    const current = updated ?? await env.DB.prepare(
+      "SELECT is_read, COALESCE(read_updated_at, created_at) AS read_updated_at, read_version " +
+      "FROM notifications WHERE id = ? AND recipient_user_id = ?",
+    ).bind(notificationId, userId).first<{
+      is_read: number
+      read_updated_at: string
+      read_version: number
+    }>()
+
+    if (!current) return jsonError("Notification not found", 404)
 
     return Response.json({
       success: true,
-      is_read: body.is_read,
-      read_updated_at: result.read_updated_at,
-      read_version: result.read_version,
+      is_read: current.is_read === 1,
+      read_updated_at: current.read_updated_at,
+      read_version: current.read_version,
     })
   }
 
