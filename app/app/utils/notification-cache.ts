@@ -87,6 +87,36 @@ function validNotification(value: unknown): value is CachedNotification {
   )
 }
 
+export function isNotificationCacheRecordValid(
+  value: unknown,
+  accountId: string,
+  now = Date.now(),
+): value is NotificationCacheRecord {
+  if (!value || typeof value !== "object") return false
+  const record = value as NotificationCacheRecord
+  return (
+    record.accountId === accountId &&
+    record.version === CACHE_VERSION &&
+    Number.isFinite(record.savedAt) &&
+    Number.isFinite(record.unreadCount) &&
+    record.unreadCount >= 0 &&
+    Number.isInteger(record.unreadCount) &&
+    (record.clockOffsetMs === undefined || record.clockOffsetMs === null || Number.isFinite(record.clockOffsetMs)) &&
+    Array.isArray(record.notifications) &&
+    record.notifications.length <= MAX_NOTIFICATIONS &&
+    record.notifications.every(validNotification) &&
+    !record.notifications.some(item => now - Date.parse(item.created_at) > MAX_CACHE_AGE) &&
+    record.savedAt <= now + 5 * 60 * 1000 &&
+    (record.clientTimeAtSave === undefined || Number.isFinite(record.clientTimeAtSave)) &&
+    (record.serverTimeAtSave === undefined || record.serverTimeAtSave === null || Number.isFinite(record.serverTimeAtSave)) &&
+    now - record.savedAt <= MAX_CACHE_AGE
+  )
+}
+
+export function isNotificationCacheExpired(savedAt: number, now = Date.now()): boolean {
+  return now - savedAt > CACHE_TTL
+}
+
 function deleteRecord(database: IDBDatabase, accountId: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(STORE_NAME, "readwrite")
@@ -117,22 +147,7 @@ export async function loadNotificationCache(
   if (!record) return null
 
   const now = Date.now()
-  const invalid =
-    record.accountId !== accountId ||
-    record.version !== CACHE_VERSION ||
-    !Number.isFinite(record.savedAt) ||
-    !Number.isFinite(record.unreadCount) ||
-    (record.clockOffsetMs !== undefined && record.clockOffsetMs !== null && !Number.isFinite(record.clockOffsetMs)) ||
-    !Array.isArray(record.notifications) ||
-    record.notifications.length > MAX_NOTIFICATIONS ||
-    !record.notifications.every(validNotification) ||
-    record.notifications.some(item => now - Date.parse(item.created_at) > MAX_CACHE_AGE) ||
-    record.savedAt > now + 5 * 60 * 1000 ||
-    (record.clientTimeAtSave !== undefined && !Number.isFinite(record.clientTimeAtSave)) ||
-    (record.serverTimeAtSave !== undefined && record.serverTimeAtSave !== null && !Number.isFinite(record.serverTimeAtSave)) ||
-    now - record.savedAt > MAX_CACHE_AGE
-
-  if (invalid) {
+  if (!isNotificationCacheRecordValid(record, accountId, now)) {
     await deleteNotificationCache(accountId, false)
     return null
   }
@@ -142,7 +157,7 @@ export async function loadNotificationCache(
     unreadCount: record.unreadCount,
     savedAt: record.savedAt,
     clockOffsetMs: record.clockOffsetMs ?? null,
-    expired: now - record.savedAt > CACHE_TTL,
+    expired: isNotificationCacheExpired(record.savedAt, now),
   }
 }
 
