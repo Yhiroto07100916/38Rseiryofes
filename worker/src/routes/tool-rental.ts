@@ -245,19 +245,23 @@ export async function handleToolRental(
       if (item.status !== "available") return json({ detail: "この個体は現在貸出できません" }, 409)
 
       const borrowerId = await getBorrowerId(env.DB, className, name)
+      const requestedBorrowerUserId = typeof body.borrower_user_id === "string" ? body.borrower_user_id : null
+      const matchedBorrower = requestedBorrowerUserId
+        ? await env.DB.prepare("SELECT id FROM users WHERE id = ? AND (name = ? OR nickname = ?)").bind(requestedBorrowerUserId, name, name).first<{ id: string }>()
+        : null
       const loan = await env.DB.prepare(`
         INSERT INTO loans (
           borrower_id, tool_id, quantity, borrowed_at, status,
-          tool_name_snapshot, time_limit_minutes, due_at, checkout_user_id
+          tool_name_snapshot, time_limit_minutes, due_at, checkout_user_id, borrower_user_id
         )
         VALUES (
           ?, ?, 1, datetime('now', '+9 hours'), 'borrowed',
           ?, ?, CASE WHEN ? IS NULL THEN NULL
-            ELSE datetime('now', '+9 hours', '+' || (? - 5) || ' minutes') END, ?
+            ELSE datetime('now', '+9 hours', '+' || (? - 5) || ' minutes') END, ?, ?
         )
       `).bind(
         borrowerId, item.tool_id, item.tool_name,
-        timeLimitMinutes, timeLimitMinutes, timeLimitMinutes, auth.user.id,
+        timeLimitMinutes, timeLimitMinutes, timeLimitMinutes, auth.user.id, matchedBorrower?.id ?? null,
       ).run()
       const loanId = Number(loan.meta.last_row_id)
       const update = await env.DB.prepare(`
@@ -358,16 +362,18 @@ export async function handleToolRental(
       `).bind(returnerId, remaining?.count ?? 0, remaining?.count ?? 0, loanItem.loan_id).run()
       await refreshToolCounts(env.DB, loanItem.tool_id)
       const borrower = await env.DB.prepare(`
-        SELECT b.name FROM borrowers b
+        SELECT b.name, l.borrower_user_id FROM borrowers b
         INNER JOIN loans l ON l.borrower_id = b.id
         WHERE l.id = ?
-      `).bind(loanItem.loan_id).first<{ name: string }>()
+      `).bind(loanItem.loan_id).first<{ name: string; borrower_user_id: string | null }>()
       if (borrower?.name) {
-        const matchingUsers = await env.DB.prepare(`
-          SELECT id FROM users
-          WHERE name = ? OR nickname = ?
-          LIMIT 2
-        `).bind(borrower.name, borrower.name).all<{ id: string }>()
+        const matchingUsers = borrower.borrower_user_id
+          ? { results: [{ id: borrower.borrower_user_id }] }
+          : await env.DB.prepare(`
+              SELECT id FROM users
+              WHERE name = ? OR nickname = ?
+              LIMIT 2
+            `).bind(borrower.name, borrower.name).all<{ id: string }>()
         if (matchingUsers.results.length === 1) {
           await notifyUsers(env, {
             eventKey: `tool-loan-item:${loanItem.id}:returned`,
