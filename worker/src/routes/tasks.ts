@@ -1009,6 +1009,23 @@ export async function handleTasks(
     }
 
     const previousRecipientIds = await getTaskNotificationRecipientIds(env, id)
+    const [previousCalendarLink, previousFileLinks, previousExternalLinks] = await Promise.all([
+      env.DB.prepare(
+        "SELECT event_id FROM task_calendar_events WHERE task_id = ? LIMIT 1",
+      ).bind(id).first<{ event_id: string }>(),
+      env.DB.prepare(
+        "SELECT file_id FROM task_files WHERE task_id = ? ORDER BY file_id",
+      ).bind(id).all<{ file_id: string }>(),
+      env.DB.prepare(
+        "SELECT title, url FROM task_links WHERE task_id = ? ORDER BY position ASC, id ASC",
+      ).bind(id).all<{ title: string; url: string }>(),
+    ])
+    const previousCalendarEventId = previousCalendarLink?.event_id ?? null
+    const previousFileIds = previousFileLinks.results.map(row => row.file_id).sort()
+    const previousExternalLinkValues = previousExternalLinks.results.map(link => ({
+      title: link.title,
+      url: link.url,
+    }))
 
     let body: UpdateTaskBody
 
@@ -1533,6 +1550,15 @@ export async function handleTasks(
 
         const statusChanged = body.status !== undefined &&
           body.status !== existingTask.status
+        const calendarLinkChanged = body.calendar_event_id !== undefined &&
+          calendarEventId !== previousCalendarEventId
+        const fileLinksChanged = body.file_ids !== undefined &&
+          JSON.stringify(requestedFileIds.slice().sort()) !== JSON.stringify(previousFileIds)
+        const externalLinksChanged = body.links !== undefined &&
+          JSON.stringify((body.links as { title: string; url: string }[]).map(link => ({
+            title: link.title.trim(),
+            url: link.url.trim(),
+          }))) !== JSON.stringify(previousExternalLinkValues)
         const otherFieldsChanged =
           (body.title !== undefined && body.title.trim() !== existingTask.title) ||
           (body.description !== undefined &&
@@ -1540,9 +1566,7 @@ export async function handleTasks(
           (body.due_at !== undefined &&
             (typeof body.due_at === "string" ? body.due_at.trim() || null : null) !== existingTask.due_at) ||
           (body.priority !== undefined && body.priority !== existingTask.priority) ||
-          body.calendar_event_id !== undefined ||
-          body.file_ids !== undefined ||
-          body.links !== undefined
+          calendarLinkChanged || fileLinksChanged || externalLinksChanged
 
         if (updatedTask && (statusChanged || otherFieldsChanged)) {
           const recipients = [...new Set([...currentRecipientIds, existingTask.created_by])]
