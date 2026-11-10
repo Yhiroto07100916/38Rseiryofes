@@ -182,10 +182,15 @@ export async function handleNotifications(
       "WHERE recipient_user_id = ? AND is_read = 0 RETURNING id, read_updated_at, read_version",
     ).bind(userId).all<{ id: string; read_updated_at: string; read_version: number }>()
 
+    const unread = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM notifications WHERE recipient_user_id = ? AND is_read = 0",
+    ).bind(userId).first<{ count: number }>()
+
     return Response.json({
       updated_count: result.results.length,
       updated_ids: result.results.map(row => row.id),
       updated_read_states: result.results,
+      unread_count: unread?.count ?? 0,
     })
   }
 
