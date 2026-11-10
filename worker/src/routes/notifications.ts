@@ -47,6 +47,13 @@ async function purgeExpiredNotifications(env: Env, userId: string): Promise<void
   ).bind(userId).run()
 }
 
+export async function purgeAllExpiredNotifications(env: Env): Promise<number> {
+  const result = await env.DB.prepare(
+    "DELETE FROM notifications WHERE expires_at <= CURRENT_TIMESTAMP",
+  ).run()
+  return result.meta?.changes ?? 0
+}
+
 export async function handleNotifications(
   request: Request,
   env: Env,
