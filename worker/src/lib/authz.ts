@@ -1,5 +1,5 @@
 import { getSessionId, getSessionUser, type SessionUser } from "./session"
-import { isFeaturePermissionEnabled } from "./site-settings"
+import { filterEnabledFeaturePermissions, isFeaturePermissionEnabled } from "./site-settings"
 
 type AuthEnv = Pick<Env, "DB">
 
@@ -106,8 +106,7 @@ export async function getUserPermissions(
       .all<{ key: string }>()
 
     const keys = result.results.map((row) => row.key)
-    const enabled = await Promise.all(keys.map(key => isFeaturePermissionEnabled(env, key)))
-    return keys.filter((_, index) => enabled[index])
+    return filterEnabledFeaturePermissions(env, keys)
   }
 
   const result = await env.DB
@@ -212,8 +211,7 @@ export async function getUserPermissions(
       return false
     })
     .map((row) => row.key)
-  const enabled = await Promise.all(granted.map(key => isFeaturePermissionEnabled(env, key)))
-  return granted.filter((_, index) => enabled[index])
+  return filterEnabledFeaturePermissions(env, granted)
 }
 
 export async function hasPermission(
