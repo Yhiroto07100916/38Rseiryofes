@@ -54,7 +54,11 @@ export async function createNotificationsForUsers(
     ).bind(recipientIds[index], input.dedupeKey).first<{ id: string }>()
 
     if (notification) {
-      await enqueueNotificationPushDeliveries(env, notification.id)
+      try {
+        await enqueueNotificationPushDeliveries(env, notification.id)
+      } catch (error) {
+        console.error("Failed to enqueue notification Push delivery:", error)
+      }
     }
   }
 
