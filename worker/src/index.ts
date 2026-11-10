@@ -9,6 +9,12 @@ import { handleCalendar } from "./routes/calendar"
 import { handleCalendarCategories } from "./routes/calendar-categories"
 import { handleNews } from "./routes/news"
 import { handlePush, processDuePushDeliveries } from "./routes/push"
+import {
+  handlePresence,
+  handleNotifications,
+  processNotificationPushDeliveries,
+  processScheduledToolRentalNotifications,
+} from "./routes/presence-notifications"
 import { handleScripts } from "./routes/scripts"
 import { handleEquipment } from "./routes/equipment"
 import { handleToolRental } from "./routes/tool-rental"
@@ -308,6 +314,26 @@ export default {
             { status: 500 },
           ),
         )
+      }
+    }
+
+    if (url.pathname === "/api/presence" || url.pathname.startsWith("/api/presence/")) {
+      const pathParts = url.pathname.slice("/api/presence".length).split("/").filter(Boolean)
+      try {
+        return withCors(request, await handlePresence(request, env, pathParts))
+      } catch (error) {
+        console.error("Presence API error:", error)
+        return withCors(request, Response.json({ error: "Internal Server Error" }, { status: 500 }))
+      }
+    }
+
+    if (url.pathname === "/api/notifications" || url.pathname.startsWith("/api/notifications/")) {
+      const pathParts = url.pathname.slice("/api/notifications".length).split("/").filter(Boolean)
+      try {
+        return withCors(request, await handleNotifications(request, env, pathParts))
+      } catch (error) {
+        console.error("Notifications API error:", error)
+        return withCors(request, Response.json({ error: "Internal Server Error" }, { status: 500 }))
       }
     }
 
@@ -841,6 +867,18 @@ export default {
       await processDuePushDeliveries(env)
     } catch (error) {
       console.error("Scheduled push delivery failed:", error)
+    }
+
+    try {
+      await processScheduledToolRentalNotifications(env)
+    } catch (error) {
+      console.error("Scheduled tool rental notifications failed:", error)
+    }
+
+    try {
+      await processNotificationPushDeliveries(env)
+    } catch (error) {
+      console.error("Scheduled notification push delivery failed:", error)
     }
   },
 } satisfies ExportedHandler<Env>
