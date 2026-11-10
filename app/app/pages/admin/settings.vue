@@ -190,7 +190,12 @@ async function loadSettings() {
     )
     settingLogs.value = logResponse.logs
     try {
-      systemInfo.value = await api.apiFetch('/api/admin/settings/system-info')
+      systemInfo.value = await api.apiFetch<{
+        api_status: string
+        database_status: string
+        version: string
+        checked_at: string
+      }>('/api/admin/settings/system-info')
     } catch (systemError) {
       console.warn('システム情報を取得できませんでした。', systemError)
       systemInfo.value = null
@@ -364,7 +369,20 @@ onBeforeRouteLeave(() => {
   }
 })
 
-onMounted(loadSettings)
+const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+  if (!hasUnsavedChanges.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+onMounted(() => {
+  loadSettings()
+  window.addEventListener('beforeunload', handleBeforeUnload)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+})
 </script>
 
 <template>
