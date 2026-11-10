@@ -716,23 +716,46 @@ async function canAccessNotificationTarget(
 
   if (delivery.entity_type === "tool_loan" && delivery.entity_id) {
     const loan = await env.DB.prepare(
-      "SELECT 1 FROM loans WHERE id = ?",
-    ).bind(Number(delivery.entity_id)).first()
+      "SELECT status, due_at FROM loans WHERE id = ?",
+    ).bind(Number(delivery.entity_id)).first<{ status: string; due_at: string | null }>()
     if (!loan) return false
+
     if (delivery.event_key.startsWith("tool_rental.due_soon") || delivery.event_key.startsWith("tool_rental.overdue")) {
+      if (loan.status !== "borrowed" || !loan.due_at) return false
       const outstanding = await env.DB.prepare(
         "SELECT 1 FROM loan_items WHERE loan_id = ? AND returned_at IS NULL LIMIT 1",
       ).bind(Number(delivery.entity_id)).first()
       if (!outstanding) return false
+
+      if (delivery.event_key.startsWith("tool_rental.due_soon")) {
+        const dueAt = Date.parse(loan.due_at)
+        if (
+          delivery.event_key !== "tool_rental.due_soon:" + delivery.entity_id + ":" + loan.due_at ||
+          !Number.isFinite(dueAt) || dueAt <= Date.now() || dueAt > Date.now() + 11 * 60_000
+        ) return false
+      } else if (Date.parse(loan.due_at) > Date.now()) {
+        return false
+      }
     }
   }
 
   if (delivery.entity_type === "tool_loan_item" && delivery.entity_id) {
     const loanItem = await env.DB.prepare(
-      "SELECT returned_at FROM loan_items WHERE id = ?",
-    ).bind(Number(delivery.entity_id)).first<{ returned_at: string | null }>()
+      "SELECT li.returned_at, l.status, l.due_at FROM loan_items li " +
+      "INNER JOIN loans l ON l.id = li.loan_id WHERE li.id = ?",
+    ).bind(Number(delivery.entity_id)).first<{
+      returned_at: string | null
+      status: string
+      due_at: string | null
+    }>()
     if (!loanItem) return false
-    if (delivery.event_key.startsWith("tool_rental.timer_end") && loanItem.returned_at) return false
+    if (delivery.event_key.startsWith("tool_rental.timer_end")) {
+      const dueAt = loanItem.due_at ? Date.parse(loanItem.due_at) : Number.NaN
+      if (
+        loanItem.returned_at !== null || loanItem.status !== "borrowed" ||
+        !Number.isFinite(dueAt) || dueAt <= Date.now() || dueAt > Date.now() + 6 * 60_000
+      ) return false
+    }
   }
 
   if (delivery.entity_type === "wishlist_item" && delivery.entity_id) {
