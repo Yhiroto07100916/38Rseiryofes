@@ -263,7 +263,7 @@ import {
   useApi,
 } from '~/composables/useApi'
 import { useSnackbar } from '~/composables/useSnackbar'
-import { jstDateKey, jstDateTimeLocalToIso } from '~/utils/jst'
+import { jstDateKey, jstDateTimeLocalToIso , getDefaultTimeZone} from '~/utils/jst'
 import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({
@@ -326,7 +326,7 @@ const formatEventDate = (event: CalendarEvent) => {
   }
 
   const date = new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: getDefaultTimeZone(),
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -337,7 +337,7 @@ const formatEventDate = (event: CalendarEvent) => {
   }
 
   const startTime = new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: getDefaultTimeZone(),
     hour: '2-digit',
     minute: '2-digit',
   }).format(start)
@@ -353,14 +353,14 @@ const formatEventDate = (event: CalendarEvent) => {
   }
 
   const endDate = new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: getDefaultTimeZone(),
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
   }).format(end)
 
   const endTime = new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: getDefaultTimeZone(),
     hour: '2-digit',
     minute: '2-digit',
   }).format(end)
@@ -488,7 +488,7 @@ const loadTasks = async () => {
           getTaskStatusLabel(task.status),
           getTaskPriorityLabel(task.priority),
           task.due_at
-            ? `期限 ${new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo' }).format(
+            ? `期限 ${new Intl.DateTimeFormat('ja-JP', { timeZone: getDefaultTimeZone() }).format(
                 new Date(task.due_at),
               )}`
             : null,
