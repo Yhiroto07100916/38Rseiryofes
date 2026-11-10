@@ -150,10 +150,12 @@ export const useNotifications = () => {
     if (cacheDeletionRequests.has(accountId)) return
     try {
       const cached = await loadNotificationCache(accountId)
-      if (!cached || hasSuccessfulApiFetch || auth.user?.id !== accountId) return
+      if (!cached || auth.user?.id !== accountId) return
       cachedClockOffsetMs = cached.clockOffsetMs
-      cacheExpired.value = cached.expired
       cacheSnapshot = cached.notifications.map(mapCachedNotification)
+      cacheInitialized = true
+      if (hasSuccessfulApiFetch) return
+      cacheExpired.value = cached.expired
 
       const term = String(search.value ?? "").trim().toLocaleLowerCase()
       const categoryLabels: Record<string, string> = {
