@@ -578,6 +578,7 @@ import {
   ref,
 } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
+import TaskLinksEditor from '~/components/tasks/TaskLinksEditor.vue'
 import { useConfirmDialog } from '~/composables/useConfirmDialog'
 import { useSnackbar } from '~/composables/useSnackbar'
 import {
