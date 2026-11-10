@@ -140,6 +140,7 @@ export const useNotifications = () => {
   })
 
   const loadCache = async (accountId: string) => {
+    if (cacheDeletionRequests.has(accountId)) return
     try {
       const cached = await loadNotificationCache(accountId)
       if (!cached || hasSuccessfulApiFetch || auth.user?.id !== accountId) return
