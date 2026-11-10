@@ -518,4 +518,80 @@ describe("site settings authorization", () => {
     }
   })
 
+  it("serves only public configuration through the site-config endpoint", async () => {
+    const response = await SELF.fetch("http://example.com/api/site-config")
+    expect(response.status).toBe(200)
+    const body = await response.json() as Record<string, unknown>
+    expect(body).toHaveProperty("site_name")
+    expect(body).toHaveProperty("timezone")
+    expect(body).toHaveProperty("feature_enabled")
+    expect(body).not.toHaveProperty("site_visibility")
+    expect(body).not.toHaveProperty("maintenance_mode")
+    expect(body).not.toHaveProperty("login_enabled")
+    expect(body).not.toHaveProperty("security_settings")
+  })
+
+  it("validates extended settings and exposes system health to admins", async () => {
+    const cookie = await createAdminSession()
+    const invalidNotification = await SELF.fetch(
+      "http://example.com/api/admin/settings",
+      {
+        method: "PATCH",
+        headers: { Cookie: cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: {
+            notification_settings: {
+              enabled: true,
+              categories: { tool_rental: true },
+              return_due_all_users: false,
+            },
+          },
+        }),
+      },
+    )
+    expect(invalidNotification.status).toBe(400)
+
+    const invalidSecurity = await SELF.fetch(
+      "http://example.com/api/admin/settings",
+      {
+        method: "PATCH",
+        headers: { Cookie: cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: {
+            security_settings: {
+              session_duration_hours: 24,
+              login_attempt_limit: 5,
+              login_lock_minutes: 15,
+              force_password_change: false,
+            },
+          },
+        }),
+      },
+    )
+    expect(invalidSecurity.status).toBe(403)
+
+    const systemInfo = await SELF.fetch(
+      "http://example.com/api/admin/settings/system-info",
+      { headers: { Cookie: cookie } },
+    )
+    expect(systemInfo.status).toBe(200)
+    expect(await systemInfo.json()).toMatchObject({
+      api_status: "ok",
+      database_status: "ok",
+    })
+  })
+
+  it("invalidates all sessions only through the important-admin endpoint", async () => {
+    const { cookie } = await createImportantAdminSession()
+    const response = await SELF.fetch(
+      "http://example.com/api/admin/settings/force-logout",
+      { method: "POST", headers: { Cookie: cookie } },
+    )
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ success: true })
+    const sessions = await env.DB.prepare("SELECT COUNT(*) AS count FROM sessions")
+      .first<{ count: number }>()
+    expect(sessions?.count ?? 0).toBe(0)
+  })
+
 })
