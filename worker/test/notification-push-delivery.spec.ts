@@ -32,9 +32,6 @@ afterEach(async () => {
   for (const id of surveyIds.splice(0)) {
     await env.DB.prepare("DELETE FROM surveys WHERE id = ?").bind(id).run()
   }
-  for (const id of calendarEventIds.splice(0)) {
-    await env.DB.prepare("DELETE FROM calendar_events WHERE id = ?").bind(id).run()
-  }
   for (const id of taskIds.splice(0)) {
     await env.DB.prepare("DELETE FROM tasks WHERE id = ?").bind(id).run()
   }
