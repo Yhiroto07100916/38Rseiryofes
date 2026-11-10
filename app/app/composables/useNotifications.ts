@@ -232,7 +232,7 @@ export const useNotifications = () => {
         )
       } catch (error) {
         if (attempt === retryDelays.length) throw error
-        await delay(retryDelays[attempt])
+        await delay(retryDelays[attempt] ?? 5_000)
       } finally {
         clearTimeout(timeout)
       }
