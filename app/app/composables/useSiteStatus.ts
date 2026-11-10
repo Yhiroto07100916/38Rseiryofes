@@ -11,6 +11,7 @@ export interface SiteStatus {
   timezone: string
   logo_url: string
   favicon_url: string
+  calendar_default_view: "month" | "list"
   is_authenticated: boolean
   is_admin: boolean
   is_important_settings_admin: boolean
