@@ -1,5 +1,6 @@
 import { hasPermission, requireAuth } from "../lib/authz"
 import { createNotificationsForUsers } from "../lib/notifications"
+import { notifyFileLinked } from "../lib/file-notifications"
 
 interface Decision {
   id: string
@@ -295,6 +296,12 @@ export async function handleDecisions(
     await env.DB.batch(statements)
 
     try {
+      for (const fileId of fileIds) await notifyFileLinked(env, fileId, userId)
+    } catch (notificationError) {
+      console.error("Failed to create linked-file notifications:", notificationError)
+    }
+
+    try {
       const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
       const eligible = await Promise.all(users.results.map(async user => ({
         id: user.id,
@@ -476,6 +483,13 @@ export async function handleDecisions(
     )
 
     await env.DB.batch(statements)
+    if (fileIds !== null) {
+      try {
+        for (const fileId of fileIds) await notifyFileLinked(env, fileId, userId)
+      } catch (notificationError) {
+        console.error("Failed to create linked-file notifications:", notificationError)
+      }
+    }
     return Response.json({
       decision: await getDecision(env, decisionId),
       ...(await getLinks(env, decisionId)),
