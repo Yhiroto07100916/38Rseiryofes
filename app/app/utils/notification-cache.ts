@@ -38,6 +38,7 @@ const MAX_NOTIFICATIONS = 100
 let databasePromise: Promise<IDBDatabase> | null = null
 const pendingCacheSaves = new Map<string, Promise<void>>()
 const cacheDeletionRequested = new Set<string>()
+const persistentCacheDeletionRequests = new Set<string>()
 const cacheDeletionPromises = new Map<string, Promise<void>>()
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -103,6 +104,7 @@ export async function loadNotificationCache(
   const pendingDeletion = cacheDeletionPromises.get(accountId)
   if (pendingDeletion) await pendingDeletion
   cacheDeletionRequested.delete(accountId)
+  persistentCacheDeletionRequests.delete(accountId)
   const database = await openDatabase()
 
   const record = await new Promise<NotificationCacheRecord | undefined>((resolve, reject) => {
@@ -276,13 +278,20 @@ export async function validateNotificationCacheClock(
   return false
 }
 
-export async function deleteNotificationCache(accountId: string): Promise<void> {
+export async function deleteNotificationCache(
+  accountId: string,
+  blockWritesUntilNextLoad = true,
+): Promise<void> {
   if (!accountId) return
   const existingDeletion = cacheDeletionPromises.get(accountId)
-  if (existingDeletion) return existingDeletion
+  if (existingDeletion) {
+    if (blockWritesUntilNextLoad) persistentCacheDeletionRequests.add(accountId)
+    return existingDeletion
+  }
 
-  // ログアウト開始時点で新しい保存を止め、開始済みの保存だけを完了させる。
+  // 削除中は新しい保存を止め、開始済みの保存だけを完了させる。
   cacheDeletionRequested.add(accountId)
+  if (blockWritesUntilNextLoad) persistentCacheDeletionRequests.add(accountId)
   const deletion = (async () => {
     const pendingSave = pendingCacheSaves.get(accountId)
     if (pendingSave) await pendingSave.catch(() => undefined)
@@ -294,5 +303,8 @@ export async function deleteNotificationCache(accountId: string): Promise<void> 
     await deletion
   } finally {
     cacheDeletionPromises.delete(accountId)
+    if (!persistentCacheDeletionRequests.has(accountId)) {
+      cacheDeletionRequested.delete(accountId)
+    }
   }
 }
