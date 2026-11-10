@@ -20,6 +20,9 @@ useHead(() => {
       { name: "description", content: siteDescription },
       { name: "apple-mobile-web-app-title", content: siteName },
     ],
+    link: siteStatus.value?.favicon_url
+      ? [{ rel: "icon", href: siteStatus.value.favicon_url }]
+      : [],
   }
 })
 </script>
