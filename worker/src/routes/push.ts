@@ -1101,8 +1101,9 @@ export async function processDueNotificationPushDeliveries(env: Env): Promise<vo
     "updated_at = CURRENT_TIMESTAMP " +
     "WHERE status IN ('pending', 'sending') AND EXISTS (" +
     "SELECT 1 FROM notifications n " +
-    "INNER JOIN push_subscriptions s ON s.id = notification_push_deliveries.subscription_id " +
-    "WHERE n.id = notification_push_deliveries.notification_id AND s.user_id <> n.recipient_user_id)"
+    "WHERE n.id = notification_push_deliveries.notification_id AND NOT EXISTS (" +
+    "SELECT 1 FROM push_subscriptions s " +
+    "WHERE s.id = notification_push_deliveries.subscription_id AND s.user_id = n.recipient_user_id))"
   ).run()
 
   const result = await env.DB.prepare(
