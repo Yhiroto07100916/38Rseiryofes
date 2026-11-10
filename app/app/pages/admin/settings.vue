@@ -86,11 +86,25 @@ async function loadSettings() {
 
     if (isImportantSettingsAdmin.value) {
       try {
-        const userResponse = await api.apiFetch<{ users: UserOption[] }>('/api/users')
-        users.value = userResponse.users
+        const [userResponse, roleResponse] = await Promise.all([
+          api.apiFetch<{ users: UserOption[] }>('/api/users'),
+          api.apiFetch<{ account_roles: Array<{ id: string; name: string }> }>('/api/account-roles'),
+        ])
+        const adminRole = roleResponse.account_roles.find((role) => role.name === 'admin')
+        if (adminRole) {
+          const memberResponse = await api.apiFetch<{
+            users: Array<UserOption & { assigned: number }>
+          }>(`/api/account-roles/${adminRole.id}/members`)
+          const adminIds = new Set(
+            memberResponse.users
+              .filter((user) => user.assigned === 1)
+              .map((user) => user.id),
+          )
+          users.value = userResponse.users.filter((user) => adminIds.has(user.id))
+        }
       } catch (error) {
         console.error(error)
-        errorMessage.value = 'ユーザー一覧を取得できませんでした。'
+        errorMessage.value = '管理者一覧を取得できませんでした。'
       }
     }
   } catch (error) {
