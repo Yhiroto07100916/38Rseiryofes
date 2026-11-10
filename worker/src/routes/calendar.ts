@@ -49,6 +49,41 @@ interface CalendarCategoryRow {
   is_active: number
 }
 
+async function notifyCalendarAttendanceChange(
+  env: Env,
+  event: CalendarEvent,
+  targetUserId: string,
+  actorUserId: string,
+  status: "attending" | "not_attending" | "undecided",
+  operationId: string,
+): Promise<void> {
+  const admins = await env.DB.prepare(
+    "SELECT uar.user_id FROM user_account_roles uar " +
+    "INNER JOIN account_roles ar ON ar.id = uar.account_role_id " +
+    "WHERE ar.name = 'admin'",
+  ).all<{ user_id: string }>()
+
+  const statusLabel = {
+    attending: "参加",
+    not_attending: "不参加",
+    undecided: "未定",
+  }[status]
+
+  await createNotificationsForUsers(env, {
+    recipientUserIds: [...new Set([event.created_by, ...admins.results.map(row => row.user_id)])],
+    eventKey: "calendar.attendance_updated",
+    category: "calendar",
+    title: "予定の出欠が更新されました",
+    body: event.title + "：" + statusLabel,
+    targetUrl: "/calendar",
+    requiredPermission: "schedule.view",
+    actorUserId,
+    entityType: "calendar_event",
+    entityId: event.id,
+    dedupeKey: "calendar.attendance_updated:" + event.id + ":" + targetUserId + ":" + operationId,
+  })
+}
+
 async function getScheduleViewUserIds(env: Env): Promise<string[]> {
   const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
   const eligible = await Promise.all(users.results.map(async user => ({
@@ -372,6 +407,10 @@ export async function handleCalendar(
       )
     }
 
+    const previous = await env.DB.prepare(
+      "SELECT status FROM calendar_event_attendance WHERE event_id = ? AND user_id = ?",
+    ).bind(eventId, targetUserId).first<{ status: string }>()
+
     const now = new Date().toISOString()
 
     await env.DB
@@ -387,6 +426,14 @@ export async function handleCalendar(
       `)
       .bind(eventId, targetUserId, status, now, now)
       .run()
+
+    if (previous?.status !== status) {
+      try {
+        await notifyCalendarAttendanceChange(env, event, targetUserId, auth.user.id, status, now)
+      } catch (notificationError) {
+        console.error("Failed to create attendance notifications:", notificationError)
+      }
+    }
 
     return Response.json({
       event_id: eventId,
@@ -526,6 +573,10 @@ export async function handleCalendar(
       )
     }
 
+    const previous = await env.DB.prepare(
+      "SELECT status FROM calendar_event_attendance WHERE event_id = ? AND user_id = ?",
+    ).bind(eventId, auth.user.id).first<{ status: string }>()
+
     const now = new Date().toISOString()
 
     await env.DB
@@ -551,6 +602,14 @@ export async function handleCalendar(
         now,
       )
       .run()
+
+    if (previous?.status !== status) {
+      try {
+        await notifyCalendarAttendanceChange(env, event, auth.user.id, auth.user.id, status, now)
+      } catch (notificationError) {
+        console.error("Failed to create attendance notifications:", notificationError)
+      }
+    }
 
     const result = await env.DB
       .prepare(`
