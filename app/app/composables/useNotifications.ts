@@ -330,7 +330,7 @@ export const useNotifications = () => {
       clearListRetry()
       error.value = ""
       refreshMessage.value = ""
-      if (manualRefreshRequested || isRetry) showSuccess("最新情報に更新しました")
+      if (manualRefreshRequested || (isRetry && reset)) showSuccess("最新情報に更新しました")
       manualRefreshRequested = false
     } catch {
       listFailures += 1
