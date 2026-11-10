@@ -686,16 +686,19 @@ async function canAccessNotificationTarget(
   }
 
   if (delivery.entity_type === "calendar_event" && delivery.entity_id) {
-    const event = await env.DB.prepare(
-      "SELECT starts_at FROM calendar_events WHERE id = ?",
-    ).bind(delivery.entity_id).first<{ starts_at: string }>()
-    if (!event) return false
-    if (
-      delivery.event_key.startsWith("calendar.reminder_") ||
-      delivery.event_key.startsWith("calendar.attendance_reminder_") ||
-      delivery.event_key.startsWith("calendar.all_day_reminder_")
-    ) {
-      if (!delivery.dedupe_key.includes(":" + event.starts_at + ":")) return false
+    // 削除通知は対象イベント自体が存在しないことが正しい状態。
+    if (delivery.event_key !== "calendar.deleted") {
+      const event = await env.DB.prepare(
+        "SELECT starts_at FROM calendar_events WHERE id = ?",
+      ).bind(delivery.entity_id).first<{ starts_at: string }>()
+      if (!event) return false
+      if (
+        delivery.event_key.startsWith("calendar.reminder_") ||
+        delivery.event_key.startsWith("calendar.attendance_reminder_") ||
+        delivery.event_key.startsWith("calendar.all_day_reminder_")
+      ) {
+        if (!delivery.dedupe_key.includes(":" + event.starts_at + ":")) return false
+      }
     }
   }
 
