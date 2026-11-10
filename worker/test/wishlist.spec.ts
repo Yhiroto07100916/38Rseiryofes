@@ -71,6 +71,14 @@ describe("Wishlist API permissions", () => {
     expect(createResponse.status).toBe(201);
     const created = await createResponse.json() as { id: string };
 
+    const createdNotification = await env.DB.prepare(
+      "SELECT event_key, target_url FROM notifications WHERE recipient_user_id = ? AND entity_id = ? AND event_key = 'wishlist.created'",
+    ).bind(reviewer.userId, created.id).first<{ event_key: string; target_url: string }>();
+    expect(createdNotification).toEqual({
+      event_key: "wishlist.created",
+      target_url: "/wishlist?open=" + created.id,
+    });
+
     const deniedResponse = await SELF.fetch(
       `http://example.com/api/wishlist/${created.id}`,
       {
