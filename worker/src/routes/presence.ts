@@ -91,6 +91,10 @@ export async function handlePresence(request: Request, env: Env, pathParts: stri
   if (auth instanceof Response) return auth
   const route = pathParts.join("/")
 
+  if (route === "attendance" || route.startsWith("attendance/")) {
+    return handleAttendance(request, env, pathParts.slice(1))
+  }
+
   if (request.method === "GET" && route === "me") {
     return Response.json(await currentPresence(env, auth.user.id))
   }
@@ -113,7 +117,15 @@ export async function handlePresence(request: Request, env: Env, pathParts: stri
       return jsonError("位置情報の値が不正です", 400)
     }
     const inside = distanceMeters(latitude, longitude, schoolLatitude, schoolLongitude) <= radius
-    return Response.json(await savePresence(env, auth.user.id, inside ? "inside" : "outside", "gps", inside ? "inside" : "outside"))
+    const saved = await savePresence(env, auth.user.id, inside ? "inside" : "outside", "gps", inside ? "inside" : "outside")
+    if (inside) {
+      await env.DB.prepare(
+        "INSERT INTO attendance_records (local_date, user_id, status, source, gps_checked_in_at, updated_by) " +
+        "VALUES (?, ?, 'present', 'gps', ?, ?) " +
+        "ON CONFLICT(local_date, user_id) DO NOTHING",
+      ).bind(saved.local_date, auth.user.id, saved.checked_at, auth.user.id).run()
+    }
+    return Response.json(saved)
   }
 
   if (request.method === "POST" && route === "manual") {
@@ -133,3 +145,111 @@ export async function handlePresence(request: Request, env: Env, pathParts: stri
 
   return jsonError("Not Found", 404)
 }
+
+type AttendanceStatus = "present" | "absent" | "late" | "early_leave" | "excused" | "unconfirmed"
+
+const attendanceStatuses: AttendanceStatus[] = ["present", "absent", "late", "early_leave", "excused", "unconfirmed"]
+
+function isValidLocalDate(value: string): boolean {
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false
+  const [year, month, day] = value.split("-").map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return date.getUTCFullYear() === year && date.getUTCMonth() + 1 === month && date.getUTCDate() === day
+}
+
+async function requireClassRepresentative(request: Request, env: Env) {
+  const auth = await requireAuth(request, env)
+  if (auth instanceof Response) return auth
+  const role = await env.DB.prepare(
+    "SELECT 1 FROM user_account_roles uar INNER JOIN account_roles ar ON ar.id = uar.account_role_id " +
+    "WHERE uar.user_id = ? AND ar.name IN ('class_representative', 'admin') LIMIT 1",
+  ).bind(auth.user.id).first()
+  if (!role) return jsonError("Forbidden", 403)
+  return auth
+}
+
+async function handleAttendance(request: Request, env: Env, pathParts: string[]): Promise<Response> {
+  const auth = await requireClassRepresentative(request, env)
+  if (auth instanceof Response) return auth
+
+  if (request.method === "GET" && pathParts.length === 0) {
+    const date = new URL(request.url).searchParams.get("date") ?? jstParts().date
+    if (!isValidLocalDate(date)) return jsonError("日付の形式が正しくありません", 400)
+
+    const result = await env.DB.prepare(
+      "SELECT u.id AS user_id, u.student_number, u.name, u.nickname, " +
+      "ar.status, ar.source, ar.gps_checked_in_at, ar.note, ar.updated_at, " +
+      "CASE WHEN ps.local_date = ? AND ps.last_gps_status = 'inside' THEN ps.last_gps_at ELSE NULL END AS last_gps_at " +
+      "FROM users u " +
+      "LEFT JOIN attendance_records ar ON ar.user_id = u.id AND ar.local_date = ? " +
+      "LEFT JOIN presence_states ps ON ps.user_id = u.id " +
+      "ORDER BY u.student_number",
+    ).bind(date, date).all<{
+      user_id: string
+      student_number: string
+      name: string
+      nickname: string | null
+      status: AttendanceStatus | null
+      source: "gps" | "manual" | null
+      gps_checked_in_at: string | null
+      note: string | null
+      updated_at: string | null
+      last_gps_at: string | null
+    }>()
+
+    const records = result.results.map((row) => ({
+      ...row,
+      status: row.status ?? "unconfirmed" as AttendanceStatus,
+      gps_checked_in_at: row.gps_checked_in_at ?? row.last_gps_at,
+    }))
+    const counts = {
+      present: records.filter((row) => row.status === "present").length,
+      absent: records.filter((row) => row.status === "absent").length,
+      late: records.filter((row) => row.status === "late").length,
+      early_leave: records.filter((row) => row.status === "early_leave").length,
+      excused: records.filter((row) => row.status === "excused").length,
+      unconfirmed: records.filter((row) => row.status === "unconfirmed").length,
+      total: records.length,
+    }
+    return Response.json({ date, records, counts })
+  }
+
+  if (request.method === "PATCH" && pathParts.length === 1) {
+    const userId = pathParts[0]
+    let body: { date?: unknown; status?: unknown; note?: unknown }
+    try { body = await request.json() } catch { return jsonError("Invalid JSON body", 400) }
+
+    const date = typeof body.date === "string" ? body.date : ""
+    const status = body.status
+    const note = body.note === undefined || body.note === null ? null : body.note
+    if (!isValidLocalDate(date)) return jsonError("日付の形式が正しくありません", 400)
+    if (typeof status !== "string" || !attendanceStatuses.includes(status as AttendanceStatus)) {
+      return jsonError("出欠状況が正しくありません", 400)
+    }
+    if (note !== null && (typeof note !== "string" || note.length > 500)) {
+      return jsonError("備考は500文字以内で入力してください", 400)
+    }
+
+    const user = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(userId).first()
+    if (!user) return jsonError("User not found", 404)
+
+    const previous = await env.DB.prepare(
+      "SELECT status FROM attendance_records WHERE local_date = ? AND user_id = ?",
+    ).bind(date, userId).first<{ status: AttendanceStatus }>()
+    const now = new Date().toISOString()
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO attendance_records (local_date, user_id, status, source, gps_checked_in_at, note, updated_by, updated_at) " +
+        "VALUES (?, ?, ?, 'manual', NULL, ?, ?, ?) " +
+        "ON CONFLICT(local_date, user_id) DO UPDATE SET status = excluded.status, source = 'manual', note = excluded.note, updated_by = excluded.updated_by, updated_at = excluded.updated_at",
+      ).bind(date, userId, status, note, auth.user.id, now),
+      env.DB.prepare(
+        "INSERT INTO attendance_events (id, local_date, user_id, previous_status, new_status, changed_by) VALUES (?, ?, ?, ?, ?, ?)",
+      ).bind(crypto.randomUUID(), date, userId, previous?.status ?? null, status, auth.user.id),
+    ])
+    return Response.json({ success: true, date, user_id: userId, status, source: "manual" })
+  }
+
+  return jsonError("Not Found", 404)
+}
+
