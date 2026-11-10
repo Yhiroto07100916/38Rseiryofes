@@ -191,7 +191,7 @@ describe("Notification center API", () => {
 
   it("marks only the unread notifications present at the start as read", async () => {
     const user = await createUser()
-    await insertNotification(user.userId)
+    const unreadId = await insertNotification(user.userId)
     await insertNotification(user.userId, { isRead: 1 })
 
     const response = await handleNotifications(
@@ -199,10 +199,11 @@ describe("Notification center API", () => {
       env,
       ["read-all"],
     )
-    const data = await response.json() as { updated_count: number }
+    const data = await response.json() as { updated_count: number; updated_ids: string[] }
 
     expect(response.status).toBe(200)
     expect(data.updated_count).toBe(1)
+    expect(data.updated_ids).toEqual([unreadId])
 
     const count = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM notifications WHERE recipient_user_id = ? AND is_read = 0",
@@ -224,4 +225,18 @@ describe("Notification center API", () => {
     expect(data.updated_count).toBe(0)
   })
 
+  it("searches by the visible Japanese category label", async () => {
+    const user = await createUser()
+    const taskNotification = await insertNotification(user.userId, { category: "tasks" })
+    await insertNotification(user.userId, { category: "calendar", title: "予定の通知" })
+
+    const response = await handleNotifications(
+      request("GET", "?search=" + encodeURIComponent("タスク"), user.cookie),
+      env,
+      [],
+    )
+    const data = await response.json() as { notifications: Array<{ id: string }> }
+    expect(data.notifications.map(item => item.id)).toContain(taskNotification)
+    expect(data.notifications).toHaveLength(1)
+  })
 })
