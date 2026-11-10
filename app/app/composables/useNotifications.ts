@@ -254,12 +254,10 @@ export const useNotifications = () => {
     const update = (async () => {
       const all: AppNotification[] = []
       let nextCursor: { created_at: string; id: string } | null = null
-      let unread = 0
 
       for (let page = 0; page < 5; page++) {
         const response = await fetchCachePage(accountId, nextCursor)
         all.push(...response.notifications)
-        unread = response.unread_count
         nextCursor = response.next_cursor
         if (!nextCursor) break
       }
