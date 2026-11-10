@@ -12,7 +12,7 @@ export function usePresence() {
   const method = useState<string | null>("presence-method", () => null);
   const busy = ref(false);
   const error = ref("");
-  const enabled = ref(false);
+  const enabled = useState<boolean>("presence-location-enabled", () => false);
 
   const refresh = async () => {
     if (!import.meta.client) return;
@@ -69,6 +69,7 @@ export function usePresence() {
   };
 
   const manualRegister = async () => {
+    if (!auth.user?.id || busy.value) return;
     busy.value = true;
     error.value = "";
     try {
