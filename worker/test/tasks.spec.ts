@@ -253,7 +253,7 @@ describe("Task write atomicity", () => {
       event_key: "task.created",
       recipient_user_id: fixture.assigneeId,
       title: "新しいタスクが割り当てられました",
-      target_url: "/tasks/" + task.id,
+      target_url: "/tasks/class/" + task.id,
     });
 
     const actorNotification = await env.DB.prepare(`
@@ -412,7 +412,7 @@ describe("Task write atomicity", () => {
       event_key: "task.commented",
       recipient_user_id: fixture.assigneeId,
       body: "確認をお願いします。",
-      target_url: "/tasks/" + taskId,
+      target_url: "/tasks/class/" + taskId,
     });
   });
 
