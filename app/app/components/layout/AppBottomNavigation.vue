@@ -39,34 +39,85 @@
     </v-btn>
 
     <v-btn
-    v-if="auth.user?.avatar_key"
-    value="/"
-    to="/me"
+      v-if="auth.user?.avatar_key"
+      value="/"
+      to="/me"
     >
-    <UserAvatar :user="auth.user" size="24" />
-    <span>マイページ</span>
+      <v-badge
+        dot
+        color="error"
+        :model-value="unreadCount > 0"
+        floating
+      >
+        <UserAvatar :user="auth.user" size="24" />
+      </v-badge>
+      <span>マイページ</span>
     </v-btn>
 
     <v-btn
-    v-else
-    value="/"
-    to="/me"
+      v-else
+      value="/"
+      to="/me"
     >
-    <v-icon icon="mdi-account-circle" />
-    <span>マイページ</span>
+      <v-badge
+        dot
+        color="error"
+        :model-value="unreadCount > 0"
+        floating
+      >
+        <v-icon icon="mdi-account-circle" />
+      </v-badge>
+      <span>マイページ</span>
     </v-btn>
   </v-bottom-navigation>
 </template>
 
 <script setup lang="ts">
-import { computed,ref,watch } from 'vue'
-import UserAvatar from '../UserAvatar.vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import UserAvatar from '../UserAvatar.vue'
 
 const route = useRoute()
 const auth = useAuthStore()
-
+const { apiFetch } = useApi()
 
 const currentRoute = computed(() => route.path)
+const unreadCount = ref(0)
+let unreadCountTimer: ReturnType<typeof setInterval> | undefined
+
+const loadUnreadCount = async () => {
+  const accountId = auth.user?.id
+  if (!accountId) {
+    unreadCount.value = 0
+    return
+  }
+
+  try {
+    const response = await apiFetch<{ unread_count: number }>('/api/notifications/unread-count')
+    if (auth.user?.id === accountId) {
+      unreadCount.value = response.unread_count
+    }
+  } catch (error) {
+    console.warn('[bottom-navigation] failed to load unread notification count', error)
+  }
+}
+
+onMounted(() => {
+  void loadUnreadCount()
+  unreadCountTimer = setInterval(() => {
+    void loadUnreadCount()
+  }, 10_000)
+})
+
+watch(
+  [() => auth.user?.id, () => route.path],
+  () => {
+    void loadUnreadCount()
+  },
+)
+
+onUnmounted(() => {
+  if (unreadCountTimer) clearInterval(unreadCountTimer)
+})
 </script>
 
 <style scoped>
