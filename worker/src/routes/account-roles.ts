@@ -160,6 +160,30 @@ async function handleSiteSettings(
     })
   }
 
+  if (
+    subPath.length === 2 &&
+    subPath[0] === "important-admins" &&
+    subPath[1] === "candidates" &&
+    request.method === "GET"
+  ) {
+    const admin = await requireImportantSettingsAdmin(request, env)
+    if (admin instanceof Response) return admin
+    const result = await env.DB.prepare(`
+      SELECT u.id, u.student_number, u.name, u.nickname
+      FROM users u
+      INNER JOIN user_account_roles admin_uar ON admin_uar.user_id = u.id
+      INNER JOIN account_roles admin_role ON admin_role.id = admin_uar.account_role_id
+      LEFT JOIN user_account_roles important_uar ON important_uar.user_id = u.id
+      LEFT JOIN account_roles important_role
+        ON important_role.id = important_uar.account_role_id
+        AND important_role.name = ?
+      WHERE admin_role.name = 'admin'
+        AND important_role.id IS NULL
+      ORDER BY u.student_number
+    `).bind(IMPORTANT_SETTINGS_ROLE).all<UserOption>()
+    return Response.json({ users: result.results })
+  }
+
   if (subPath.length === 1 && subPath[0] === "important-admins") {
     const admin = await requireImportantSettingsAdmin(request, env)
     if (admin instanceof Response) return admin
