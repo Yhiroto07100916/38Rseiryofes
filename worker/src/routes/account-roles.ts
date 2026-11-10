@@ -28,7 +28,7 @@ function generateId(): string {
 const IMPORTANT_SETTINGS_ROLE = "important_settings_admin"
 
 const SETTING_RULES: Record<string, {
-  type: "string" | "boolean" | "integer"
+  type: "string" | "boolean" | "integer" | "json"
   maxLength?: number
   minLength?: number
   min?: number
@@ -61,6 +61,16 @@ async function handleSiteSettings(
   pathParts: string[],
 ): Promise<Response> {
   const subPath = pathParts.slice(1)
+
+  if (subPath.length === 1 && subPath[0] === "force-logout" && request.method === "POST") {
+    const admin = await requireImportantSettingsAdmin(request, env)
+    if (admin instanceof Response) return admin
+    const result = await env.DB.prepare("DELETE FROM sessions").run()
+    await env.DB.prepare(
+      "INSERT INTO site_setting_logs (id, setting_key, old_value, new_value, changed_by) VALUES (?, 'security.force_logout_all_sessions', ?, ?, ?)",
+    ).bind(crypto.randomUUID(), String(result.meta?.changes ?? 0), "all_sessions_invalidated", admin.userId).run()
+    return Response.json({ success: true, invalidated_sessions: result.meta?.changes ?? 0 })
+  }
 
   if (subPath.length === 1 && subPath[0] === "important-admins") {
     const admin = await requireImportantSettingsAdmin(request, env)
@@ -255,6 +265,7 @@ async function handleSiteSettings(
         (rule.type === "string" && (typeof value !== "string" || value.length < (rule.minLength ?? 0) || value.length > (rule.maxLength ?? 1000))) ||
         (rule.type === "boolean" && typeof value !== "boolean") ||
         (rule.type === "integer" && (!Number.isInteger(value) || (value as number) < (rule.min ?? -Infinity) || (value as number) > (rule.max ?? Infinity))) ||
+        (rule.type === "json" && !isValidSettingValue(key, value)) ||
         (key === "site_visibility" && value !== "public" && value !== "private")
       ) {
         return Response.json({ error: `Invalid value for setting: ${key}` }, { status: 400 })
