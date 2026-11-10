@@ -464,7 +464,7 @@
 </template>
 
 <script setup lang="ts">
-import { formatJstDateTimeLocal, jstDateTimeLocalToIso } from '~/utils/jst'
+import { formatJstDateTimeLocal, jstDateTimeLocalToIso , getDefaultTimeZone} from '~/utils/jst'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useApi } from '~/composables/useApi'
 import { useAuthStore } from '~/stores/auth'
@@ -619,7 +619,7 @@ function formatDate(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: getDefaultTimeZone(),
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
