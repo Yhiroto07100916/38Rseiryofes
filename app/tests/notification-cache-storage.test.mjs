@@ -12,6 +12,7 @@ const {
   deleteNotificationCache,
   loadNotificationCache,
   saveNotificationCache,
+  validateNotificationCacheClock,
 } = await import("../app/utils/notification-cache.ts")
 
 const DATABASE_NAME = "38r-notification-cache"
