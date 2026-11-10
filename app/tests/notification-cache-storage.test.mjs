@@ -91,3 +91,35 @@ test("blocks writes after deletion until the next cache load", async () => {
     ["e-3"],
   )
 })
+
+test("preserves the original cache freshness when updating cached contents", async () => {
+  await saveNotificationCache("account-f", [notification("f-1")], 1)
+  const original = readFakeIndexedDBRecord(DATABASE_NAME, STORE_NAME, "account-f")
+  assert.ok(original)
+
+  const expiredSavedAt = Date.now() - 5 * 60 * 1000 - 1_000
+  original.savedAt = expiredSavedAt
+  original.clientTimeAtSave = expiredSavedAt
+  original.serverTimeAtSave = expiredSavedAt - 500
+  original.clockOffsetMs = -500
+  writeFakeIndexedDBRecord(DATABASE_NAME, STORE_NAME, "account-f", original)
+
+  await saveNotificationCache(
+    "account-f",
+    [notification("f-2")],
+    2,
+    undefined,
+    true,
+  )
+
+  const updated = readFakeIndexedDBRecord(DATABASE_NAME, STORE_NAME, "account-f")
+  assert.ok(updated)
+  assert.equal(updated.savedAt, expiredSavedAt)
+  assert.equal(updated.serverTimeAtSave, expiredSavedAt - 500)
+  assert.equal(updated.clockOffsetMs, -500)
+  assert.deepEqual(updated.notifications.map(item => item.id), ["f-2"])
+
+  const cached = await loadNotificationCache("account-f")
+  assert.equal(cached?.expired, true)
+  assert.equal(cached?.unreadCount, 2)
+})
