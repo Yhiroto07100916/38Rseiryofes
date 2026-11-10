@@ -178,6 +178,19 @@ describe("role member endpoints", () => {
 })
 
 
+async function createUserSession() {
+  const userId = await createUser("サイトアクセス制御テスト")
+  const sessionId = crypto.randomUUID()
+  sessionIds.push(sessionId)
+
+  await env.DB.prepare(`
+    INSERT INTO sessions (id, user_id, expires_at)
+    VALUES (?, ?, datetime('now', '+1 day'))
+  `).bind(sessionId, userId).run()
+
+  return `session_id=${sessionId}`
+}
+
 async function createImportantAdminSession() {
   const cookie = await createAdminSession()
   const sessionId = cookie.slice("session_id=".length)
@@ -337,6 +350,71 @@ describe("site settings authorization", () => {
     } finally {
       await env.DB.prepare(
         "UPDATE site_settings SET value = 'true' WHERE key = 'login_enabled'",
+      ).run()
+    }
+  })
+
+  it("requires a session when the site is private", async () => {
+    await env.DB.prepare(
+      "UPDATE site_settings SET value = '\\"private\\"' WHERE key = 'site_visibility'",
+    ).run()
+
+    try {
+      const anonymous = await SELF.fetch("http://example.com/api/not-a-real-route")
+      expect(anonymous.status).toBe(401)
+      expect(await anonymous.json()).toMatchObject({
+        error: "Authentication required",
+      })
+
+      const authenticated = await SELF.fetch("http://example.com/api/not-a-real-route", {
+        headers: { Cookie: await createUserSession() },
+      })
+      expect(authenticated.status).toBe(404)
+
+      const status = await SELF.fetch("http://example.com/api/site-status")
+      expect(status.status).toBe(200)
+      expect(await status.json()).toMatchObject({
+        site_visibility: "private",
+        maintenance_mode: false,
+      })
+    } finally {
+      await env.DB.prepare(
+        "UPDATE site_settings SET value = '\\"public\\"' WHERE key = 'site_visibility'",
+      ).run()
+    }
+  })
+
+  it("restricts maintenance mode to administrators while allowing the login flow", async () => {
+    await env.DB.prepare(
+      "UPDATE site_settings SET value = 'true' WHERE key = 'maintenance_mode'",
+    ).run()
+
+    try {
+      const anonymous = await SELF.fetch("http://example.com/api/not-a-real-route")
+      expect(anonymous.status).toBe(503)
+
+      const regularUser = await SELF.fetch("http://example.com/api/not-a-real-route", {
+        headers: { Cookie: await createUserSession() },
+      })
+      expect(regularUser.status).toBe(503)
+      expect(await regularUser.json()).toMatchObject({
+        error: "Maintenance mode",
+      })
+
+      const admin = await SELF.fetch("http://example.com/api/not-a-real-route", {
+        headers: { Cookie: await createAdminSession() },
+      })
+      expect(admin.status).toBe(404)
+
+      const login = await SELF.fetch("http://example.com/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+      expect(login.status).toBe(400)
+    } finally {
+      await env.DB.prepare(
+        "UPDATE site_settings SET value = 'false' WHERE key = 'maintenance_mode'",
       ).run()
     }
   })
