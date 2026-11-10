@@ -220,14 +220,25 @@ afterEach(async () => {
       await env.FILES_BUCKET.delete(objectKey);
     }
 
-    await env.DB.prepare("DELETE FROM user_permissions WHERE user_id = ?")
-      .bind(fixture.userId).run();
-
-    await env.DB.prepare("DELETE FROM users WHERE id = ?")
-      .bind(fixture.recipientUserId).run();
-
-    await env.DB.prepare("DELETE FROM users WHERE id = ?")
-      .bind(fixture.userId).run();
+    for (const userId of [fixture.recipientUserId, fixture.userId]) {
+      await env.DB.prepare(
+        "DELETE FROM notifications WHERE recipient_user_id = ? OR actor_user_id = ?",
+      ).bind(userId, userId).run();
+      await env.DB.prepare("DELETE FROM notification_user_settings WHERE user_id = ?")
+        .bind(userId).run();
+      await env.DB.prepare("DELETE FROM notification_category_settings WHERE user_id = ?")
+        .bind(userId).run();
+      await env.DB.prepare("DELETE FROM push_subscriptions WHERE user_id = ?")
+        .bind(userId).run();
+      await env.DB.prepare("DELETE FROM user_roles WHERE user_id = ?")
+        .bind(userId).run();
+      await env.DB.prepare("DELETE FROM user_account_roles WHERE user_id = ?")
+        .bind(userId).run();
+      await env.DB.prepare("DELETE FROM user_permissions WHERE user_id = ?")
+        .bind(userId).run();
+      await env.DB.prepare("DELETE FROM users WHERE id = ?")
+        .bind(userId).run();
+    }
   }
 });
 
