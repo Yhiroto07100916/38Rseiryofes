@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 type Fixture = {
   userId: string;
+  recipientUserId: string;
   sessionId: string;
   receiptId: string;
   taskId: string;
@@ -40,10 +41,12 @@ async function grantPermissions(userId: string, keys: string[]) {
 
 async function createFixture(): Promise<Fixture> {
   const userId = crypto.randomUUID();
+  const recipientUserId = crypto.randomUUID();
   const sessionId = crypto.randomUUID();
 
   const fixture: Fixture = {
     userId,
+    recipientUserId,
     sessionId,
     receiptId: crypto.randomUUID(),
     taskId: crypto.randomUUID(),
@@ -66,6 +69,11 @@ async function createFixture(): Promise<Fixture> {
     INSERT INTO users (id, student_number, name, nickname)
     VALUES (?, ?, ?, NULL)
   `).bind(userId, `files-test-${userId}`, "ファイル権限テストユーザー").run();
+
+  await env.DB.prepare(`
+    INSERT INTO users (id, student_number, name, nickname)
+    VALUES (?, ?, ?, NULL)
+  `).bind(recipientUserId, `files-recipient-${recipientUserId}`, "通知受信ユーザー").run();
 
   await env.DB.prepare(`
     INSERT INTO sessions (id, user_id, expires_at)
@@ -212,6 +220,9 @@ afterEach(async () => {
 
     await env.DB.prepare("DELETE FROM user_permissions WHERE user_id = ?")
       .bind(fixture.userId).run();
+
+    await env.DB.prepare("DELETE FROM users WHERE id = ?")
+      .bind(fixture.recipientUserId).run();
 
     await env.DB.prepare("DELETE FROM users WHERE id = ?")
       .bind(fixture.userId).run();
@@ -420,4 +431,50 @@ describe("Files access permissions", () => {
     expect(body.files[0].id).toBe(fixture.fileIds.receipt);
     expect(body.count).toBe(1);
   });
+  it("creates upload notifications only when the uploader opts in", async () => {
+    const fixture = await createFixture();
+    const category = await env.DB.prepare(
+      "SELECT slug FROM file_categories WHERE is_active = 1 LIMIT 1",
+    ).first<{ slug: string }>();
+    expect(category).not.toBeNull();
+
+    const formData = new FormData();
+    formData.set("file", new File(["notification test"], "notify.txt", { type: "text/plain" }));
+    formData.set("category", category!.slug);
+    formData.set("notify", "true");
+
+    const response = await SELF.fetch("http://example.com/api/files", {
+      method: "POST",
+      headers: { Cookie: fixture.cookie },
+      body: formData,
+    });
+
+    expect(response.status).toBe(201);
+    const uploaded = await response.json() as { id: string; object_key: string };
+    fixture.objectKeys.push(uploaded.object_key);
+
+    const notification = await env.DB.prepare(`
+      SELECT event_key, recipient_user_id, body, target_url
+      FROM notifications
+      WHERE entity_type = 'file' AND entity_id = ?
+    `).bind(uploaded.id).first<{
+      event_key: string;
+      recipient_user_id: string;
+      body: string;
+      target_url: string;
+    }>();
+
+    expect(notification).toMatchObject({
+      event_key: "files.uploaded",
+      recipient_user_id: fixture.recipientUserId,
+      body: "notify.txt",
+      target_url: "/files",
+    });
+
+    const actorNotification = await env.DB.prepare(
+      "SELECT id FROM notifications WHERE entity_id = ? AND recipient_user_id = ?",
+    ).bind(uploaded.id, fixture.userId).first();
+    expect(actorNotification).toBeNull();
+  });
+
 });
