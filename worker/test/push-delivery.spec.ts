@@ -206,6 +206,28 @@ describe("Web Push delivery queue", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("does not send a queued news notice to a subscription reassigned to another account", async () => {
+    const subscriptionId = await createSubscription()
+    const newsId = await createNews()
+    const originalOwner = await env.DB.prepare(
+      "SELECT user_id FROM push_subscriptions WHERE id = ?",
+    ).bind(subscriptionId).first<{ user_id: string }>()
+    const newOwnerId = await createViewer()
+    expect(originalOwner?.user_id).toBeTruthy()
+
+    await enqueueNewsPushDeliveries(pushEnv, { id: newsId })
+    await env.DB.prepare("UPDATE push_subscriptions SET user_id = ? WHERE id = ?")
+      .bind(newOwnerId, subscriptionId).run()
+
+    const fetchMock = vi.fn(async () => new Response(null, { status: 201 }))
+    vi.stubGlobal("fetch", fetchMock)
+    await processDuePushDeliveries(pushEnv)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    const delivery = await getDelivery(newsId)
+    expect(delivery?.status).toBe("failed")
+  })
+
   it("requeues an existing news notification for all current subscriptions", async () => {
     await createSubscription()
     const newsId = await createNews()
