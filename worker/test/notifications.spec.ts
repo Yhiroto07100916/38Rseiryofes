@@ -8,12 +8,16 @@ import { handleNotifications } from "../src/routes/notifications"
 const userIds: string[] = []
 const sessionIds: string[] = []
 const notificationIds: string[] = []
+const triggerNames: string[] = []
 
 beforeAll(async () => {
   await applyD1Migrations(env.DB, JSON.parse(__D1_MIGRATIONS__))
 })
 
 afterEach(async () => {
+  for (const name of triggerNames.splice(0)) {
+    await env.DB.prepare(`DROP TRIGGER IF EXISTS ${name}`).run()
+  }
   for (const id of notificationIds.splice(0)) {
     await env.DB.prepare("DELETE FROM notifications WHERE id = ?").bind(id).run()
   }
@@ -284,6 +288,52 @@ describe("Notification center API", () => {
     ).bind(user.userId).first<{ count: number }>()
     expect(count?.count).toBe(0)
   })
+  it("leaves notifications arriving during mark-all-read unread", async () => {
+    const user = await createUser()
+    const existingUnreadId = await insertNotification(user.userId)
+    const arrivingNotificationId = crypto.randomUUID()
+    notificationIds.push(arrivingNotificationId)
+    const triggerName = "notification_arrives_during_read_all_" + crypto.randomUUID().replace(/-/g, "")
+    triggerNames.push(triggerName)
+
+    await env.DB.prepare(
+      `CREATE TRIGGER ${triggerName}
+       AFTER UPDATE OF is_read ON notifications
+       WHEN NEW.id = '${existingUnreadId}' AND NEW.is_read = 1
+       BEGIN
+         INSERT INTO notifications (
+           id, recipient_user_id, event_key, category, title, body,
+           target_url, dedupe_key, is_read, created_at, expires_at
+         ) VALUES (
+           '${arrivingNotificationId}', '${user.userId}', 'test.arrived_during_read_all',
+           'tasks', '処理中に届いた通知', '通知本文', '/tasks/test',
+           'test:${arrivingNotificationId}', 0, datetime('now'), datetime('now', '+90 days')
+         );
+       END`,
+    ).run()
+
+    const response = await handleNotifications(
+      request("POST", "/read-all", user.cookie),
+      env,
+      ["read-all"],
+    )
+    const data = await response.json() as {
+      updated_count: number
+      updated_ids: string[]
+      unread_count: number
+    }
+
+    expect(response.status).toBe(200)
+    expect(data.updated_count).toBe(1)
+    expect(data.updated_ids).toEqual([existingUnreadId])
+    expect(data.unread_count).toBe(1)
+
+    const arrivingNotification = await env.DB.prepare(
+      "SELECT is_read FROM notifications WHERE id = ?",
+    ).bind(arrivingNotificationId).first<{ is_read: number }>()
+    expect(arrivingNotification?.is_read).toBe(0)
+  })
+
   it("returns zero when mark-all-read is pressed with no unread notifications", async () => {
     const user = await createUser()
     await insertNotification(user.userId, { isRead: 1 })
