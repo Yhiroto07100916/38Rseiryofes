@@ -1,6 +1,7 @@
 import { isFileLinkConflict } from "../lib/file-link-errors"
 import { hasPermission, requireAuth } from "../lib/authz"
 import { createNotificationsForUsers } from "../lib/notifications"
+import { notifyFileLinked } from "../lib/file-notifications"
 
 type Env = {
   DB: D1Database
@@ -616,6 +617,12 @@ export async function handleAccounting(
         }
 
         await env.DB.batch(statements)
+
+        try {
+          for (const fileId of fileIds) await notifyFileLinked(env, fileId, auth.user.id)
+        } catch (notificationError) {
+          console.error("Failed to create linked-file notifications:", notificationError)
+        }
 
         return json({
           files: (
