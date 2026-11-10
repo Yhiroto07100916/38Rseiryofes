@@ -159,10 +159,7 @@ export const useNotifications = () => {
         "/api/notifications?" + buildQuery(false),
       )
       const existing = new Map(notifications.value.map(item => [item.id, item]))
-      const merged = response.notifications.map(item => {
-        const current = existing.get(item.id)
-        return current ? { ...item, is_read: current.is_read } : item
-      })
+      const merged = response.notifications
       const incomingIds = new Set(merged.map(item => item.id))
       notifications.value = [
         ...merged,
