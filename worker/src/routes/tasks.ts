@@ -1,5 +1,6 @@
 import { isFileLinkConflict } from "../lib/file-link-errors"
 import { hasPermission, requireAuth } from "../lib/authz"
+import { createNotificationsForUsers } from "../lib/notifications"
 
 export interface Task {
   id: string
@@ -817,6 +818,30 @@ export async function handleTasks(
       }
 
       await env.DB.batch(statements)
+
+      try {
+        const recipients = await env.DB.prepare(
+          "SELECT user_id FROM task_assignees WHERE task_id = ? " +
+          "UNION SELECT ur.user_id FROM task_roles tr " +
+          "INNER JOIN user_roles ur ON ur.role_id = tr.role_id " +
+          "WHERE tr.task_id = ?",
+        ).bind(id, id).all<{ user_id: string }>()
+
+        await createNotificationsForUsers(env, {
+          recipientUserIds: recipients.results.map(row => row.user_id),
+          eventKey: "task.created",
+          category: "tasks",
+          title: "新しいタスクが割り当てられました",
+          body: title,
+          targetUrl: "/tasks/" + id,
+          actorUserId: auth.user.id,
+          entityType: "task",
+          entityId: id,
+          dedupeKey: "task.created:" + id,
+        })
+      } catch (notificationError) {
+        console.error("Failed to create task notifications:", notificationError)
+      }
     } catch (error) {
       if (isFileLinkConflict(error)) {
         return Response.json(
