@@ -25,6 +25,9 @@ self.addEventListener('push', (event) => {
       notificationId: typeof payload.notificationId === 'string'
         ? payload.notificationId
         : null,
+      notificationReadUrl: typeof payload.notificationReadUrl === 'string'
+        ? payload.notificationReadUrl
+        : null,
     },
   }
 
@@ -48,15 +51,30 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil((async () => {
     const target = new URL(targetUrl, self.location.origin)
     const notificationId = event.notification.data?.notificationId
+    const rawNotificationReadUrl = event.notification.data?.notificationReadUrl
+    let notificationReadUrl = null
+    if (typeof rawNotificationReadUrl === 'string') {
+      try {
+        const candidate = new URL(rawNotificationReadUrl)
+        const allowedOrigin = candidate.origin === self.location.origin ||
+          candidate.origin === 'https://api.38r-seiryofes.com' ||
+          (candidate.hostname === 'localhost' && self.location.hostname === 'localhost')
+        if (allowedOrigin && candidate.protocol !== 'javascript:') {
+          notificationReadUrl = candidate
+        }
+      } catch {
+        notificationReadUrl = null
+      }
+    }
 
-    // Push通知から開いた場合も、ログイン中なら正本の既読状態を更新する。
+    // APIはサイトと別ドメイン。Push payloadに含まれる正規のAPI URLへ既読を保存する。
     // 既読APIの応答を待たずに画面遷移を開始し、オフライン時も遷移を遅らせない。
-    const markReadPromise = typeof notificationId === 'string' && notificationId.length <= 64
+    const markReadPromise = typeof notificationId === 'string' && notificationId.length <= 64 && notificationReadUrl
       ? (async () => {
           const controller = new AbortController()
           const timeout = setTimeout(() => controller.abort(), 2500)
           try {
-            await fetch(new URL('/api/notifications/' + encodeURIComponent(notificationId) + '/read', self.location.origin), {
+            await fetch(notificationReadUrl.toString(), {
               method: 'PATCH',
               credentials: 'include',
               headers: { 'Content-Type': 'application/json' },
