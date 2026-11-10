@@ -1030,6 +1030,8 @@
 import { useConfirmDialog } from '~/composables/useConfirmDialog'
 import { jstDateKey } from '~/utils/jst'
 
+const siteStatus = useSiteStatus()
+
 definePageMeta({
   permissions: ['accounting.view'],
   middleware: ['auth'],
@@ -2091,8 +2093,9 @@ const recognizeReceipt = async () => {
     return
   }
 
-  if (file.size > 10 * 1024 * 1024) {
-    errorMessage.value = '画像は10MB以下にしてください。'
+  const maxOcrFileSizeMb = Math.min(10, siteStatus.value?.upload_max_file_size_mb ?? 25)
+  if (file.size > maxOcrFileSizeMb * 1024 * 1024) {
+    errorMessage.value = `画像は${maxOcrFileSizeMb}MB以下にしてください。`
     return
   }
 
