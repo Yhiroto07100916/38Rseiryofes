@@ -71,6 +71,7 @@ export const useNotifications = () => {
   let unreadSuccessHandle: ReturnType<typeof setTimeout> | undefined
   let requestInProgress = false
   let unreadRequestInProgress = false
+  let unreadAbortController: AbortController | undefined
   let pendingUnreadRefresh = false
   let pendingResetFetch = false
   let manualRefreshRequested = false
@@ -436,10 +437,14 @@ export const useNotifications = () => {
     }
 
     const requestAccountId = auth.user?.id ?? null
+    const controller = new AbortController()
+    unreadAbortController = controller
     unreadRequestInProgress = true
     unreadCountLoading.value = true
     try {
-      const response = await apiFetch<{ unread_count: number; server_time?: string }>("/api/notifications/unread-count")
+      const response = await apiFetch<{ unread_count: number; server_time?: string }>("/api/notifications/unread-count", {
+        signal: controller.signal,
+      })
       if (auth.user?.id !== requestAccountId) return
       await validateServerClock(requestAccountId, response.server_time)
       unreadCount.value = response.unread_count
@@ -462,6 +467,7 @@ export const useNotifications = () => {
         scheduleUnreadRetry()
       }
     } finally {
+      if (unreadAbortController === controller) unreadAbortController = undefined
       unreadRequestInProgress = false
       unreadCountLoading.value = false
       if (pendingUnreadRefresh) {
@@ -662,6 +668,8 @@ export const useNotifications = () => {
     () => auth.user?.id,
     (accountId, previousAccountId) => {
       if (accountId === previousAccountId) return
+      unreadAbortController?.abort()
+      unreadAbortController = undefined
 
       notifications.value = []
       cacheExpired.value = false
