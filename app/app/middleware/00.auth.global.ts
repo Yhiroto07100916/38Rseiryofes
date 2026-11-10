@@ -1,4 +1,6 @@
 export default defineNuxtRouteMiddleware(async (to) => {
+  let requiresLogin = true
+
   if (import.meta.client) {
     const config = useRuntimeConfig()
     const apiBaseUrl = String(config.public.apiBaseUrl).replace(/\/$/, "")
@@ -7,10 +9,14 @@ export default defineNuxtRouteMiddleware(async (to) => {
       const siteStatus = await $fetch<{
         maintenance_mode: boolean
         maintenance_message: string
+        require_login: boolean
+        site_visibility: "public" | "private"
         is_admin: boolean
       }>(`${apiBaseUrl}/api/site-status`, {
         credentials: "include",
       })
+
+      requiresLogin = siteStatus.require_login || siteStatus.site_visibility === "private"
 
       if (
         siteStatus.maintenance_mode &&
@@ -42,7 +48,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     await auth.fetchMe()
   }
 
-  if (!auth.isLoggedIn) {
+  if (!auth.isLoggedIn && requiresLogin) {
     return navigateTo("/login")
   }
 
