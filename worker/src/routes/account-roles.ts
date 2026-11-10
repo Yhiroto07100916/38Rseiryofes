@@ -144,7 +144,14 @@ async function handleSiteSettings(
     } catch {
       databaseStatus = "error"
     }
-    const version = (env as Env & { APP_VERSION?: string }).APP_VERSION ?? "未設定"
+    const versionMetadata = (env as Env & {
+      CF_VERSION_METADATA?: { id?: string; tag?: string }
+      APP_VERSION?: string
+    }).CF_VERSION_METADATA
+    const version = versionMetadata?.tag ||
+      versionMetadata?.id?.slice(0, 12) ||
+      (env as Env & { APP_VERSION?: string }).APP_VERSION ||
+      "未設定"
     return Response.json({
       api_status: "ok",
       database_status: databaseStatus,
