@@ -15,6 +15,18 @@
         @click="refresh"
       />
     </div>
+    <v-alert
+      v-if="pushPermissionDenied"
+      type="info"
+      variant="tonal"
+      density="compact"
+      class="mb-4"
+    >
+      プッシュ通知がブラウザまたは端末の設定でブロックされています。端末側の設定から38Rサイトの通知を許可できます。アプリ内通知は引き続き利用できます。
+      <template #append>
+        <v-btn size="small" variant="text" to="/me">設定方法</v-btn>
+      </template>
+    </v-alert>
     <div v-if="refreshMessage" class="text-caption text-medium-emphasis mb-3">
       {{ refreshMessage }}
     </div>
@@ -188,7 +200,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue"
+import { onMounted, ref, watch } from "vue"
 import { useNotifications, type AppNotification, type NotificationCategory } from "~/composables/useNotifications"
 
 definePageMeta({ middleware: "auth" })
@@ -219,6 +231,12 @@ const {
 
 const snackbar = ref(false)
 const snackbarText = ref("")
+const pushPermissionDenied = ref(false)
+
+onMounted(() => {
+  pushPermissionDenied.value = import.meta.client &&
+    typeof Notification !== "undefined" && Notification.permission === "denied"
+})
 
 watch([successMessage, unreadCountSuccess], ([listSuccess, countSuccess]) => {
   const message = listSuccess || countSuccess
