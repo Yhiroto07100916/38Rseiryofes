@@ -328,12 +328,17 @@ describe("38R tool inventory and lending ledger", () => {
   it("sends due-soon, timer-end, and overdue notifications to everyone", async () => {
     const manager = await createUser("期限通知担当")
     const onCampus = await createUser("期限前の在校ユーザー")
+    const offCampus = await createUser("期限前の校外ユーザー")
     const checkedAt = new Date().toISOString()
     const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
     await env.DB.prepare(
       "INSERT INTO presence_states (user_id, status, method, checked_at, expires_at, local_date) " +
       "VALUES (?, 'inside', 'manual', ?, ?, date('now', '+9 hours'))",
     ).bind(onCampus.userId, checkedAt, expiresAt).run()
+    await env.DB.prepare(
+      "INSERT INTO presence_states (user_id, status, method, checked_at, expires_at, local_date) " +
+      "VALUES (?, 'outside', 'gps', ?, ?, date('now', '+9 hours'))",
+    ).bind(offCampus.userId, checkedAt, expiresAt).run()
     await grant(manager.userId, [
       "tool_rental.view",
       "tool_rental.manage",
