@@ -177,6 +177,7 @@
 import { jstDateKey, jstDateTimeLocalToIso } from '~/utils/jst'
 import { onMounted, ref } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
+import TaskLinksEditor from '~/components/tasks/TaskLinksEditor.vue'
 import { useSnackbar } from '~/composables/useSnackbar'
 import { useAuthStore } from '~/stores/auth'
 import {
