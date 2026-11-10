@@ -97,7 +97,7 @@
               density="compact"
               hide-details
               class="my-1"
-              :disabled="settingsSaving || !globalPushEnabled"
+              :disabled="settingsSaving"
               @update:model-value="value => updateCategoryPush(category.value, value)"
             />
           </template>
