@@ -13,8 +13,7 @@
       </v-btn>
     </div>
 
-    <template v-for="(taskLink, index) of modelValue" :key="index">
-      <div class="d-flex align-start ga-2 mb-2">
+    <div v-for="(taskLink, index) in modelValue" :key="index" class="d-flex align-start ga-2 mb-2">
       <div class="flex-grow-1">
         <v-text-field
           :model-value="taskLink.title"
@@ -43,8 +42,7 @@
         aria-label="リンクを削除"
         @click="removeLink(index)"
       />
-      </div>
-    </template>
+    </div>
 
     <div v-if="helpText" class="text-caption text-medium-emphasis">
       {{ helpText }}
