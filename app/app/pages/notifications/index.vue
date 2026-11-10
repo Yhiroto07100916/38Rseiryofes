@@ -1,5 +1,9 @@
 <template>
-  <v-container class="py-5 px-4 notification-page">
+  <v-container
+    class="py-5 px-4 notification-page"
+    @touchstart.passive="handleTouchStart"
+    @touchend.passive="handleTouchEnd"
+  >
     <div class="d-flex align-center mb-1">
       <div class="flex-grow-1">
         <h1 class="text-h5 font-weight-bold">通知</h1>
