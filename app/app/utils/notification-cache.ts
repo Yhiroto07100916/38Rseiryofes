@@ -253,19 +253,22 @@ export async function validateNotificationCacheClock(
 export async function deleteNotificationCache(accountId: string): Promise<void> {
   if (!accountId) return
 
-  // API取得完了後、保存処理だけが残っている場合はその保存を優先して保持する。
-  const pendingSave = pendingCacheSaves.get(accountId)
-  if (pendingSave) {
-    await pendingSave
+  // ログアウト時点ですでに始まっている保存は完了させ、その直後に必ず削除する。
+  // 後続の保存がDBオープン待ちで始まった場合も、保存完了後に削除する。
+  let database = await openDatabase()
+  while (true) {
+    const pendingSave = pendingCacheSaves.get(accountId)
+    if (pendingSave) {
+      await pendingSave.catch(() => undefined)
+      continue
+    }
+    database = await openDatabase()
+    const saveStartedWhileOpening = pendingCacheSaves.get(accountId)
+    if (saveStartedWhileOpening) {
+      await saveStartedWhileOpening.catch(() => undefined)
+      continue
+    }
+    await deleteRecord(database, accountId)
     return
   }
-
-  const database = await openDatabase()
-  // DBオープン待ちの間に保存が開始された場合も、保存完了後のキャッシュを保持する。
-  const saveStartedWhileOpening = pendingCacheSaves.get(accountId)
-  if (saveStartedWhileOpening) {
-    await saveStartedWhileOpening
-    return
-  }
-  await deleteRecord(database, accountId)
 }
