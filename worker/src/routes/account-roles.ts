@@ -173,14 +173,22 @@ async function handleSiteSettings(
       FROM users u
       INNER JOIN user_account_roles admin_uar ON admin_uar.user_id = u.id
       INNER JOIN account_roles admin_role ON admin_role.id = admin_uar.account_role_id
-      LEFT JOIN user_account_roles important_uar ON important_uar.user_id = u.id
-      LEFT JOIN account_roles important_role
-        ON important_role.id = important_uar.account_role_id
-        AND important_role.name = ?
       WHERE admin_role.name = 'admin'
-        AND important_role.id IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM user_account_roles important_uar
+          INNER JOIN account_roles important_role
+            ON important_role.id = important_uar.account_role_id
+          WHERE important_uar.user_id = u.id
+            AND important_role.name = ?
+        )
       ORDER BY u.student_number
-    `).bind(IMPORTANT_SETTINGS_ROLE).all<UserOption>()
+    `).bind(IMPORTANT_SETTINGS_ROLE).all<{
+      id: string
+      student_number: string
+      name: string
+      nickname: string | null
+    }>()
     return Response.json({ users: result.results })
   }
 
