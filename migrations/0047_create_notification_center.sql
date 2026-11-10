@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   title TEXT NOT NULL,
   body TEXT NOT NULL DEFAULT '',
   target_url TEXT,
+  required_permission TEXT,
   actor_user_id TEXT,
   entity_type TEXT,
   entity_id TEXT,
