@@ -236,11 +236,24 @@ describe("Notification center API", () => {
       env,
       ["read-all"],
     )
-    const data = await response.json() as { updated_count: number; updated_ids: string[] }
+    const data = await response.json() as {
+      updated_count: number
+      updated_ids: string[]
+      updated_read_states: Array<{ id: string; read_updated_at: string }>
+    }
 
     expect(response.status).toBe(200)
     expect(data.updated_count).toBe(1)
     expect(data.updated_ids).toEqual([unreadId])
+    expect(data.updated_read_states).toHaveLength(1)
+    expect(data.updated_read_states[0]?.id).toBe(unreadId)
+    expect(data.updated_read_states[0]?.read_updated_at).toBeTruthy()
+
+    const storedReadState = await env.DB.prepare(
+      "SELECT is_read, read_updated_at FROM notifications WHERE id = ?",
+    ).bind(unreadId).first<{ is_read: number; read_updated_at: string }>()
+    expect(storedReadState?.is_read).toBe(1)
+    expect(storedReadState?.read_updated_at).toBe(data.updated_read_states[0]?.read_updated_at)
 
     const count = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM notifications WHERE recipient_user_id = ? AND is_read = 0",
