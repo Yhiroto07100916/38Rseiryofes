@@ -144,7 +144,7 @@ export async function handleNotifications(
       const batch = targets.results.slice(offset, offset + 90)
       const results = await env.DB.batch(
         batch.map(target => env.DB.prepare(
-          "UPDATE notifications SET is_read = 1 WHERE id = ? AND recipient_user_id = ?",
+          "UPDATE notifications SET is_read = 1 WHERE id = ? AND recipient_user_id = ? AND is_read = 0",
         ).bind(target.id, userId)),
       )
       updatedCount += results.reduce(
