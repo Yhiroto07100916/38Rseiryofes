@@ -720,14 +720,21 @@ async function canAccessNotificationTarget(
       has_submission: number
     }>()
 
-    if (!links || links.has_submission) return false
-    if (links.has_receipt && !(await hasPermission(env, delivery.recipient_user_id, "accounting.view"))) {
-      return false
+    if (!links) return false
+    const linkedAccessChecks: Promise<boolean>[] = []
+    if (links.has_receipt) {
+      linkedAccessChecks.push(hasPermission(env, delivery.recipient_user_id, "accounting.view"))
     }
-    if (links.has_task && !(await hasPermission(env, delivery.recipient_user_id, "tasks.view"))) {
-      return false
+    if (links.has_task) {
+      linkedAccessChecks.push(hasPermission(env, delivery.recipient_user_id, "tasks.view"))
     }
-    if (links.has_decision && !(await hasPermission(env, delivery.recipient_user_id, "decisions.view"))) {
+    if (links.has_decision) {
+      linkedAccessChecks.push(hasPermission(env, delivery.recipient_user_id, "decisions.view"))
+    }
+    if (links.has_submission) {
+      linkedAccessChecks.push(hasPermission(env, delivery.recipient_user_id, "submissions.view"))
+    }
+    if (linkedAccessChecks.length > 0 && !(await Promise.all(linkedAccessChecks)).some(Boolean)) {
       return false
     }
   }
