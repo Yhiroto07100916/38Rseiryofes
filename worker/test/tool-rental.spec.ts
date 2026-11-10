@@ -2,6 +2,7 @@ declare const __D1_MIGRATIONS__: string
 
 import { applyD1Migrations, env, SELF } from "cloudflare:test"
 import { beforeAll, describe, expect, it } from "vitest"
+import { processDueToolRentalNotifications } from "../src/routes/tool-rental"
 
 beforeAll(async () => {
   const migrations = JSON.parse(__D1_MIGRATIONS__)
@@ -323,5 +324,62 @@ describe("38R tool inventory and lending ledger", () => {
     ).bind("tool_rental.returned:" + current[0].loan_item_id).all<{ recipient_user_id: string }>()
     expect(returnNotifications.results.map(row => row.recipient_user_id).sort())
       .toEqual([manager.userId, onCampus.userId].sort())
+  })
+  it("sends due-soon, timer-end, and overdue notifications to all users", async () => {
+    const manager = await createUser("期限通知担当")
+    await grant(manager.userId, [
+      "tool_rental.view",
+      "tool_rental.manage",
+      "tool_rental.checkout",
+    ])
+    const tool = await createTool(manager, "期限通知用工具", "38R-TOOL-DEADLINE")
+    const itemResponse = await api(manager, "/tools/" + tool.id + "/items")
+    const items = await itemResponse.json() as Array<{ id: number }>
+    const checkout = await api(manager, "/loans", {
+      method: "POST",
+      body: {
+        tool_item_id: items[0].id,
+        class_name: "38R",
+        name: "借用者",
+        time_limit_minutes: 60,
+      },
+    })
+    expect(checkout.status).toBe(201)
+    const checkoutBody = await checkout.json() as { loan_id: number }
+    await env.DB.prepare("UPDATE loans SET due_at = datetime('now', '+9 hours', '+5 minutes') WHERE id = ?")
+      .bind(checkoutBody.loan_id).run()
+    const loan = await env.DB.prepare("SELECT due_at FROM loans WHERE id = ?")
+      .bind(checkoutBody.loan_id).first<{ due_at: string }>()
+    const allUsers = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+
+    await processDueToolRentalNotifications(env)
+
+    const dueSoon = await env.DB.prepare("SELECT recipient_user_id FROM notifications WHERE event_key = ?")
+      .bind("tool_rental.due_soon:" + checkoutBody.loan_id + ":" + loan?.due_at).all<{ recipient_user_id: string }>()
+    expect(dueSoon.results.map(row => row.recipient_user_id).sort())
+      .toEqual(allUsers.results.map(row => row.id).sort())
+
+    await env.DB.prepare("UPDATE loans SET due_at = datetime('now', '+9 hours', '-1 minute') WHERE id = ?")
+      .bind(checkoutBody.loan_id).run()
+    const loanItem = await env.DB.prepare("SELECT id FROM loan_items WHERE loan_id = ?")
+      .bind(checkoutBody.loan_id).first<{ id: number }>()
+    await processDueToolRentalNotifications(env)
+
+    const timerEnd = await env.DB.prepare("SELECT recipient_user_id FROM notifications WHERE event_key = ?")
+      .bind("tool_rental.timer_end:" + loanItem?.id).all<{ recipient_user_id: string }>()
+    const overdue = await env.DB.prepare("SELECT recipient_user_id FROM notifications WHERE event_key = ?")
+      .bind("tool_rental.overdue:" + checkoutBody.loan_id).all<{ recipient_user_id: string }>()
+    expect(timerEnd.results.map(row => row.recipient_user_id).sort())
+      .toEqual(allUsers.results.map(row => row.id).sort())
+    expect(overdue.results.map(row => row.recipient_user_id).sort())
+      .toEqual(allUsers.results.map(row => row.id).sort())
+
+    await processDueToolRentalNotifications(env)
+    const timerEndCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM notifications WHERE event_key = ?")
+      .bind("tool_rental.timer_end:" + loanItem?.id).first<{ count: number }>()
+    const overdueCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM notifications WHERE event_key = ?")
+      .bind("tool_rental.overdue:" + checkoutBody.loan_id).first<{ count: number }>()
+    expect(timerEndCount?.count).toBe(allUsers.results.length)
+    expect(overdueCount?.count).toBe(allUsers.results.length)
   })
 })
