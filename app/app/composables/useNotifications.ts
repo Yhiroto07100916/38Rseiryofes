@@ -281,6 +281,7 @@ export const useNotifications = () => {
       return
     }
 
+    const requestAccountId = auth.user?.id ?? null
     requestInProgress = true
     if (reset) loading.value = true
     else loadingMore.value = true
@@ -291,7 +292,18 @@ export const useNotifications = () => {
       const response = await apiFetch<NotificationListResponse>(
         "/api/notifications?" + buildQuery(!reset),
       )
+      if (auth.user?.id !== requestAccountId) return
+      hasSuccessfulApiFetch = true
       applyResponse(response, reset)
+      if (
+        reset &&
+        requestAccountId &&
+        readFilter.value === "all" &&
+        selectedCategories.value.length === 0 &&
+        !search.value.trim()
+      ) {
+        void refreshFullCache(requestAccountId)
+      }
       listFailures = 0
       clearListRetry()
       error.value = ""
@@ -342,10 +354,12 @@ export const useNotifications = () => {
       clearUnreadRetry()
     }
 
+    const requestAccountId = auth.user?.id ?? null
     unreadRequestInProgress = true
     unreadCountLoading.value = true
     try {
       const response = await apiFetch<{ unread_count: number }>("/api/notifications/unread-count")
+      if (auth.user?.id !== requestAccountId) return
       unreadCount.value = response.unread_count
       const recovered = unreadFailures > 0 || Boolean(unreadCountError.value)
       unreadFailures = 0
@@ -373,6 +387,7 @@ export const useNotifications = () => {
   }
 
   const setRead = async (id: string, isRead: boolean) => {
+    const requestAccountId = auth.user?.id ?? null
     const item = notifications.value.find(notification => notification.id === id)
     if (!item || Boolean(item.is_read) === isRead) return true
 
@@ -384,9 +399,11 @@ export const useNotifications = () => {
         method: "PATCH",
         body: { is_read: isRead },
       })
+      if (auth.user?.id !== requestAccountId) return true
       await refreshUnreadCount()
       return true
     } catch {
+      if (auth.user?.id !== requestAccountId) return true
       item.is_read = previous
       error.value = "既読状態を保存できませんでした。"
       return false
@@ -394,14 +411,17 @@ export const useNotifications = () => {
   }
 
   const markAllRead = async () => {
+    const requestAccountId = auth.user?.id ?? null
     try {
       const response = await apiFetch<{ updated_count: number }>("/api/notifications/read-all", {
         method: "POST",
       })
+      if (auth.user?.id !== requestAccountId) return response.updated_count
       for (const item of notifications.value) item.is_read = 1
       unreadCount.value = Math.max(0, unreadCount.value - response.updated_count)
       return response.updated_count
     } catch {
+      if (auth.user?.id !== requestAccountId) return null
       error.value = "既読状態を保存できませんでした。"
       return null
     }
@@ -409,11 +429,14 @@ export const useNotifications = () => {
 
   const pollLatest = async () => {
     if (requestInProgress) return
+    const requestAccountId = auth.user?.id ?? null
     requestInProgress = true
     try {
       const response = await apiFetch<NotificationListResponse>(
         "/api/notifications?" + buildQuery(false),
       )
+      if (auth.user?.id !== requestAccountId) return
+      hasSuccessfulApiFetch = true
       const merged = response.notifications
       const incomingIds = new Set(merged.map(item => item.id))
       notifications.value = [
@@ -476,6 +499,8 @@ export const useNotifications = () => {
     listFailures = 0
     unreadFailures = 0
     manualRefreshRequested = false
+    const accountId = auth.user?.id
+    if (accountId) void loadCache(accountId)
     void fetchPage(true)
     void refreshUnreadCount()
     startPolling()
