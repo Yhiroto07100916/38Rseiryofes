@@ -164,6 +164,16 @@ export async function handlePush(
         return jsonError("Invalid push subscription", 400)
       }
 
+      const previousSubscription = await env.DB.prepare(
+        "SELECT id, user_id FROM push_subscriptions WHERE endpoint = ?",
+      ).bind(endpoint).first<{ id: string; user_id: string | null }>()
+      if (previousSubscription?.user_id && previousSubscription.user_id !== auth.user.id) {
+        await env.DB.prepare(`
+          DELETE FROM notification_push_deliveries
+          WHERE subscription_id = ? AND status IN ('pending', 'sending')
+        `).bind(previousSubscription.id).run()
+      }
+
       // 件数判定とINSERTを1つのSQL文にまとめ、同時登録による上限超過を防ぐ。
       const registration = await env.DB
         .prepare(`
