@@ -626,12 +626,18 @@ export const useNotifications = () => {
     const listed = new Map(response.notifications.map(item => [item.id, item]))
     const local = new Map(notifications.value.map(item => [item.id, item]))
     const conflicts = (response.known_notifications ?? []).filter(known => {
+      const knownTime = Date.parse(known.read_updated_at)
       const listedItem = listed.get(known.id)
       const localItem = local.get(known.id)
+      const listedTime = listedItem
+        ? Date.parse(listedItem.read_updated_at ?? listedItem.created_at)
+        : Number.NaN
+      const localTime = localItem
+        ? Date.parse(localItem.read_updated_at ?? localItem.created_at)
+        : Number.NaN
       return Boolean(
-        (listedItem && listedItem.is_read !== known.is_read) ||
-        (localItem && localItem.is_read !== known.is_read &&
-          Date.parse(known.read_updated_at) > Date.parse(localItem.read_updated_at ?? localItem.created_at)),
+        (listedItem && listedItem.is_read !== known.is_read && knownTime >= listedTime) ||
+        (localItem && localItem.is_read !== known.is_read && knownTime >= localTime),
       )
     })
 
@@ -689,7 +695,7 @@ export const useNotifications = () => {
       await validateServerClock(requestAccountId, response.server_time)
       hasSuccessfulApiFetch = true
       const currentReadStates = new Map(
-        (response.known_notifications ?? []).map(item => [item.id, item.is_read]),
+        (response.known_notifications ?? []).map(item => [item.id, item]),
       )
       const matchesCurrentFilters = (item: AppNotification) => {
         if (readFilter.value === "unread" && item.is_read) return false
@@ -714,9 +720,18 @@ export const useNotifications = () => {
           if (pending) return { ...item, is_read: pending.isRead ? 1 : 0 }
           if (completedAt !== undefined && completedAt > requestStartedAt) return item
           if (completedAt !== undefined) readStateWriteCompletedAt.delete(item.id)
-          return currentReadStates.has(item.id)
-            ? { ...item, is_read: currentReadStates.get(item.id)! }
-            : item
+          const latestReadState = currentReadStates.get(item.id)
+          if (!latestReadState) return item
+          const localReadAt = Date.parse(item.read_updated_at ?? item.created_at)
+          const serverReadAt = Date.parse(latestReadState.read_updated_at)
+          if (Number.isFinite(localReadAt) && Number.isFinite(serverReadAt) && localReadAt > serverReadAt) {
+            return item
+          }
+          return {
+            ...item,
+            is_read: latestReadState.is_read,
+            read_updated_at: latestReadState.read_updated_at,
+          }
         })
         .filter(matchesCurrentFilters)
       const merged = response.notifications.map(item => preserveRecentReadState(item, requestStartedAt))
