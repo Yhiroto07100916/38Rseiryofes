@@ -816,6 +816,12 @@ async function canAccessNotificationTarget(
   }
 
   if (delivery.entity_type === "survey" && delivery.entity_id) {
+    const [canViewSurvey, canRespondSurvey] = await Promise.all([
+      hasPermission(env, delivery.recipient_user_id, "surveys.view"),
+      hasPermission(env, delivery.recipient_user_id, "surveys.respond"),
+    ])
+    if (!canViewSurvey && !canRespondSurvey) return false
+
     const survey = await env.DB.prepare(
       "SELECT status, deadline_at FROM surveys WHERE id = ?",
     ).bind(delivery.entity_id).first<{
