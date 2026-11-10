@@ -204,11 +204,9 @@
             variant="outlined"
             maxlength="200"
           />
-          <v-text-field
+          <CommonJstDateTimePicker
             v-model="form.dueAt"
             label="提出期限"
-            type="datetime-local"
-            variant="outlined"
             clearable
           />
           <v-textarea
