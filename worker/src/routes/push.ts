@@ -565,6 +565,9 @@ interface NotificationPushDeliveryRecord {
   title: string
   body: string
   target_url: string | null
+  recipient_user_id: string
+  category: string
+  required_permission: string | null
 }
 
 export async function enqueueNotificationPushDeliveries(
@@ -686,6 +689,31 @@ async function processOneNotificationDelivery(
   if ((claimed.meta?.changes ?? 0) !== 1) return
 
   try {
+    const preferences = await env.DB.prepare(
+      "SELECT COALESCE(us.global_push_enabled, 1) AS global_enabled, " +
+      "COALESCE(cs.push_enabled, 1) AS category_enabled " +
+      "FROM notification_user_settings us " +
+      "LEFT JOIN notification_category_settings cs " +
+      "ON cs.user_id = us.user_id AND cs.category = ? " +
+      "WHERE us.user_id = ?",
+    ).bind(delivery.category, delivery.recipient_user_id)
+      .first<{ global_enabled: number; category_enabled: number }>()
+    const effectivePreferences = preferences ?? { global_enabled: 1, category_enabled: 1 }
+
+    if (
+      effectivePreferences.global_enabled !== 1 ||
+      effectivePreferences.category_enabled !== 1 ||
+      (delivery.required_permission !== null &&
+        !(await hasPermission(env, delivery.recipient_user_id, delivery.required_permission)))
+    ) {
+      await updateNotificationDelivery(env, delivery.delivery_id, {
+        status: "failed",
+        attemptCount: attemptNumber,
+        error: "Delivery suppressed by current user settings or access permissions",
+      })
+      return
+    }
+
     const response = await sendNotificationPush(env, delivery)
 
     if (response.ok) {
@@ -754,7 +782,8 @@ export async function processDueNotificationPushDeliveries(env: Env): Promise<vo
 
   const result = await env.DB.prepare(
     "SELECT d.id AS delivery_id, d.notification_id, d.subscription_id, " +
-    "d.attempt_count, s.endpoint, s.p256dh, s.auth, n.title, n.body, n.target_url " +
+    "d.attempt_count, s.endpoint, s.p256dh, s.auth, n.title, n.body, n.target_url, " +
+    "n.recipient_user_id, n.category, n.required_permission " +
     "FROM notification_push_deliveries d " +
     "INNER JOIN push_subscriptions s ON s.id = d.subscription_id " +
     "INNER JOIN notifications n ON n.id = d.notification_id " +
