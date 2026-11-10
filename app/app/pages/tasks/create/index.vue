@@ -204,12 +204,13 @@ const {
 
 const auth = useAuthStore()
 const snackbar = useSnackbar()
+const siteStatus = useSiteStatus()
 
 const form = ref({
   title: '',
   description: '',
   scope: 'class_representative' as Task['scope'],
-  status: 'todo' as Task['status'],
+  status: (siteStatus.value?.task_default_status ?? 'todo') as Task['status'],
   priority: 'medium' as Task['priority'],
   dueAt: '',
   assigneeUserIds: [] as string[],
