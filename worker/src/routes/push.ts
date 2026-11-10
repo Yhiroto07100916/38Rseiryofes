@@ -979,6 +979,17 @@ async function processOneNotificationDelivery(
 export async function processDueNotificationPushDeliveries(env: Env): Promise<void> {
   if (!isPushConfigured(env)) return
 
+  // Subscriptionが別アカウントへ移管された場合、旧通知の配送を残さず失敗扱いにする。
+  await env.DB.prepare(
+    "UPDATE notification_push_deliveries SET status = 'failed', " +
+    "lease_until = NULL, last_error = 'Subscription owner no longer matches notification recipient', " +
+    "updated_at = CURRENT_TIMESTAMP " +
+    "WHERE status IN ('pending', 'sending') AND EXISTS (" +
+    "SELECT 1 FROM notifications n " +
+    "INNER JOIN push_subscriptions s ON s.id = notification_push_deliveries.subscription_id " +
+    "WHERE n.id = notification_push_deliveries.notification_id AND s.user_id <> n.recipient_user_id)"
+  ).run()
+
   const result = await env.DB.prepare(
     "SELECT d.id AS delivery_id, d.notification_id, d.subscription_id, " +
     "d.attempt_count, s.endpoint, s.p256dh, s.auth, n.title, n.body, n.target_url, " +
