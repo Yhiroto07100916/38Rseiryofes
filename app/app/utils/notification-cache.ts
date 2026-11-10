@@ -221,7 +221,9 @@ export async function validateNotificationCacheClock(
 
   if (
     !record ||
+    typeof record.serverTimeAtSave !== "number" ||
     !Number.isFinite(record.serverTimeAtSave) ||
+    typeof record.clientTimeAtSave !== "number" ||
     !Number.isFinite(record.clientTimeAtSave)
   ) return true
 
