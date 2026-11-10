@@ -235,8 +235,10 @@ async function handleLogin(
   await env.DB.prepare("DELETE FROM login_attempt_locks WHERE identifier_hash = ?")
     .bind(identifierHash).run()
 
-  if (!(await isLoginEnabled(env))) {
-    const isAdmin = await env.DB.prepare(`
+  const maintenanceMode = await getSiteSetting<boolean>(env, "maintenance_mode", false)
+  const loginEnabled = await isLoginEnabled(env)
+  if (!loginEnabled || maintenanceMode) {
+    const isImportantSettingsAdmin = await env.DB.prepare(`
       SELECT 1
       FROM user_account_roles uar
       INNER JOIN account_roles ar ON ar.id = uar.account_role_id
@@ -244,10 +246,10 @@ async function handleLogin(
       LIMIT 1
     `).bind(user.id).first()
 
-    if (!isAdmin) {
+    if (!isImportantSettingsAdmin) {
       return Response.json(
-        { error: "Login is currently disabled for regular users" },
-        { status: 403 },
+        { error: maintenanceMode ? "Maintenance mode" : "Login is currently disabled for regular users" },
+        { status: maintenanceMode ? 503 : 403 },
       )
     }
   }
