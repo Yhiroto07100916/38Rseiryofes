@@ -139,8 +139,8 @@ export async function handleNotifications(
           "SELECT id, is_read, COALESCE(read_updated_at, created_at) AS read_updated_at, read_version " +
           "FROM notifications WHERE recipient_user_id = ? AND id IN (" +
           knownIds.map(() => "?").join(", ") + ")",
-        ).bind(userId, ...knownIds).all<{ id: string; is_read: number }>()
-      : { results: [] as { id: string; is_read: number }[] }
+        ).bind(userId, ...knownIds).all<{ id: string; is_read: number; read_updated_at: string; read_version: number }>()
+      : { results: [] as { id: string; is_read: number; read_updated_at: string; read_version: number }[] }
 
     return Response.json({
       notifications,
