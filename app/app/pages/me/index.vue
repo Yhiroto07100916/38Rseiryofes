@@ -832,6 +832,7 @@ interface RelevantNews extends News {
 }
 
 const auth = useAuthStore()
+const siteStatus = useSiteStatus()
 const snackbar = useSnackbar()
 const unreadCount = ref(0)
 
@@ -975,7 +976,7 @@ const formatDate = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: siteStatus.value?.timezone || 'Asia/Tokyo',
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -990,7 +991,7 @@ const formatMonthDay = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: siteStatus.value?.timezone || 'Asia/Tokyo',
     month: 'numeric',
     day: 'numeric',
   }).format(date)
@@ -1004,7 +1005,7 @@ const formatTime = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: siteStatus.value?.timezone || 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(date)
