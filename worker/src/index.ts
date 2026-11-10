@@ -13,7 +13,7 @@ import { handleNotifications } from "./routes/notifications"
 import { handlePresence } from "./routes/presence"
 import { handleScripts } from "./routes/scripts"
 import { handleEquipment } from "./routes/equipment"
-import { handleToolRental } from "./routes/tool-rental"
+import { handleToolRental, processDueToolRentalNotifications } from "./routes/tool-rental"
 import { handleAccounting } from "./routes/accounting"
 import { handleFiles } from "./routes/files"
 import { handlePublicFiles } from "./routes/public-files"
@@ -879,6 +879,12 @@ export default {
       await processDueNotificationPushDeliveries(env)
     } catch (error) {
       console.error("Scheduled notification push delivery failed:", error)
+    }
+
+    try {
+      await processDueToolRentalNotifications(env)
+    } catch (error) {
+      console.error("Scheduled tool rental notification processing failed:", error)
     }
 
     try {
