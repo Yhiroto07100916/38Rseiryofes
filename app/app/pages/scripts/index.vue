@@ -144,6 +144,7 @@
 </template>
 
 <script setup lang="ts">
+import { getDefaultTimeZone } from '~/utils/jst'
 const { apiFetch } = useApi()
 
 definePageMeta({
@@ -220,7 +221,7 @@ const openScript = (id: string) => {
 const formatDate = (value: string) => {
   if (!value) return ''
   return new Date(value.replace(' ', 'T') + 'Z').toLocaleString('ja-JP', {
-    timeZone: 'Asia/Tokyo',
+    timeZone: getDefaultTimeZone(),
     month: 'numeric',
     day: 'numeric',
     hour: 'numeric',
