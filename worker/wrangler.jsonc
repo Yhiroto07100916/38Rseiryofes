@@ -7,8 +7,8 @@
 	"vars": {
 		"API_BASE_URL": "https://api.38r-seiryofes.com",
 		"SCHOOL_GEOFENCE_RADIUS_METERS": "500",
-		"SCHOOL_LATITUDE": "35.657256",
-		"SCHOOL_LONGITUDE": "139.776686"
+		"SCHOOL_LATITUDE": "35.67627",
+		"SCHOOL_LONGITUDE": "139.739724"
 	},
 	"triggers": {
 		"crons": [
