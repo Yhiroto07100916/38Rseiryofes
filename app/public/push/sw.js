@@ -56,6 +56,27 @@ self.addEventListener('notificationclick', (event) => {
       }
 
       try {
+        const handledByApp = await new Promise((resolve) => {
+          const channel = new MessageChannel()
+          const timeout = setTimeout(() => {
+            channel.port1.close()
+            resolve(false)
+          }, 500)
+
+          channel.port1.onmessage = (messageEvent) => {
+            clearTimeout(timeout)
+            channel.port1.close()
+            resolve(messageEvent.data?.handled === true)
+          }
+
+          client.postMessage({ type: '38R_PUSH_NAVIGATE', url: target.href }, [channel.port2])
+        })
+
+        if (handledByApp) {
+          await client.focus()
+          return client
+        }
+
         const navigatedClient = await client.navigate(target.href)
         if (navigatedClient) {
           await navigatedClient.focus()
