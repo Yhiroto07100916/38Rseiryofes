@@ -27,7 +27,7 @@
           density="comfortable"
           hide-details
           class="mb-2"
-          @update:model-value="value => updateLink(index, 'title', value)"
+          @update:model-value="updateTitle(index, $event)"
         />
         <v-text-field
           :model-value="taskLink.url"
@@ -36,7 +36,7 @@
           variant="outlined"
           density="comfortable"
           hide-details
-          @update:model-value="value => updateLink(index, 'url', value)"
+          @update:model-value="updateUrl(index, $event)"
         />
       </div>
       <v-btn
@@ -60,7 +60,7 @@ interface TaskLink {
   url: string
 }
 
-const props = withDefaults(defineProps<{
+const { modelValue, addLabel, helpText } = withDefaults(defineProps<{
   modelValue: TaskLink[]
   addLabel?: string
   helpText?: string
@@ -74,12 +74,12 @@ const emit = defineEmits<{
 }>()
 
 const addLink = () => {
-  if (props.modelValue.length >= 20) return
-  emit("update:modelValue", [...props.modelValue, { title: "", url: "" }])
+  if (modelValue.length >= 20) return
+  emit("update:modelValue", [...modelValue, { title: "", url: "" }])
 }
 
 const updateLink = (index: number, field: keyof TaskLink, value: string | null) => {
-  const links = props.modelValue.map((link, currentIndex) => (
+  const links = modelValue.map((link, currentIndex) => (
     currentIndex === index
       ? { ...link, [field]: value ?? "" }
       : link
@@ -87,7 +87,10 @@ const updateLink = (index: number, field: keyof TaskLink, value: string | null) 
   emit("update:modelValue", links)
 }
 
+const updateTitle = (index: number, value: string | null) => updateLink(index, "title", value)
+const updateUrl = (index: number, value: string | null) => updateLink(index, "url", value)
+
 const removeLink = (index: number) => {
-  emit("update:modelValue", props.modelValue.filter((_, currentIndex) => currentIndex !== index))
+  emit("update:modelValue", modelValue.filter((_, currentIndex) => currentIndex !== index))
 }
 </script>
