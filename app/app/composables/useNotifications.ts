@@ -79,6 +79,12 @@ export const useNotifications = () => {
   let unreadFailures = 0
   let hasSuccessfulApiFetch = false
   const cacheUpdatePromises = new Map<string, Promise<void>>()
+  const partialCacheUpdates = new Map<string, {
+    notifications: AppNotification[]
+    nextCursor: { created_at: string; id: string } | null
+    pageCount: number
+    pagesComplete: boolean
+  }>()
   const cacheDeletionRequests = new Set<string>()
   const pendingReadOperations = new Map<string, { isRead: boolean; previous: number }>()
   const readStateWriteCompletedAt = new Map<string, number>()
@@ -256,14 +262,30 @@ export const useNotifications = () => {
     if (existing) return existing
 
     const update = (async () => {
-      const all: AppNotification[] = []
-      let nextCursor: { created_at: string; id: string } | null = null
+      const partial = partialCacheUpdates.get(accountId) ?? {
+        notifications: [],
+        nextCursor: null,
+        pageCount: 0,
+        pagesComplete: false,
+      }
+      partialCacheUpdates.set(accountId, partial)
+      const all = [...partial.notifications]
+      let nextCursor = partial.nextCursor
+      let page = partial.pageCount
 
-      for (let page = 0; page < 5; page++) {
+      while (!partial.pagesComplete && page < 5) {
         const response = await fetchCachePage(accountId, nextCursor)
         all.push(...response.notifications)
         nextCursor = response.next_cursor
-        if (!nextCursor) break
+        page += 1
+        const pagesComplete = !nextCursor || page >= 5
+        partialCacheUpdates.set(accountId, {
+          notifications: [...all],
+          nextCursor,
+          pageCount: page,
+          pagesComplete,
+        })
+        if (pagesComplete) break
       }
 
       const latest = await fetchCachePage(accountId, null)
@@ -282,6 +304,7 @@ export const useNotifications = () => {
         cacheSnapshot = snapshot
         cacheInitialized = true
       }
+      partialCacheUpdates.delete(accountId)
     })().catch(() => {
       // 不完全な取得結果では既存キャッシュを置き換えない。
     }).finally(() => {
@@ -644,6 +667,8 @@ export const useNotifications = () => {
           .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.id.localeCompare(a.id))
           .slice(0, 100)
         void saveCacheSnapshot(requestAccountId, response.server_time)
+      } else if (partialCacheUpdates.has(requestAccountId)) {
+        void refreshFullCache(requestAccountId)
       }
       listFailures = 0
       clearListRetry()
@@ -727,6 +752,7 @@ export const useNotifications = () => {
             if (pendingCacheUpdate) await pendingCacheUpdate
             await deleteNotificationCache(previousAccountId)
           } finally {
+            partialCacheUpdates.delete(previousAccountId)
             cacheDeletionRequests.delete(previousAccountId)
           }
         })().catch(() => undefined)
