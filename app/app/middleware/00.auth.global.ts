@@ -20,6 +20,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const featureRoutes: Array<[string, string]> = [
     ["/tasks", "tasks"],
     ["/calendar", "calendar"],
+    ["/class-representative/attendance", "attendance"],
     ["/news", "news"],
     ["/scripts", "scripts"],
     ["/accounting", "accounting"],
