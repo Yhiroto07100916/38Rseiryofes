@@ -94,7 +94,7 @@ export const useNotifications = () => {
         : undefined
     )
     try {
-      await saveNotificationCache(accountId, cacheSnapshot, unreadCount.value, effectiveServerTime)
+      await saveNotificationCache(accountId, cacheSnapshot, unreadCount.value, effectiveServerTime, true)
     } catch {
       // キャッシュ保存失敗は通知操作に影響させない。
     }
