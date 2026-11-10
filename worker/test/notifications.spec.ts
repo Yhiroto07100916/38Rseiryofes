@@ -176,7 +176,7 @@ describe("Notification center API", () => {
     expect(stored?.is_read).toBe(1)
     expect(stored?.read_updated_at).toBe(updateBody.read_updated_at)
     expect(stored?.read_version).toBe(updateBody.read_version)
-    expect(updateBody.read_version).toBeGreaterThan(1)
+    expect(updateBody.read_version).toBe(1)
 
     const refetched = await handleNotifications(
       request("GET", "/" + id, owner.cookie),
@@ -187,6 +187,14 @@ describe("Notification center API", () => {
     expect(refetchedBody.notification.is_read).toBe(1)
     expect(refetchedBody.notification.read_updated_at).toBe(updateBody.read_updated_at)
     expect(refetchedBody.notification.read_version).toBe(updateBody.read_version)
+
+    const secondUpdate = await handleNotifications(
+      request("PATCH", "/" + id + "/read", owner.cookie, { is_read: false }),
+      env,
+      [id, "read"],
+    )
+    const secondUpdateBody = await secondUpdate.json() as { read_version: number }
+    expect(secondUpdateBody.read_version).toBe(updateBody.read_version + 1)
   })
 
   it("uses enabled-by-default push preferences and persists category/global changes", async () => {
@@ -251,11 +259,11 @@ describe("Notification center API", () => {
     expect(data.updated_read_states).toHaveLength(1)
     expect(data.updated_read_states[0]?.id).toBe(unreadId)
     expect(data.updated_read_states[0]?.read_updated_at).toBeTruthy()
-    expect(data.updated_read_states[0]?.read_version).toBeGreaterThan(1)
+    expect(data.updated_read_states[0]?.read_version).toBe(1)
 
     const storedReadState = await env.DB.prepare(
-      "SELECT is_read, read_updated_at FROM notifications WHERE id = ?",
-    ).bind(unreadId).first<{ is_read: number; read_updated_at: string }>()
+      "SELECT is_read, read_updated_at, read_version FROM notifications WHERE id = ?",
+    ).bind(unreadId).first<{ is_read: number; read_updated_at: string; read_version: number }>()
     expect(storedReadState?.is_read).toBe(1)
     expect(storedReadState?.read_updated_at).toBe(data.updated_read_states[0]?.read_updated_at)
     expect(storedReadState?.read_version).toBe(data.updated_read_states[0]?.read_version)
