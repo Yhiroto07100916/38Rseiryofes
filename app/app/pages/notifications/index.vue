@@ -59,7 +59,7 @@
           :loading="unreadCountLoading"
           @click="retryUnreadCount"
         >
-          再取得
+          {{ unreadCountLoading ? '再取得中…' : '再取得' }}
         </v-btn>
       </template>
     </v-alert>
