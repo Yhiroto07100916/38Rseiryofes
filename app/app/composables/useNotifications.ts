@@ -617,7 +617,7 @@ export const useNotifications = () => {
       for (const item of cacheSnapshot) {
         if (updatedIds.has(item.id)) {
           item.is_read = 1
-          item.read_updated_at = updatedReadStates.get(item.id) ?? item.read_updated_at
+          item.read_updated_at = updatedReadStates.get(item.id)?.read_updated_at ?? item.read_updated_at
         }
       }
       if (readFilter.value === "unread") {
