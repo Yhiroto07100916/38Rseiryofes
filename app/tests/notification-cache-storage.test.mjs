@@ -152,3 +152,24 @@ test("skips clock validation when the server time is unavailable", async () => {
   assert.equal(await validateNotificationCacheClock("account-i", undefined), true)
   assert.ok(readFakeIndexedDBRecord(DATABASE_NAME, STORE_NAME, "account-i"))
 })
+
+test("serializes concurrent writes for the same account in invocation order", async () => {
+  await Promise.all([
+    saveNotificationCache("account-j", [notification("j-1")], 1),
+    saveNotificationCache("account-j", [notification("j-2")], 2),
+  ])
+
+  const cached = await loadNotificationCache("account-j")
+  assert.deepEqual(cached?.notifications.map(item => item.id), ["j-2"])
+  assert.equal(cached?.unreadCount, 2)
+})
+
+test("deletion waits for an already-started cache write and removes its result", async () => {
+  const pendingSave = saveNotificationCache("account-k", [notification("k-1")], 1)
+  const pendingDelete = deleteNotificationCache("account-k")
+
+  await Promise.all([pendingSave, pendingDelete])
+
+  assert.equal(readFakeIndexedDBRecord(DATABASE_NAME, STORE_NAME, "account-k"), undefined)
+  assert.equal(await loadNotificationCache("account-k"), null)
+})
