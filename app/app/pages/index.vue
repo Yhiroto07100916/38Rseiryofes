@@ -1,14 +1,22 @@
 <template>
 
 
-    <p>
-      38Rの活動をまとめるサイトです。うお
-    </p>
+    <main class="home-intro">
+      <p class="home-event">
+        {{ siteStatus ? `${siteStatus.event_year}年度 ${siteStatus.event_name}` : "38R 星陵祭準備" }}
+      </p>
+      <h1>{{ siteStatus?.site_name || "38R 星陵祭準備サイト" }}</h1>
+      <p class="home-description">
+        {{ siteStatus?.site_description || "38Rの星陵祭準備を管理するサイトです。" }}
+      </p>
+    </main>
 
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+
+const siteStatus = useSiteStatus()
 
 definePageMeta({
   middleware: 'auth',
@@ -172,6 +180,34 @@ const menuItems = [
 </script>
 
 <style scoped>
+.home-intro {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 72px 24px;
+}
+
+.home-event {
+  margin: 0 0 12px;
+  color: #245b7a;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.home-intro h1 {
+  margin: 0;
+  color: #102b43;
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.home-description {
+  margin-top: 18px;
+  color: #71808a;
+  font-size: 1rem;
+  line-height: 1.8;
+}
 .seiryo-home {
   --navy: #102b43;
   --blue: #245b7a;
