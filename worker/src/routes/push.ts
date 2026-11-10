@@ -451,6 +451,22 @@ async function processOneDelivery(
   }
 
   try {
+    const siteNotificationSettings = await getSiteSetting<{
+      enabled?: boolean
+      categories?: Record<string, boolean>
+    }>(env, "notification_settings", { enabled: true, categories: {} })
+    if (
+      siteNotificationSettings.enabled === false ||
+      siteNotificationSettings.categories?.news === false
+    ) {
+      await updateDelivery(env, delivery.delivery_id, {
+        status: "failed",
+        attemptCount: attemptNumber,
+        error: "News push delivery disabled by site notification settings",
+      })
+      return
+    }
+
     const [subscription, newsExists, canViewNews] = await Promise.all([
       env.DB.prepare(
         "SELECT COALESCE(us.global_push_enabled, 1) AS global_push_enabled, " +
