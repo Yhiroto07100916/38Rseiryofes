@@ -8,6 +8,16 @@
   >
     <div class="drawer-content">
       <header class="site-branding">
+        <v-img
+          v-if="siteStatus?.logo_url"
+          :src="siteStatus.logo_url"
+          alt="サイトロゴ"
+          width="56"
+          height="56"
+          max-width="56"
+          class="site-branding-logo mb-2"
+          cover
+        />
         <div class="site-branding-name">{{ siteStatus?.site_name || "38R 星陵祭準備サイト" }}</div>
         <div class="site-branding-event">
           {{ siteStatus ? `${siteStatus.event_year}年度 ${siteStatus.event_name}` : "38R 準備サイト" }}
