@@ -87,6 +87,7 @@ describe("Survey notification events", () => {
       },
       body: JSON.stringify({
         title: "上演時間アンケート",
+        description: null,
         response_type: "free_text",
         status: "published",
       }),
