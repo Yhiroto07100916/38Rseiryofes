@@ -47,8 +47,7 @@ const loading = ref(true)
 const saving = ref(false)
 const assigning = ref(false)
 const isImportantSettingsAdmin = ref(false)
-const errorMessage = ref('')
-const successMessage = ref('')
+const snackbar = useSnackbar()
 
 const availableUsers = computed(() => {
   const assigned = new Set(importantAdmins.value.map((user) => user.id))
@@ -62,7 +61,6 @@ function displayUser(user: UserOption) {
 
 async function loadSettings() {
   loading.value = true
-  errorMessage.value = ''
 
   try {
     const response = await api.apiFetch<{ settings: Partial<SiteSettings> }>(
@@ -104,12 +102,12 @@ async function loadSettings() {
         }
       } catch (error) {
         console.error(error)
-        errorMessage.value = '管理者一覧を取得できませんでした。'
+        snackbar.error('管理者一覧を取得できませんでした。')
       }
     }
   } catch (error) {
     console.error(error)
-    errorMessage.value = 'サイト設定を取得できませんでした。'
+    snackbar.error('サイト設定を取得できませんでした。')
   } finally {
     loading.value = false
   }
@@ -117,8 +115,6 @@ async function loadSettings() {
 
 async function saveSettings() {
   saving.value = true
-  errorMessage.value = ''
-  successMessage.value = ''
 
   const payload: Partial<SiteSettings> = {
     site_name: settings.site_name.trim(),
@@ -145,10 +141,10 @@ async function saveSettings() {
     } catch (statusError) {
       console.warn('サイト表示設定の再取得に失敗しました。', statusError)
     }
-    successMessage.value = 'サイト設定を保存しました。'
+    snackbar.success('サイト設定を保存しました。')
   } catch (error) {
     console.error(error)
-    errorMessage.value = '設定の保存に失敗しました。入力内容を確認してください。'
+    snackbar.error('設定の保存に失敗しました。入力内容を確認してください。')
   } finally {
     saving.value = false
   }
@@ -157,7 +153,6 @@ async function saveSettings() {
 async function addImportantAdmin() {
   if (!selectedUserId.value) return
   assigning.value = true
-  errorMessage.value = ''
 
   try {
     await api.apiFetch('/api/account-roles/settings/important-admins', {
@@ -166,9 +161,10 @@ async function addImportantAdmin() {
     })
     selectedUserId.value = ''
     await loadImportantAdmins()
+    snackbar.success('重要設定管理者を追加しました。')
   } catch (error) {
     console.error(error)
-    errorMessage.value = '重要設定管理者を追加できませんでした。'
+    snackbar.error('重要設定管理者を追加できませんでした。')
   } finally {
     assigning.value = false
   }
@@ -176,7 +172,7 @@ async function addImportantAdmin() {
 
 async function removeImportantAdmin(user: UserOption) {
   if (importantAdmins.value.length <= 1) {
-    errorMessage.value = '重要設定管理者を0人にすることはできません。'
+    snackbar.warning('重要設定管理者を0人にすることはできません。')
     return
   }
 
@@ -184,7 +180,6 @@ async function removeImportantAdmin(user: UserOption) {
   if (!confirmed) return
 
   assigning.value = true
-  errorMessage.value = ''
 
   try {
     await api.apiFetch(
@@ -192,9 +187,10 @@ async function removeImportantAdmin(user: UserOption) {
       { method: 'DELETE' },
     )
     await loadImportantAdmins()
+    snackbar.success('重要設定管理者を解除しました。')
   } catch (error) {
     console.error(error)
-    errorMessage.value = '重要設定管理者を解除できませんでした。'
+    snackbar.error('重要設定管理者を解除できませんでした。')
   } finally {
     assigning.value = false
   }
@@ -223,29 +219,6 @@ onMounted(loadSettings)
         38Rサイト全体の基本情報と運用設定を管理します。
       </p>
     </div>
-
-    <v-alert
-      v-if="errorMessage"
-      type="error"
-      variant="tonal"
-      rounded="xl"
-      class="mt-6"
-      closable
-      @click:close="errorMessage = ''"
-    >
-      {{ errorMessage }}
-    </v-alert>
-    <v-alert
-      v-if="successMessage"
-      type="success"
-      variant="tonal"
-      rounded="xl"
-      class="mt-6"
-      closable
-      @click:close="successMessage = ''"
-    >
-      {{ successMessage }}
-    </v-alert>
 
     <div v-if="loading" class="d-flex justify-center py-16">
       <v-progress-circular indeterminate color="primary" />
