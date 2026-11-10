@@ -266,4 +266,62 @@ describe("38R tool inventory and lending ledger", () => {
     expect(notifications.status).toBe(404)
     expect(returnTimes.status).toBe(404)
   })
+  it("notifies only on-campus users for checkout and return, including the operator", async () => {
+    const manager = await createUser("在校中の貸出担当")
+    const onCampus = await createUser("在校ユーザー")
+    const offCampus = await createUser("校外ユーザー")
+    await grant(manager.userId, [
+      "tool_rental.view",
+      "tool_rental.manage",
+      "tool_rental.checkout",
+      "tool_rental.return",
+      "tool_rental.history",
+    ])
+
+    const now = new Date()
+    const checkedAt = now.toISOString()
+    const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString()
+    await env.DB.prepare(
+      "INSERT INTO presence_states (user_id, status, method, checked_at, expires_at, local_date) " +
+      "VALUES (?, 'inside', 'manual', ?, ?, date('now', '+9 hours'))",
+    ).bind(onCampus.userId, checkedAt, expiresAt).run()
+    await env.DB.prepare(
+      "INSERT INTO presence_states (user_id, status, method, checked_at, expires_at, local_date) " +
+      "VALUES (?, 'outside', 'gps', ?, ?, date('now', '+9 hours'))",
+    ).bind(offCampus.userId, checkedAt, expiresAt).run()
+
+    const tool = await createTool(manager, "通知テスト用工具", "38R-TOOL-NOTIFY")
+    const itemResponse = await api(manager, "/tools/" + tool.id + "/items")
+    const items = await itemResponse.json() as Array<{ id: number }>
+    const checkout = await api(manager, "/loans", {
+      method: "POST",
+      body: { tool_item_id: items[0].id, class_name: "38R", name: "借用者" },
+    })
+    expect(checkout.status).toBe(201)
+    const checkoutBody = await checkout.json() as { loan_id: number }
+
+    const checkoutNotifications = await env.DB.prepare(
+      "SELECT recipient_user_id FROM notifications WHERE event_key = ?",
+    ).bind("tool_rental.checked_out:" + checkoutBody.loan_id).all<{ recipient_user_id: string }>()
+    expect(checkoutNotifications.results.map(row => row.recipient_user_id).sort())
+      .toEqual([manager.userId, onCampus.userId].sort())
+
+    const currentResponse = await api(manager, "/loans/current")
+    const current = await currentResponse.json() as Array<{ loan_item_id: number }>
+    const returned = await api(manager, "/loans/return", {
+      method: "POST",
+      body: {
+        loan_item_id: current[0].loan_item_id,
+        returner_class_name: "38R",
+        returner_name: "返却担当",
+      },
+    })
+    expect(returned.status).toBe(200)
+
+    const returnNotifications = await env.DB.prepare(
+      "SELECT recipient_user_id FROM notifications WHERE event_key = ?",
+    ).bind("tool_rental.returned:" + current[0].loan_item_id).all<{ recipient_user_id: string }>()
+    expect(returnNotifications.results.map(row => row.recipient_user_id).sort())
+      .toEqual([manager.userId, onCampus.userId].sort())
+  })
 })
