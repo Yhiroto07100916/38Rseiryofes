@@ -173,8 +173,23 @@ async function handleSiteSettings(
       LEFT JOIN users u ON u.id = l.changed_by
       ORDER BY l.changed_at DESC
       LIMIT 100
-    `).all()
-    return Response.json({ logs: result.results })
+    `).all<{
+      id: string
+      setting_key: string
+      old_value: string | null
+      new_value: string
+      changed_by: string | null
+      changed_at: string
+      changed_by_name: string | null
+      changed_by_nickname: string | null
+    }>()
+    const logs = result.results.map((log) => {
+      if (SETTING_RULES[log.setting_key]?.critical && !isImportantSettingsAdmin) {
+        return { ...log, old_value: null, new_value: "[redacted]" }
+      }
+      return log
+    })
+    return Response.json({ logs })
   }
 
   if (subPath.length !== 0) {
