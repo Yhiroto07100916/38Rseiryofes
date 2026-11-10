@@ -371,4 +371,49 @@ describe("Task write atomicity", () => {
       title: "担当タスクが更新されました",
     });
   });
+  it("notifies other task participants when a comment is added", async () => {
+    const fixture = await createFixture();
+    const taskId = fixture.taskIds[0];
+
+    await grantPermissions(fixture.actorId, ["tasks.comment"]);
+    await createTaskDirectly(taskId, fixture.actorId, "コメント通知テスト");
+
+    await env.DB.prepare(`
+      INSERT INTO task_assignees (task_id, user_id)
+      VALUES (?, ?)
+    `).bind(taskId, fixture.assigneeId).run();
+
+    const response = await SELF.fetch(
+      `http://example.com/api/tasks/${taskId}/comments`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: fixture.cookie,
+        },
+        body: JSON.stringify({ content: "確認をお願いします。" }),
+      },
+    );
+
+    expect(response.status).toBe(201);
+
+    const notification = await env.DB.prepare(`
+      SELECT event_key, recipient_user_id, body, target_url
+      FROM notifications
+      WHERE entity_type = 'task' AND entity_id = ? AND recipient_user_id = ?
+    `).bind(taskId, fixture.assigneeId).first<{
+      event_key: string;
+      recipient_user_id: string;
+      body: string;
+      target_url: string;
+    }>();
+
+    expect(notification).toMatchObject({
+      event_key: "task.commented",
+      recipient_user_id: fixture.assigneeId,
+      body: "確認をお願いします。",
+      target_url: "/tasks/" + taskId,
+    });
+  });
+
 });
