@@ -19,7 +19,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   if (
     siteStatus?.maintenance_mode &&
-    !siteStatus.is_admin &&
+    !siteStatus.is_important_settings_admin &&
     to.path !== "/maintenance" &&
     to.path !== "/login"
   ) {
