@@ -139,17 +139,11 @@ const savingUserId = ref<string | null>(null)
 const statusOptions = [
   { title: '出席', value: 'present' },
   { title: '欠席', value: 'absent' },
-  { title: '遅刻', value: 'late' },
-  { title: '早退', value: 'early_leave' },
-  { title: '公欠', value: 'excused' },
   { title: '未確認', value: 'unconfirmed' },
 ]
 const summaryItems: { key: keyof Omit<AttendanceCounts, 'total'>; label: string; color: string }[] = [
   { key: 'present', label: '出席', color: 'success' },
   { key: 'absent', label: '欠席', color: 'error' },
-  { key: 'late', label: '遅刻', color: 'warning' },
-  { key: 'early_leave', label: '早退', color: 'info' },
-  { key: 'excused', label: '公欠', color: 'secondary' },
   { key: 'unconfirmed', label: '未確認', color: 'surface-variant' },
 ]
 
