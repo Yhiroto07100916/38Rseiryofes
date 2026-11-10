@@ -580,7 +580,7 @@ export const useNotifications = () => {
       const response = await apiFetch<{ updated_count: number; updated_ids: string[] }>("/api/notifications/read-all", {
         method: "POST",
       })
-      if (auth.user?.id !== requestAccountId) return response.updated_count
+      if (auth.user?.id !== requestAccountId) return null
       const updatedIds = new Set(response.updated_ids)
       const completedAt = Date.now()
       for (const id of updatedIds) readStateWriteCompletedAt.set(id, completedAt)
