@@ -761,16 +761,9 @@ export async function handleUserAccountRoles(
     }
 
     if (accountRole.name === IMPORTANT_SETTINGS_ROLE) {
-      const actorIsImportantAdmin = await env.DB.prepare(`
-        SELECT 1
-        FROM user_account_roles uar
-        INNER JOIN account_roles ar ON ar.id = uar.account_role_id
-        WHERE uar.user_id = ? AND ar.name = ?
-        LIMIT 1
-      `).bind(authError.userId, IMPORTANT_SETTINGS_ROLE).first()
-      if (!actorIsImportantAdmin) {
-        return Response.json({ error: "Forbidden" }, { status: 403 })
-      }
+      return Response.json({
+        error: "Use the dedicated site settings administrator management endpoint",
+      }, { status: 403 })
     }
 
     const existing = await env.DB
@@ -854,24 +847,9 @@ export async function handleUserAccountRoles(
     ).bind(accountRoleId).first<{ id: string; name: string }>()
 
     if (accountRole?.name === IMPORTANT_SETTINGS_ROLE) {
-      const actorIsImportantAdmin = await env.DB.prepare(`
-        SELECT 1
-        FROM user_account_roles uar
-        INNER JOIN account_roles ar ON ar.id = uar.account_role_id
-        WHERE uar.user_id = ? AND ar.name = ?
-        LIMIT 1
-      `).bind(authError.userId, IMPORTANT_SETTINGS_ROLE).first()
-      if (!actorIsImportantAdmin) {
-        return Response.json({ error: "Forbidden" }, { status: 403 })
-      }
-      const count = await env.DB.prepare(`
-        SELECT COUNT(*) AS count
-        FROM user_account_roles
-        WHERE account_role_id = ?
-      `).bind(accountRoleId).first<{ count: number }>()
-      if ((count?.count ?? 0) <= 1) {
-        return Response.json({ error: "At least one important settings administrator must remain" }, { status: 409 })
-      }
+      return Response.json({
+        error: "Use the dedicated site settings administrator management endpoint",
+      }, { status: 403 })
     }
 
     await env.DB
