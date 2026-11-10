@@ -604,7 +604,9 @@ export const useNotifications = () => {
       })
       if (auth.user?.id !== requestAccountId) return null
       const updatedIds = new Set(response.updated_ids)
-      const updatedReadStates = new Map(response.updated_read_states.map(item => [item.id, item]))
+      const updatedReadStates = new Map<string, { read_updated_at: string; read_version: number }>(
+        response.updated_read_states.map(item => [item.id, item]),
+      )
       const completedAt = Date.now()
       for (const id of updatedIds) readStateWriteCompletedAt.set(id, completedAt)
       for (const item of notifications.value) {
