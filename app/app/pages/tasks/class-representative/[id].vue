@@ -86,7 +86,7 @@
                   <div class="text-subtitle-2 font-weight-medium">関連リンク</div>
                   <v-btn size="small" variant="tonal" prepend-icon="mdi-plus" @click="editForm.links.push({ title: '', url: '' })">追加</v-btn>
                 </div>
-                <div v-for="taskLink in editForm.links" :key="link.title + '|' + link.url" class="d-flex align-start ga-2 mb-2">
+                <div v-for="taskLink in editLinks" :key="taskLink.title + '|' + taskLink.url" class="d-flex align-start ga-2 mb-2">
                   <div class="flex-grow-1">
                     <v-text-field v-model="taskLink.title" label="表示タイトル" placeholder="例：資料・参考ページ" variant="outlined" density="comfortable" hide-details class="mb-2" />
                     <v-text-field v-model="taskLink.url" label="URL" placeholder="https://example.com" variant="outlined" density="comfortable" hide-details />
@@ -695,6 +695,8 @@ const removeEditLink = (link: { title: string; url: string }) => {
   const index = editForm.value.links.indexOf(link)
   if (index >= 0) editForm.value.links.splice(index, 1)
 }
+
+const editLinks = computed(() => editForm.value.links)
 
 const canEdit = computed(() =>
   auth.hasPermission('tasks.edit'),
