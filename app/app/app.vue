@@ -7,7 +7,15 @@
 </template>
 
 <script setup lang="ts">
+import { setDefaultTimeZone } from "~/utils/jst"
+
 const siteStatus = useSiteStatus()
+
+watch(
+  () => siteStatus.value?.timezone,
+  (timeZone) => setDefaultTimeZone(timeZone),
+  { immediate: true },
+)
 
 useHead(() => {
   const siteName = siteStatus.value?.site_name || "38R 星陵祭準備サイト"
