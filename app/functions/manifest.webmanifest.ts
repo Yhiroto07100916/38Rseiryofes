@@ -46,12 +46,6 @@ export async function onRequest(context: PagesFunctionContext): Promise<Response
         name,
         short_name: Array.from(name).slice(0, 12).join("") || FALLBACK_MANIFEST.short_name,
         description: config.site_description?.trim() || FALLBACK_MANIFEST.description,
-        icons: config.logo_url
-          ? [
-              ...FALLBACK_MANIFEST.icons,
-              { src: config.logo_url, sizes: "any", type: "image/png", purpose: "any" },
-            ]
-          : FALLBACK_MANIFEST.icons,
       }
     }
   } catch {
