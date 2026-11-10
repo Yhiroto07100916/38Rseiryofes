@@ -270,9 +270,11 @@ export const useNotifications = () => {
       unread = latest.unread_count
       await validateNotificationCacheClock(accountId, latest.server_time)
 
-      // ここから先は取得完了済み。ログアウト後も元アカウントの領域にだけ保存する。
-      cacheSnapshot = merged.slice(0, 100)
-      await saveNotificationCache(accountId, cacheSnapshot, unread, latest.server_time)
+      // 取得済みデータは元アカウントの領域にだけ保存する。
+      // アカウント切替後に共有UI用スナップショットを書き換えない。
+      const snapshot = merged.slice(0, 100)
+      if (auth.user?.id === accountId) cacheSnapshot = snapshot
+      await saveNotificationCache(accountId, snapshot, unread, latest.server_time)
     })().catch(() => {
       // 不完全な取得結果では既存キャッシュを置き換えない。
     }).finally(() => {
