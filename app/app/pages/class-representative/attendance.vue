@@ -11,10 +11,13 @@
     <v-card rounded="xl" variant="outlined" class="mb-4">
       <v-card-text>
         <div class="d-flex flex-wrap align-center justify-space-between ga-3">
-          <div>
-            <div class="text-subtitle-2 text-medium-emphasis">対象日</div>
-            <input v-model="selectedDate" class="date-input" type="date" @change="loadAttendance">
-          </div>
+          <CommonJstDatePicker
+            :model-value="selectedDate"
+            label="対象日"
+            density="comfortable"
+            hide-details
+            @update:model-value="handleDateChange"
+          />
           <v-btn :loading="loading" prepend-icon="mdi-refresh" variant="tonal" @click="loadAttendance">
             更新
           </v-btn>
@@ -147,6 +150,11 @@ const summaryItems: { key: keyof Omit<AttendanceCounts, 'total'>; label: string;
   { key: 'unconfirmed', label: '未確認', color: 'surface-variant' },
 ]
 
+function handleDateChange(value: string) {
+  selectedDate.value = value
+  void loadAttendance()
+}
+
 async function loadAttendance() {
   loading.value = true
   error.value = ''
@@ -198,14 +206,6 @@ onMounted(loadAttendance)
 <style scoped>
 .attendance-page {
   max-width: 1100px;
-}
-.date-input {
-  min-height: 40px;
-  padding: 6px 10px;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 8px;
-  color: inherit;
-  background: transparent;
 }
 .status-column {
   min-width: 150px;
