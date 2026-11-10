@@ -10,6 +10,7 @@ import { handleCalendarCategories } from "./routes/calendar-categories"
 import { handleNews } from "./routes/news"
 import { handlePush, processDuePushDeliveries, processDueNotificationPushDeliveries } from "./routes/push"
 import { handleNotifications } from "./routes/notifications"
+import { handlePresence } from "./routes/presence"
 import { handleScripts } from "./routes/scripts"
 import { handleEquipment } from "./routes/equipment"
 import { handleToolRental } from "./routes/tool-rental"
@@ -312,6 +313,15 @@ export default {
       }
     }
 
+    if (url.pathname === "/api/presence" || url.pathname.startsWith("/api/presence/")) {
+      const pathParts = url.pathname.slice("/api/presence".length).split("/").filter(Boolean)
+      try {
+        return withCors(request, await handlePresence(request, env, pathParts))
+      } catch (error) {
+        console.error("Presence API error:", error)
+        return withCors(request, Response.json({ error: "Internal Server Error" }, { status: 500 }))
+      }
+    }
     if (
       url.pathname === "/api/notifications" ||
       url.pathname.startsWith("/api/notifications/")
