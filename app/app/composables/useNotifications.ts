@@ -2,6 +2,7 @@ import { onMounted, onUnmounted, ref, watch } from "vue"
 import { useApi } from "~/composables/useApi"
 import { useAuthStore } from "~/stores/auth"
 import { deleteNotificationCache, loadNotificationCache, saveNotificationCache, validateNotificationCacheClock } from "~/utils/notification-cache"
+import { getNotificationFailureLimit, getNotificationRetryDelay, NOTIFICATION_MAX_FAILURES } from "~/utils/notification-retry"
 
 export type NotificationCategory =
   | "tasks"
@@ -44,8 +45,6 @@ interface NotificationListResponse {
 }
 
 const PAGE_SIZE = 20
-const RETRY_DELAYS = [10_000, 20_000, 40_000, 60_000]
-const MAX_FAILURES = 5
 
 export const useNotifications = () => {
   const { apiFetch } = useApi()
@@ -381,9 +380,9 @@ export const useNotifications = () => {
   }
 
   const scheduleListRetry = (reset: boolean) => {
-    const failureLimit = manualRetryActive ? MAX_FAILURES + 1 : MAX_FAILURES
+    const failureLimit = getNotificationFailureLimit(manualRetryActive)
     if (!listActive || listRetryHandle || listFailures >= failureLimit) return
-    const delay = RETRY_DELAYS[Math.min(listFailures - 1, RETRY_DELAYS.length - 1)]
+    const delay = getNotificationRetryDelay(listFailures) ?? 60_000
     refreshMessage.value = "最新情報を再取得しています"
     listRetryHandle = setTimeout(() => {
       listRetryHandle = undefined
@@ -392,8 +391,8 @@ export const useNotifications = () => {
   }
 
   const scheduleUnreadRetry = () => {
-    if (!listActive || unreadRetryHandle || unreadFailures >= MAX_FAILURES) return
-    const delay = RETRY_DELAYS[Math.min(unreadFailures - 1, RETRY_DELAYS.length - 1)]
+    if (!listActive || unreadRetryHandle || unreadFailures >= NOTIFICATION_MAX_FAILURES) return
+    const delay = getNotificationRetryDelay(unreadFailures) ?? 60_000
     unreadRetryHandle = setTimeout(() => {
       unreadRetryHandle = undefined
       void refreshUnreadCount()
@@ -502,7 +501,7 @@ export const useNotifications = () => {
       successMessage.value = ""
       if (successHandle) clearTimeout(successHandle)
       successHandle = undefined
-      const failureLimit = manualRetryActive ? MAX_FAILURES + 1 : MAX_FAILURES
+      const failureLimit = getNotificationFailureLimit(manualRetryActive)
       if (listFailures >= failureLimit) {
         error.value = cacheExpired.value
           ? "最新情報を取得できませんでした。保存済みの通知を表示しています。手動で再試行してください。"
@@ -599,7 +598,7 @@ export const useNotifications = () => {
       unreadCountSuccess.value = ""
       if (unreadSuccessHandle) clearTimeout(unreadSuccessHandle)
       unreadSuccessHandle = undefined
-      if (unreadFailures >= MAX_FAILURES) {
+      if (unreadFailures >= NOTIFICATION_MAX_FAILURES) {
         unreadCountError.value = "未読件数を再取得できませんでした。手動で再試行してください。"
       } else {
         unreadCountError.value = "未読件数を取得できませんでした。"
@@ -901,10 +900,10 @@ export const useNotifications = () => {
       successMessage.value = ""
       if (successHandle) clearTimeout(successHandle)
       successHandle = undefined
-      error.value = listFailures >= MAX_FAILURES
+      error.value = listFailures >= NOTIFICATION_MAX_FAILURES
         ? "再取得に失敗しました。手動で再試行してください。"
         : "通知を取得できませんでした。通信環境を確認して再試行してください。"
-      if (listFailures >= MAX_FAILURES) {
+      if (listFailures >= NOTIFICATION_MAX_FAILURES) {
         refreshMessage.value = ""
         manualRefreshRequested = false
       } else {
