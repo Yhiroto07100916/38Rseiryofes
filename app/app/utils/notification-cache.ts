@@ -74,7 +74,8 @@ function validNotification(value: unknown): value is CachedNotification {
     typeof item.category === "string" &&
     (typeof item.target_url === "string" || item.target_url === null) &&
     (item.is_read === 0 || item.is_read === 1) &&
-    typeof item.created_at === "string"
+    typeof item.created_at === "string" &&
+    Number.isFinite(Date.parse(item.created_at))
   )
 }
 
