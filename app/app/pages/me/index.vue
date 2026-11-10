@@ -550,6 +550,19 @@
           </v-card-text>
         </v-card>
 
+        <PresenceSettings />
+
+        <v-card rounded="xl" variant="outlined" class="mb-4">
+          <v-card-text class="d-flex align-center ga-3">
+            <v-icon icon="mdi-bell-badge-outline" color="primary" />
+            <div class="flex-grow-1">
+              <div class="font-weight-medium">アプリ内通知履歴</div>
+              <div class="text-caption text-medium-emphasis">工具貸出などの通知を確認できます。</div>
+            </div>
+            <v-btn to="/notifications" color="primary" variant="tonal">開く</v-btn>
+          </v-card-text>
+        </v-card>
+
         <v-card
           rounded="xl"
           elevation="1"
