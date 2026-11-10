@@ -1,5 +1,7 @@
 import { onMounted, onUnmounted, ref } from "vue"
 import { useApi } from "~/composables/useApi"
+import { useAuthStore } from "~/stores/auth"
+import { loadNotificationCache, saveNotificationCache } from "~/utils/notification-cache"
 
 export type NotificationCategory =
   | "tasks"
@@ -43,6 +45,7 @@ const MAX_FAILURES = 5
 
 export const useNotifications = () => {
   const { apiFetch } = useApi()
+  const auth = useAuthStore()
   const notifications = ref<AppNotification[]>([])
   const unreadCount = ref(0)
   const loading = ref(false)
@@ -69,6 +72,8 @@ export const useNotifications = () => {
   let manualRefreshRequested = false
   let listFailures = 0
   let unreadFailures = 0
+  let hasSuccessfulApiFetch = false
+  const cacheUpdatePromises = new Map<string, Promise<void>>()
 
   const buildQuery = (includeCursor: boolean) => {
     const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
@@ -80,6 +85,132 @@ export const useNotifications = () => {
       params.set("before_id", cursor.value.id)
     }
     return params.toString()
+  }
+
+  const delay = (milliseconds: number) =>
+    new Promise<void>(resolve => setTimeout(resolve, milliseconds))
+
+  const mapCachedNotification = (item: {
+    id: string
+    title: string
+    body: string
+    category: string
+    target_url: string | null
+    is_read: number
+    created_at: string
+  }): AppNotification => ({
+    id: item.id,
+    event_key: "",
+    category: item.category as NotificationCategory,
+    title: item.title,
+    body: item.body,
+    target_url: item.target_url,
+    actor_user_id: null,
+    entity_type: null,
+    entity_id: null,
+    is_read: item.is_read,
+    created_at: item.created_at,
+    expires_at: new Date(Date.parse(item.created_at) + 90 * 24 * 60 * 60 * 1000).toISOString(),
+  })
+
+  const loadCache = async (accountId: string) => {
+    try {
+      const cached = await loadNotificationCache(accountId)
+      if (!cached || hasSuccessfulApiFetch || auth.user?.id !== accountId) return
+
+      const term = search.value.trim().toLocaleLowerCase()
+      const filtered = cached.notifications.filter(item => {
+        if (readFilter.value === "unread" && item.is_read) return false
+        if (readFilter.value === "read" && !item.is_read) return false
+        if (
+          selectedCategories.value.length > 0 &&
+          !selectedCategories.value.includes(item.category as NotificationCategory)
+        ) return false
+        if (term && ![item.title, item.body, item.category].some(value =>
+          value.toLocaleLowerCase().includes(term),
+        )) return false
+        return true
+      })
+
+      const visible = filtered.slice(0, PAGE_SIZE)
+      notifications.value = visible.map(mapCachedNotification)
+      unreadCount.value = cached.unreadCount
+      const cursorItem = filtered.length > PAGE_SIZE
+        ? filtered[PAGE_SIZE - 1]
+        : cached.notifications.length >= 100
+          ? cached.notifications[cached.notifications.length - 1]
+          : filtered[filtered.length - 1]
+      cursor.value = cursorItem
+        ? { created_at: cursorItem.created_at, id: cursorItem.id }
+        : null
+      hasMore.value = filtered.length > PAGE_SIZE || cached.notifications.length >= 100
+    } catch {
+      // キャッシュ障害時はAPI取得を継続する。
+    }
+  }
+
+  const fetchCachePage = async (
+    accountId: string,
+    pageCursor: { created_at: string; id: string } | null,
+  ) => {
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
+    if (pageCursor) {
+      params.set("before_created_at", pageCursor.created_at)
+      params.set("before_id", pageCursor.id)
+    }
+
+    const retryDelays = [1_000, 3_000, 5_000]
+    for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+      if (auth.user?.id !== accountId) {
+        throw new Error("Notification cache update invalidated by account change")
+      }
+      try {
+        return await apiFetch<NotificationListResponse>(
+          "/api/notifications?" + params.toString(),
+        )
+      } catch (error) {
+        if (attempt === retryDelays.length) throw error
+        await delay(retryDelays[attempt])
+      }
+    }
+    throw new Error("Notification cache page fetch failed")
+  }
+
+  const refreshFullCache = (accountId: string) => {
+    const existing = cacheUpdatePromises.get(accountId)
+    if (existing) return existing
+
+    const update = (async () => {
+      const all: AppNotification[] = []
+      let nextCursor: { created_at: string; id: string } | null = null
+      let unread = 0
+
+      for (let page = 0; page < 5; page++) {
+        const response = await fetchCachePage(accountId, nextCursor)
+        all.push(...response.notifications)
+        unread = response.unread_count
+        nextCursor = response.next_cursor
+        if (!nextCursor) break
+      }
+
+      const latest = await fetchCachePage(accountId, null)
+      const ids = new Set(all.map(item => item.id))
+      const merged = [
+        ...latest.notifications,
+        ...all.filter(item => !ids.has(item.id)),
+      ]
+      unread = latest.unread_count
+
+      // ここから先は取得完了済み。ログアウト後も元アカウントの領域にだけ保存する。
+      await saveNotificationCache(accountId, merged.slice(0, 100), unread)
+    })().catch(() => {
+      // 不完全な取得結果では既存キャッシュを置き換えない。
+    }).finally(() => {
+      cacheUpdatePromises.delete(accountId)
+    })
+
+    cacheUpdatePromises.set(accountId, update)
+    return update
   }
 
   const clearListRetry = () => {
