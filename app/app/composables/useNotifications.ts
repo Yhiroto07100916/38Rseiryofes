@@ -543,18 +543,27 @@ export const useNotifications = () => {
     item.is_read = isRead ? 1 : 0
 
     try {
-      await apiFetch("/api/notifications/" + encodeURIComponent(id) + "/read", {
-        method: "PATCH",
-        body: { is_read: isRead },
-      })
+      const saved = await apiFetch<{ read_updated_at: string }>(
+        "/api/notifications/" + encodeURIComponent(id) + "/read",
+        {
+          method: "PATCH",
+          body: { is_read: isRead },
+        },
+      )
       if (auth.user?.id !== requestAccountId) return true
       if (pendingReadOperations.get(id) !== operation) return true
       pendingReadOperations.delete(id)
       readStateWriteCompletedAt.set(id, Date.now())
       const currentItem = notifications.value.find(notification => notification.id === id)
-      if (currentItem) currentItem.is_read = isRead ? 1 : 0
+      if (currentItem) {
+        currentItem.is_read = isRead ? 1 : 0
+        currentItem.read_updated_at = saved.read_updated_at
+      }
       const cachedItem = cacheSnapshot.find(notification => notification.id === id)
-      if (cachedItem) cachedItem.is_read = isRead ? 1 : 0
+      if (cachedItem) {
+        cachedItem.is_read = isRead ? 1 : 0
+        cachedItem.read_updated_at = saved.read_updated_at
+      }
       unreadCount.value = Math.max(0, unreadCount.value + (isRead ? -1 : 1))
       await refreshUnreadCount()
       void saveCacheSnapshot(requestAccountId)
@@ -574,18 +583,29 @@ export const useNotifications = () => {
   const markAllRead = async () => {
     const requestAccountId = auth.user?.id ?? null
     try {
-      const response = await apiFetch<{ updated_count: number; updated_ids: string[] }>("/api/notifications/read-all", {
+      const response = await apiFetch<{
+        updated_count: number
+        updated_ids: string[]
+        updated_read_states: Array<{ id: string; read_updated_at: string }>
+      }>("/api/notifications/read-all", {
         method: "POST",
       })
       if (auth.user?.id !== requestAccountId) return null
       const updatedIds = new Set(response.updated_ids)
+      const updatedReadStates = new Map(response.updated_read_states.map(item => [item.id, item.read_updated_at]))
       const completedAt = Date.now()
       for (const id of updatedIds) readStateWriteCompletedAt.set(id, completedAt)
       for (const item of notifications.value) {
-        if (updatedIds.has(item.id)) item.is_read = 1
+        if (updatedIds.has(item.id)) {
+          item.is_read = 1
+          item.read_updated_at = updatedReadStates.get(item.id) ?? item.read_updated_at
+        }
       }
       for (const item of cacheSnapshot) {
-        if (updatedIds.has(item.id)) item.is_read = 1
+        if (updatedIds.has(item.id)) {
+          item.is_read = 1
+          item.read_updated_at = updatedReadStates.get(item.id) ?? item.read_updated_at
+        }
       }
       if (readFilter.value === "unread") {
         notifications.value = notifications.value.filter(item => !updatedIds.has(item.id))
