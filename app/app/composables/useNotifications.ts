@@ -489,8 +489,9 @@ export const useNotifications = () => {
       if (auth.user?.id !== requestAccountId) return true
       const cachedItem = cacheSnapshot.find(notification => notification.id === id)
       if (cachedItem) cachedItem.is_read = isRead ? 1 : 0
-      void saveCacheSnapshot(requestAccountId)
+      unreadCount.value = Math.max(0, unreadCount.value + (isRead ? -1 : 1))
       await refreshUnreadCount()
+      void saveCacheSnapshot(requestAccountId)
       return true
     } catch {
       if (auth.user?.id !== requestAccountId) return true
