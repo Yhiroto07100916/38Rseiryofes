@@ -783,6 +783,25 @@ const {
   disable: disablePush,
 } = usePushNotifications()
 
+const notificationSettingsLoading = ref(true)
+const notificationSettingsSaving = ref(false)
+const globalPushEnabled = ref(true)
+const notificationCategorySettings = ref<Record<string, boolean>>({})
+const notificationCategoryOptions = [
+  { title: 'タスク', value: 'tasks' },
+  { title: 'カレンダー', value: 'calendar' },
+  { title: '提出物', value: 'submissions' },
+  { title: 'お知らせ', value: 'news' },
+  { title: 'アンケート', value: 'surveys' },
+  { title: '意思決定', value: 'decisions' },
+  { title: '備品', value: 'equipment' },
+  { title: '工具貸出', value: 'tool_rental' },
+  { title: '会計', value: 'accounting' },
+  { title: 'ファイル', value: 'files' },
+  { title: '牛乳パック', value: 'milk_collection' },
+  { title: 'ほしい物リスト', value: 'wishlist' },
+  { title: 'アカウント', value: 'account_admin' },
+]
 const {
   apiFetch,
   getCalendarEvents,
