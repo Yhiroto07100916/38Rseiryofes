@@ -7,6 +7,7 @@ on:
   pull_request:
     paths:
       - "worker/**"
+      - "app/**"
       - "migrations/**"
       - ".github/workflows/worker-tests.yml"
 
@@ -31,3 +32,25 @@ jobs:
       - name: Run Worker tests
         run: npm test
         working-directory: worker
+  app-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install app dependencies
+        run: npm ci
+        working-directory: app
+
+      - name: Build Nuxt app
+        run: npm run build
+        working-directory: app
+        env:
+          NUXT_PUBLIC_API_BASE_URL: https://api.38r-seiryofes.com
