@@ -1,4 +1,17 @@
-const DEFAULT_TIME_ZONE = 'Asia/Tokyo'
+let DEFAULT_TIME_ZONE = 'Asia/Tokyo'
+
+export function setDefaultTimeZone(timeZone?: string): void {
+  if (!timeZone) {
+    DEFAULT_TIME_ZONE = 'Asia/Tokyo'
+    return
+  }
+  try {
+    new Intl.DateTimeFormat('ja-JP', { timeZone })
+    DEFAULT_TIME_ZONE = timeZone
+  } catch {
+    DEFAULT_TIME_ZONE = 'Asia/Tokyo'
+  }
+}
 
 function getDateParts(
   value: string | Date,
