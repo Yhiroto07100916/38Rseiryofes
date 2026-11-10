@@ -2,11 +2,12 @@ declare const __D1_MIGRATIONS__: string
 
 import { applyD1Migrations, env } from "cloudflare:test"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
-import { processDueNotificationPushDeliveries } from "../src/routes/push"
+import { canAccessNotificationTarget, processDueNotificationPushDeliveries } from "../src/routes/push"
 
 const userIds: string[] = []
 const notificationIds: string[] = []
 const subscriptionIds: string[] = []
+const calendarEventIds: string[] = []
 
 const pushEnv = Object.assign(Object.create(env), {
   VAPID_PUBLIC_KEY: "test-public-key",
@@ -22,6 +23,9 @@ afterEach(async () => {
   vi.restoreAllMocks()
   for (const id of notificationIds.splice(0)) {
     await env.DB.prepare("DELETE FROM notifications WHERE id = ?").bind(id).run()
+  }
+  for (const id of calendarEventIds.splice(0)) {
+    await env.DB.prepare("DELETE FROM calendar_events WHERE id = ?").bind(id).run()
   }
   for (const id of subscriptionIds.splice(0)) {
     await env.DB.prepare("DELETE FROM push_subscriptions WHERE id = ?").bind(id).run()
@@ -41,6 +45,51 @@ async function createUser(name: string): Promise<string> {
 }
 
 describe("notification Push delivery account isolation", () => {
+  it("suppresses an attendance reminder if the recipient answers before Push delivery", async () => {
+    const recipientId = await createUser("出欠回答済みユーザー")
+    const eventId = crypto.randomUUID()
+    const startsAt = new Date(Date.now() + 60 * 60_000).toISOString()
+    calendarEventIds.push(eventId)
+
+    await env.DB.prepare(
+      "INSERT INTO user_permissions (user_id, permission_id, effect) " +
+      "SELECT ?, id, 'allow' FROM permissions WHERE key = 'schedule.view'",
+    ).bind(recipientId).run()
+    await env.DB.prepare(
+      "INSERT INTO calendar_events (id, title, starts_at, is_all_day, created_by) VALUES (?, ?, ?, 0, ?)",
+    ).bind(eventId, "出欠リマインダーテスト", startsAt, recipientId).run()
+    await env.DB.prepare(
+      "INSERT INTO calendar_event_attendance (event_id, user_id, status) VALUES (?, ?, 'attending')",
+    ).bind(eventId, recipientId).run()
+
+    const delivery = {
+      delivery_id: crypto.randomUUID(),
+      notification_id: crypto.randomUUID(),
+      subscription_id: crypto.randomUUID(),
+      attempt_count: 0,
+      endpoint: "https://fcm.googleapis.com/fcm/send/test",
+      p256dh: "test-p256dh",
+      auth: "test-auth",
+      title: "出欠を回答してください",
+      body: "予定",
+      target_url: "/calendar",
+      recipient_user_id: recipientId,
+      category: "calendar",
+      event_key: "calendar.attendance_reminder_1h",
+      dedupe_key: "calendar.attendance_reminder_1h:" + eventId + ":" + startsAt + ":1h",
+      required_permission: "schedule.view",
+      entity_type: "calendar_event",
+      entity_id: eventId,
+    }
+
+    expect(await canAccessNotificationTarget(env, delivery)).toBe(false)
+
+    await env.DB.prepare(
+      "UPDATE calendar_event_attendance SET status = 'undecided' WHERE event_id = ? AND user_id = ?",
+    ).bind(eventId, recipientId).run()
+    expect(await canAccessNotificationTarget(env, delivery)).toBe(true)
+  })
+
   it("does not send an old account's notification to a subscription reassigned to another account", async () => {
     const recipientId = await createUser("通知の受信者")
     const currentSubscriptionOwnerId = await createUser("現在の端末所有者")
