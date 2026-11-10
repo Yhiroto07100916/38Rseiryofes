@@ -3,6 +3,7 @@ import test from "node:test"
 import {
   installFakeIndexedDB,
   readFakeIndexedDBRecord,
+  writeFakeIndexedDBRecord,
 } from "./helpers/fake-indexeddb.mjs"
 
 installFakeIndexedDB()
@@ -70,11 +71,7 @@ test("removes malformed persisted records instead of returning them", async () =
   const record = readFakeIndexedDBRecord(DATABASE_NAME, STORE_NAME, "account-d")
   assert.ok(record)
   record.unreadCount = -1
-
-  const records = globalThis.indexedDB
-  assert.ok(records)
-  const stored = readFakeIndexedDBRecord(DATABASE_NAME, STORE_NAME, "account-d")
-  assert.equal(stored?.unreadCount, -1)
+  writeFakeIndexedDBRecord(DATABASE_NAME, STORE_NAME, "account-d", record)
 
   const cached = await loadNotificationCache("account-d")
   assert.equal(cached, null)

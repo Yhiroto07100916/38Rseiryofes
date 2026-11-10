@@ -123,3 +123,9 @@ export function installFakeIndexedDB() {
 export function readFakeIndexedDBRecord(databaseName, storeName, key) {
   return clone(databases.get(databaseName)?.get(storeName)?.get(key))
 }
+
+export function writeFakeIndexedDBRecord(databaseName, storeName, key, value) {
+  const records = databases.get(databaseName)?.get(storeName)
+  if (!records) throw new Error(`Unknown fake IndexedDB store: ${storeName}`)
+  records.set(key, clone(value))
+}
