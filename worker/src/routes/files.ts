@@ -1,5 +1,4 @@
 import { hasPermission, requireAuth } from "../lib/authz"
-import { notifyFileLinked } from "../lib/file-notifications"
 
 type Env = {
   DB: D1Database
