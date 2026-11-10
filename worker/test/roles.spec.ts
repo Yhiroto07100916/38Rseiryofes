@@ -317,4 +317,28 @@ describe("site settings authorization", () => {
     )
     expect(restoreResponse.status).toBe(200)
   })
+
+  it("rejects new login sessions when login is disabled in site settings", async () => {
+    await env.DB.prepare(
+      "UPDATE site_settings SET value = 'false' WHERE key = 'login_enabled'",
+    ).run()
+
+    try {
+      const response = await SELF.fetch("http://example.com/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+
+      expect(response.status).toBe(403)
+      expect(await response.json()).toEqual({
+        error: "Login is currently disabled",
+      })
+    } finally {
+      await env.DB.prepare(
+        "UPDATE site_settings SET value = 'true' WHERE key = 'login_enabled'",
+      ).run()
+    }
+  })
+
 })
