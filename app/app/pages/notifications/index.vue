@@ -1,6 +1,6 @@
 <template>
   <v-container class="py-5 px-4 notification-page">
-    <div class="d-flex align-center mb-5">
+    <div class="d-flex align-center mb-1">
       <div class="flex-grow-1">
         <h1 class="text-h5 font-weight-bold">通知</h1>
         <div class="text-body-2 text-medium-emphasis mt-1">
@@ -15,6 +15,30 @@
         @click="refresh"
       />
     </div>
+    <div v-if="refreshMessage" class="text-caption text-medium-emphasis mb-3">
+      {{ refreshMessage }}
+    </div>
+    <v-alert
+      v-if="unreadCountError"
+      type="error"
+      variant="tonal"
+      density="compact"
+      closable
+      class="mb-4"
+      @click:close="clearUnreadCountError"
+    >
+      {{ unreadCountError }}
+      <template #append>
+        <v-btn
+          size="small"
+          variant="text"
+          :loading="unreadCountLoading"
+          @click="retryUnreadCount"
+        >
+          再取得
+        </v-btn>
+      </template>
+    </v-alert>
 
     <v-card rounded="xl" variant="outlined" class="mb-4">
       <v-card-text class="pa-3">
@@ -164,7 +188,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
+import { ref, watch } from "vue"
 import { useNotifications, type AppNotification, type NotificationCategory } from "~/composables/useNotifications"
 
 definePageMeta({ middleware: "auth" })
@@ -175,6 +199,11 @@ const {
   loading,
   loadingMore,
   error,
+  unreadCountError,
+  unreadCountLoading,
+  refreshMessage,
+  successMessage,
+  unreadCountSuccess,
   hasMore,
   readFilter,
   selectedCategories,
@@ -184,10 +213,19 @@ const {
   setRead,
   markAllRead,
   setFilters,
+  retryUnreadCount,
+  clearUnreadCountError,
 } = useNotifications()
 
 const snackbar = ref(false)
 const snackbarText = ref("")
+
+watch([successMessage, unreadCountSuccess], ([listSuccess, countSuccess]) => {
+  const message = listSuccess || countSuccess
+  if (!message) return
+  snackbarText.value = message
+  snackbar.value = true
+})
 
 const categoryOptions = [
   { title: "タスク", value: "tasks" },
