@@ -476,6 +476,7 @@
 </template>
 
 <script setup lang="ts">
+import { getDefaultTimeZone } from '~/utils/jst'
 import { nextTick } from "vue"
 definePageMeta({
   middleware: ['auth'],
@@ -609,7 +610,7 @@ const formatDate = (value: string) => {
   const date = new Date(value)
   return Number.isNaN(date.getTime())
     ? value
-    : date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+    : date.toLocaleString('ja-JP', { timeZone: getDefaultTimeZone() })
 }
 
 const fileIcon = (contentType: string) => {
