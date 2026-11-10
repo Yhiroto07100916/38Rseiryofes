@@ -160,7 +160,7 @@ export async function handleNotifications(
     return Response.json({ unread_count: result?.count ?? 0, server_time: new Date().toISOString() })
   }
 
-  if (pathParts.length === 1 && method === "GET") {
+  if (pathParts.length === 1 && method === "GET" && pathParts[0] !== "settings") {
     await purgeExpiredNotifications(env, userId)
     const notification = await env.DB.prepare(
       "SELECT id, event_key, category, title, body, target_url, actor_user_id, entity_type, entity_id, " +
