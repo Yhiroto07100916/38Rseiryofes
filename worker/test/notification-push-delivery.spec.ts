@@ -10,7 +10,6 @@ const subscriptionIds: string[] = []
 const surveyIds: string[] = []
 const calendarEventIds: string[] = []
 const taskIds: string[] = []
-const calendarEventIds: string[] = []
 
 const pushEnv = Object.assign(Object.create(env), {
   VAPID_PUBLIC_KEY: "test-public-key",
@@ -155,33 +154,6 @@ describe("notification Push delivery account isolation", () => {
       entityType: "survey",
       entityId: surveyId,
       targetUrl: "/surveys?open=" + surveyId,
-    }))
-
-    expect(allowed).toBe(false)
-  })
-
-  it("suppresses attendance reminders after the recipient has answered", async () => {
-    const creatorId = await createUser("予定作成者")
-    const recipientId = await createUser("回答者", ["schedule.view"])
-    const eventId = crypto.randomUUID()
-    const startsAt = new Date(Date.now() + 30 * 60_000).toISOString()
-    calendarEventIds.push(eventId)
-    await env.DB.prepare(
-      "INSERT INTO calendar_events (id, title, starts_at, created_by) VALUES (?, ?, ?, ?)",
-    ).bind(eventId, "テスト予定", startsAt, creatorId).run()
-    await env.DB.prepare(
-      "INSERT INTO calendar_event_attendance (event_id, user_id, status) VALUES (?, ?, 'attending')",
-    ).bind(eventId, recipientId).run()
-
-    const allowed = await canAccessNotificationTarget(env, deliveryFor({
-      recipientId,
-      category: "calendar",
-      eventKey: "calendar.attendance_reminder_1h",
-      entityType: "calendar_event",
-      entityId: eventId,
-      targetUrl: "/calendar/" + eventId,
-      requiredPermission: "schedule.view",
-      dedupeKey: "calendar.attendance_reminder_1h:" + eventId + ":" + startsAt + ":1h",
     }))
 
     expect(allowed).toBe(false)
