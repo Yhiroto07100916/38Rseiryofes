@@ -12,6 +12,7 @@ export interface SiteStatus {
   logo_url: string
   favicon_url: string
   calendar_default_view: "month" | "list"
+  feature_enabled: Record<string, boolean>
   is_authenticated: boolean
   is_admin: boolean
   is_important_settings_admin: boolean
