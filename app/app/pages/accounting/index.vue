@@ -166,11 +166,9 @@
                     </v-col>
 
                     <v-col cols="12" sm="6" md="3">
-                      <v-text-field
+                      <CommonJstDatePicker
                         v-model="aggregationStartDate"
                         label="期間開始"
-                        type="date"
-                        variant="outlined"
                         density="comfortable"
                         hide-details
                         clearable
@@ -178,11 +176,9 @@
                     </v-col>
 
                     <v-col cols="12" sm="6" md="3">
-                      <v-text-field
+                      <CommonJstDatePicker
                         v-model="aggregationEndDate"
                         label="期間終了"
-                        type="date"
-                        variant="outlined"
                         density="comfortable"
                         hide-details
                         clearable
@@ -751,11 +747,9 @@
 
           <v-row>
             <v-col cols="12" sm="6">
-              <v-text-field
+              <CommonJstDatePicker
                 v-model="receiptForm.purchased_at"
                 label="購入日"
-                type="date"
-                variant="outlined"
               />
             </v-col>
 
