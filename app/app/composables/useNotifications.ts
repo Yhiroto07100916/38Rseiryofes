@@ -417,9 +417,17 @@ export const useNotifications = () => {
 
     try {
       if (reset) cursor.value = null
-      const response = await apiFetch<NotificationListResponse>(
-        "/api/notifications?" + buildQuery(!reset),
+      const params = new URLSearchParams(buildQuery(!reset))
+      const knownIds = [...new Set([
+        ...notifications.value.map(item => item.id),
+        ...cacheSnapshot.map(item => item.id),
+      ])].slice(0, 100)
+      if (knownIds.length > 0) params.set("known_ids", knownIds.join(","))
+      let response = await apiFetch<NotificationListResponse>(
+        "/api/notifications?" + params.toString(),
       )
+      if (auth.user?.id !== requestAccountId) return
+      response = await resolveReadStateConflicts(response)
       if (auth.user?.id !== requestAccountId) return
       await validateServerClock(requestAccountId, response.server_time)
       hasSuccessfulApiFetch = true
@@ -629,7 +637,8 @@ export const useNotifications = () => {
     response: NotificationListResponse,
   ): Promise<NotificationListResponse> => {
     const listed = new Map(response.notifications.map(item => [item.id, item]))
-    const local = new Map(notifications.value.map(item => [item.id, item]))
+    const local = new Map(cacheSnapshot.map(item => [item.id, item]))
+    for (const item of notifications.value) local.set(item.id, item)
     const conflicts = (response.known_notifications ?? []).filter(known => {
       const knownTime = Date.parse(known.read_updated_at)
       const listedItem = listed.get(known.id)
