@@ -31,11 +31,10 @@ export async function getSiteSetting<T>(
   }
 }
 
-export async function isFeaturePermissionEnabled(
-  env: Pick<Env, "DB">,
+function isFeatureEnabledForPermission(
+  rawFeature: FeatureSettings,
   permissionKey: string,
-): Promise<boolean> {
-  const rawFeature = await getSiteSetting<FeatureSettings>(env, "feature_settings", {})
+): boolean {
   const parts = permissionKey.split(".")
   const rawCategory = parts[0] ?? ""
   const category = PERMISSION_FEATURE_ALIASES[rawCategory] ?? rawCategory
@@ -48,6 +47,22 @@ export async function isFeaturePermissionEnabled(
   }
 
   return true
+}
+
+export async function filterEnabledFeaturePermissions(
+  env: Pick<Env, "DB">,
+  permissionKeys: string[],
+): Promise<string[]> {
+  const rawFeature = await getSiteSetting<FeatureSettings>(env, "feature_settings", {})
+  return permissionKeys.filter(key => isFeatureEnabledForPermission(rawFeature, key))
+}
+
+export async function isFeaturePermissionEnabled(
+  env: Pick<Env, "DB">,
+  permissionKey: string,
+): Promise<boolean> {
+  const enabled = await filterEnabledFeaturePermissions(env, [permissionKey])
+  return enabled.length === 1
 }
 
 export async function getSecuritySettings(env: Pick<Env, "DB">): Promise<{
