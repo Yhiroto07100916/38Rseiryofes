@@ -37,6 +37,8 @@ const MAX_NOTIFICATIONS = 100
 
 let databasePromise: Promise<IDBDatabase> | null = null
 const pendingCacheSaves = new Map<string, Promise<void>>()
+const cacheDeletionRequested = new Set<string>()
+const cacheDeletionPromises = new Map<string, Promise<void>>()
 
 function openDatabase(): Promise<IDBDatabase> {
   if (typeof indexedDB === "undefined") {
@@ -98,6 +100,9 @@ export async function loadNotificationCache(
   accountId: string,
 ): Promise<LoadedNotificationCache | null> {
   if (!accountId) return null
+  const pendingDeletion = cacheDeletionPromises.get(accountId)
+  if (pendingDeletion) await pendingDeletion
+  cacheDeletionRequested.delete(accountId)
   const database = await openDatabase()
 
   const record = await new Promise<NotificationCacheRecord | undefined>((resolve, reject) => {
@@ -154,7 +159,7 @@ export async function saveNotificationCache(
   serverTime?: string | null,
   preserveValidity = false,
 ): Promise<void> {
-  if (!accountId) return
+  if (!accountId || cacheDeletionRequested.has(accountId)) return
 
   const previous = pendingCacheSaves.get(accountId)
   const operation = (async () => {
@@ -273,23 +278,21 @@ export async function validateNotificationCacheClock(
 
 export async function deleteNotificationCache(accountId: string): Promise<void> {
   if (!accountId) return
+  const existingDeletion = cacheDeletionPromises.get(accountId)
+  if (existingDeletion) return existingDeletion
 
-  // ログアウト時点ですでに始まっている保存は完了させ、その直後に必ず削除する。
-  // 後続の保存がDBオープン待ちで始まった場合も、保存完了後に削除する。
-  let database = await openDatabase()
-  while (true) {
+  // ログアウト開始時点で新しい保存を止め、開始済みの保存だけを完了させる。
+  cacheDeletionRequested.add(accountId)
+  const deletion = (async () => {
     const pendingSave = pendingCacheSaves.get(accountId)
-    if (pendingSave) {
-      await pendingSave.catch(() => undefined)
-      continue
-    }
-    database = await openDatabase()
-    const saveStartedWhileOpening = pendingCacheSaves.get(accountId)
-    if (saveStartedWhileOpening) {
-      await saveStartedWhileOpening.catch(() => undefined)
-      continue
-    }
+    if (pendingSave) await pendingSave.catch(() => undefined)
+    const database = await openDatabase()
     await deleteRecord(database, accountId)
-    return
+  })()
+  cacheDeletionPromises.set(accountId, deletion)
+  try {
+    await deletion
+  } finally {
+    cacheDeletionPromises.delete(accountId)
   }
 }
