@@ -17,6 +17,30 @@ export default defineNuxtRouteMiddleware(async (to) => {
     siteStatus.require_login ||
     siteStatus.site_visibility === "private"
 
+  const featureRoutes: Array<[string, string]> = [
+    ["/tasks", "tasks"],
+    ["/calendar", "calendar"],
+    ["/news", "news"],
+    ["/scripts", "scripts"],
+    ["/accounting", "accounting"],
+    ["/equipment", "equipment"],
+    ["/surveys", "surveys"],
+    ["/files", "files"],
+    ["/submissions", "submissions"],
+    ["/decisions", "decisions"],
+    ["/minutes", "minutes"],
+    ["/tool-rental", "tool_rental"],
+    ["/wishlist", "wishlist"],
+    ["/milk-collection", "milk_collection"],
+  ]
+  const disabledFeature = featureRoutes.find(([prefix, feature]) =>
+    (to.path === prefix || to.path.startsWith(prefix + "/")) &&
+    siteStatus?.feature_enabled?.[feature] === false,
+  )
+  if (disabledFeature && !to.path.startsWith("/admin")) {
+    return navigateTo("/")
+  }
+
   if (
     siteStatus?.maintenance_mode &&
     !siteStatus.is_important_settings_admin &&
