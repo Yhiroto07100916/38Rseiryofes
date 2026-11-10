@@ -125,6 +125,11 @@ export async function handlePush(
         return jsonError("A valid endpoint is required", 400)
       }
 
+      await env.DB.prepare(`
+        UPDATE push_subscriptions SET user_id = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE endpoint = ? AND user_id IS NULL
+      `).bind(auth.user.id, endpoint).run()
+
       const subscription = await env.DB
         .prepare("SELECT id FROM push_subscriptions WHERE endpoint = ? AND user_id = ?")
         .bind(endpoint, auth.user.id)
