@@ -1,4 +1,5 @@
 import { requireAccountRole } from "../lib/authz"
+import { createNotificationsForUsers } from "../lib/notifications"
 
 export interface AccountRole {
   id: string
@@ -26,7 +27,7 @@ function generateId(): string {
 async function requireAdmin(
   request: Request,
   env: Env,
-): Promise<Response | null> {
+): Promise<{ userId: string } | Response> {
   const auth = await requireAccountRole(
     request,
     env,
@@ -37,7 +38,7 @@ async function requireAdmin(
     return auth
   }
 
-  return null
+  return { userId: auth.user.id }
 }
 
 export async function handleAccountRoles(
@@ -45,10 +46,10 @@ export async function handleAccountRoles(
   env: Env,
   pathParts: string[],
 ): Promise<Response> {
-  const authError = await requireAdmin(request, env)
+  const admin = await requireAdmin(request, env)
 
-  if (authError) {
-    return authError
+  if (admin instanceof Response) {
+    return admin
   }
 
   if (request.method === "GET") {
@@ -495,12 +496,12 @@ export async function handleUserAccountRoles(
 
     const accountRole = await env.DB
       .prepare(`
-        SELECT id
+        SELECT id, name
         FROM account_roles
         WHERE id = ?
       `)
       .bind(body.account_role_id)
-      .first<{ id: string }>()
+      .first<{ id: string; name: string }>()
 
     if (!accountRole) {
       return Response.json(
@@ -537,6 +538,23 @@ export async function handleUserAccountRoles(
       .bind(userId, body.account_role_id)
       .run()
 
+    try {
+      await createNotificationsForUsers(env, {
+        recipientUserIds: [userId],
+        eventKey: "account_admin.role_granted",
+        category: "account_admin",
+        title: "アカウントロールが付与されました",
+        body: accountRole.name,
+        targetUrl: "/me",
+        actorUserId: admin.userId,
+        entityType: "account_role",
+        entityId: accountRole.id,
+        dedupeKey: "account_admin.role_granted:" + userId + ":" + accountRole.id + ":" + crypto.randomUUID(),
+      })
+    } catch (notificationError) {
+      console.error("Failed to create account role grant notification:", notificationError)
+    }
+
     return Response.json(
       {
         message: "Account role assigned",
@@ -568,6 +586,10 @@ export async function handleUserAccountRoles(
       )
     }
 
+    const accountRole = await env.DB.prepare(
+      "SELECT id, name FROM account_roles WHERE id = ?",
+    ).bind(accountRoleId).first<{ id: string; name: string }>()
+
     await env.DB
       .prepare(`
         DELETE FROM user_account_roles
@@ -576,6 +598,25 @@ export async function handleUserAccountRoles(
       `)
       .bind(userId, accountRoleId)
       .run()
+
+    if (accountRole) {
+      try {
+        await createNotificationsForUsers(env, {
+          recipientUserIds: [userId],
+          eventKey: "account_admin.role_revoked",
+          category: "account_admin",
+          title: "アカウントロールが解除されました",
+          body: accountRole.name,
+          targetUrl: "/me",
+          actorUserId: admin.userId,
+          entityType: "account_role",
+          entityId: accountRole.id,
+          dedupeKey: "account_admin.role_revoked:" + userId + ":" + accountRole.id + ":" + crypto.randomUUID(),
+        })
+      } catch (notificationError) {
+        console.error("Failed to create account role revocation notification:", notificationError)
+      }
+    }
 
     return new Response(null, { status: 204 })
   }
