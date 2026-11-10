@@ -802,7 +802,10 @@ async function canAccessNotificationTarget(
 
   if (delivery.entity_type === "task" && delivery.entity_id) {
     if (delivery.event_key === "task.assignee_removed") {
-      return hasPermission(env, delivery.recipient_user_id, "tasks.view")
+      // 担当解除通知はアクセス権を失った本人にも届ける必要がある。
+      return Boolean(await env.DB.prepare(
+        "SELECT 1 FROM tasks WHERE id = ? LIMIT 1",
+      ).bind(delivery.entity_id).first())
     }
 
     if (delivery.event_key.startsWith("task.deadline_reminder_")) {
