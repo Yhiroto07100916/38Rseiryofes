@@ -22,6 +22,16 @@ interface UserOption {
   nickname: string | null
 }
 
+interface SettingLog {
+  id: string
+  setting_key: string
+  old_value: string | null
+  new_value: string
+  changed_at: string
+  changed_by_name: string | null
+  changed_by_nickname: string | null
+}
+
 const api = useApi()
 const settings = reactive<SiteSettings>({
   site_name: '',
@@ -31,6 +41,7 @@ const settings = reactive<SiteSettings>({
 })
 const importantAdmins = ref<UserOption[]>([])
 const users = ref<UserOption[]>([])
+const settingLogs = ref<SettingLog[]>([])
 const selectedUserId = ref('')
 const loading = ref(true)
 const saving = ref(false)
@@ -58,6 +69,10 @@ async function loadSettings() {
       '/api/account-roles/settings',
     )
     Object.assign(settings, response.settings)
+    const logResponse = await api.apiFetch<{ logs: SettingLog[] }>(
+      '/api/account-roles/settings/logs',
+    )
+    settingLogs.value = logResponse.logs
 
     try {
       const adminResponse = await api.apiFetch<{ users: UserOption[] }>(
@@ -381,6 +396,40 @@ onMounted(loadSettings)
       <v-card rounded="xl" variant="outlined" class="mt-5">
         <v-card-item>
           <template #prepend>
+            <v-icon icon="mdi-history" size="30" color="primary" />
+          </template>
+          <v-card-title>設定変更履歴</v-card-title>
+          <v-card-subtitle>直近100件の設定変更を表示します。</v-card-subtitle>
+        </v-card-item>
+        <v-divider />
+        <v-table density="comfortable">
+          <thead>
+            <tr>
+              <th>変更日時</th>
+              <th>設定項目</th>
+              <th>変更者</th>
+              <th>変更後の値</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="log in settingLogs" :key="log.id">
+              <td class="text-no-wrap">{{ new Date(log.changed_at + 'Z').toLocaleString('ja-JP') }}</td>
+              <td><code>{{ log.setting_key }}</code></td>
+              <td>{{ log.changed_by_nickname || log.changed_by_name || '不明' }}</td>
+              <td class="setting-log-value">{{ log.new_value }}</td>
+            </tr>
+            <tr v-if="settingLogs.length === 0">
+              <td colspan="4" class="text-center text-medium-emphasis py-6">
+                変更履歴はありません。
+              </td>
+            </tr>
+          </tbody>
+        </v-table>
+      </v-card>
+
+      <v-card rounded="xl" variant="outlined" class="mt-5">
+        <v-card-item>
+          <template #prepend>
             <v-icon icon="mdi-tune-variant" size="30" color="primary" />
           </template>
           <v-card-title>機能別権限</v-card-title>
@@ -432,8 +481,12 @@ onMounted(loadSettings)
   line-height: 1.1;
   font-weight: 800;
 }
-.page-description {
+ .page-description {
   margin-top: 12px;
   color: rgba(var(--v-theme-on-surface), 0.68);
+}
+.setting-log-value {
+  max-width: 280px;
+  overflow-wrap: anywhere;
 }
 </style>
