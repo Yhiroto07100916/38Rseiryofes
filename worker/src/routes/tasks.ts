@@ -1684,6 +1684,24 @@ export async function handleTasks(
         updated_at: string
       }>()
 
+    try {
+      const recipients = await getTaskNotificationRecipientIds(env, taskId)
+      await createNotificationsForUsers(env, {
+        recipientUserIds: [...new Set([...recipients, task.created_by])],
+        eventKey: "task.commented",
+        category: "tasks",
+        title: "担当タスクにコメントが追加されました",
+        body: content,
+        targetUrl: "/tasks/" + taskId,
+        actorUserId: auth.user.id,
+        entityType: "task",
+        entityId: taskId,
+        dedupeKey: "task.commented:" + id,
+      })
+    } catch (notificationError) {
+      console.error("Failed to create task comment notifications:", notificationError)
+    }
+
     return Response.json(
       comment,
       { status: 201 },
