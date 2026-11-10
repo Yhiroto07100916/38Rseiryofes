@@ -235,7 +235,7 @@ export async function handlePush(
       }
 
       await env.DB
-        .prepare("DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?")
+        .prepare("DELETE FROM push_subscriptions WHERE endpoint = ? AND (user_id IS NULL OR user_id = ?)")
         .bind(endpoint, auth.user.id)
         .run()
 
