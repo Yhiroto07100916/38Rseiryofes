@@ -1,5 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
-import { enqueueNewsPushDeliveries, processDuePushDeliveries } from "./push"
+import { enqueueNewsPushDeliveries, processDuePushDeliveries, reenqueueNewsPushDeliveries } from "./push"
 
 export interface News {
   id: string
@@ -621,6 +621,54 @@ export async function handleNews(
     }
 
     return Response.json(news, { status: 201 })
+  }
+
+  if (
+    request.method === "POST" &&
+    pathParts.length === 2 &&
+    pathParts[1] === "notify"
+  ) {
+    if (!(await hasPermission(env, auth.user.id, "news.edit"))) {
+      return Response.json(
+        {
+          error: "Forbidden",
+          permission: "news.edit",
+        },
+        { status: 403 },
+      )
+    }
+
+    const newsId = pathParts[0]
+    const existingNews = await env.DB
+      .prepare("SELECT id FROM news WHERE id = ?")
+      .bind(newsId)
+      .first<{ id: string }>()
+
+    if (!existingNews) {
+      return Response.json(
+        { error: "News not found" },
+        { status: 404 },
+      )
+    }
+
+    const result = await reenqueueNewsPushDeliveries(env, { id: newsId })
+
+    if (!result.configured) {
+      return Response.json(
+        { error: "Push notifications are not configured" },
+        { status: 503 },
+      )
+    }
+
+    if (ctx) {
+      ctx.waitUntil(
+        processDuePushDeliveries(env).catch((error) => {
+          console.error("Background news re-notification failed:", error)
+        }),
+      )
+    }
+
+    return Response.json({ queued: result.queued })
   }
 
   if (

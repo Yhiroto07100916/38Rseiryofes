@@ -264,6 +264,17 @@
           <v-btn
             v-if="auth.hasPermission('news.edit')"
             variant="outlined"
+            prepend-icon="mdi-bell-ring-outline"
+            :loading="renotifying"
+            :disabled="deleting"
+            @click="renotifyNewsItem"
+          >
+            再通知
+          </v-btn>
+
+          <v-btn
+            v-if="auth.hasPermission('news.edit')"
+            variant="outlined"
             prepend-icon="mdi-pencil"
             @click="navigateTo(`/news/${news.id}/edit`)"
           >
@@ -304,13 +315,14 @@ definePageMeta({
 
 const route = useRoute()
 const auth = useAuthStore()
-const { getNewsById, deleteNews } = useApi()
+const { getNewsById, deleteNews, renotifyNews } = useApi()
 const { confirm } = useConfirmDialog()
 const snackbar = useSnackbar()
 
 const news = ref<NewsWithCalendarEvents | null>(null)
 const loading = ref(false)
 const deleting = ref(false)
+const renotifying = ref(false)
 const notFound = ref(false)
 
 const newsId = computed(() => String(route.params.id))
@@ -405,6 +417,40 @@ const loadNews = async () => {
     }
   } finally {
     loading.value = false
+  }
+}
+
+const renotifyNewsItem = async () => {
+  if (!news.value || !auth.hasPermission('news.edit') || renotifying.value) {
+    return
+  }
+
+  const accepted = await confirm({
+    title: 'お知らせを再通知',
+    message: `「${news.value.title}」を、Web Push通知を登録しているすべての端末に再通知します。すでに通知を受け取った端末にも届きます。よろしいですか？`,
+    confirmText: '再通知する',
+    cancelText: 'キャンセル',
+  })
+
+  if (!accepted) {
+    return
+  }
+
+  renotifying.value = true
+
+  try {
+    const result = await renotifyNews(news.value.id)
+
+    if (result.queued > 0) {
+      snackbar.success(`${result.queued}台の端末への再通知を開始しました`)
+    } else {
+      snackbar.info('通知を受け取る端末が登録されていません')
+    }
+  } catch (error) {
+    console.error('Failed to re-notify news:', error)
+    snackbar.error('お知らせの再通知に失敗しました')
+  } finally {
+    renotifying.value = false
   }
 }
 

@@ -13,6 +13,7 @@ import {
 import {
   enqueueNewsPushDeliveries,
   processDuePushDeliveries,
+  reenqueueNewsPushDeliveries,
 } from "../src/routes/push";
 
 const userIds: string[] = [];
@@ -189,6 +190,36 @@ describe("Web Push delivery queue", () => {
     expect(deliveries.results.every((row) => row.attempt_count === 1)).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("requeues an existing news notification for all current subscriptions", async () => {
+    await createSubscription()
+    const newsId = await createNews()
+
+    const fetchMock = vi.fn(async () => new Response(null, { status: 201 }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await enqueueNewsPushDeliveries(pushEnv, { id: newsId })
+    await processDuePushDeliveries(pushEnv)
+
+    let delivery = await getDelivery(newsId)
+    expect(delivery?.status).toBe("sent")
+    expect(delivery?.attempt_count).toBe(1)
+
+    const result = await reenqueueNewsPushDeliveries(pushEnv, { id: newsId })
+    expect(result).toEqual({ configured: true, queued: 1 })
+
+    delivery = await getDelivery(newsId)
+    expect(delivery?.status).toBe("pending")
+    expect(delivery?.attempt_count).toBe(0)
+    expect(delivery?.last_error).toBeNull()
+
+    await processDuePushDeliveries(pushEnv)
+
+    delivery = await getDelivery(newsId)
+    expect(delivery?.status).toBe("sent")
+    expect(delivery?.attempt_count).toBe(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
 
   it("retries temporary failures after the configured delays and fails after four attempts", async () => {
     await createSubscription();

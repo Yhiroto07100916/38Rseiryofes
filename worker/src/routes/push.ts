@@ -261,6 +261,51 @@ export async function enqueueNewsPushDeliveries(
 
 }
 
+
+export async function reenqueueNewsPushDeliveries(
+  env: Env,
+  news: { id: string },
+): Promise<{ configured: boolean; queued: number }> {
+  if (!isPushConfigured(env)) {
+    return { configured: false, queued: 0 }
+  }
+
+  const result = await env.DB
+    .prepare(`
+      INSERT INTO push_notification_deliveries (
+        id,
+        news_id,
+        subscription_id,
+        status,
+        attempt_count,
+        next_attempt_at
+      )
+      SELECT
+        lower(hex(randomblob(16))),
+        ?,
+        id,
+        'pending',
+        0,
+        CURRENT_TIMESTAMP
+      FROM push_subscriptions
+      WHERE 1
+      ON CONFLICT(news_id, subscription_id) DO UPDATE SET
+        status = 'pending',
+        attempt_count = 0,
+        next_attempt_at = CURRENT_TIMESTAMP,
+        lease_until = NULL,
+        last_error = NULL,
+        updated_at = CURRENT_TIMESTAMP
+    `)
+    .bind(news.id)
+    .run()
+
+  return {
+    configured: true,
+    queued: result.meta?.changes ?? 0,
+  }
+}
+
 async function sendPush(
   env: Env,
   subscription: Pick<PushSubscriptionRecord, "endpoint" | "p256dh" | "auth">,
