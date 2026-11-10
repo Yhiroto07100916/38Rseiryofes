@@ -56,11 +56,10 @@ self.addEventListener('notificationclick', (event) => {
       }
 
       try {
-        const focusedClient = await client.focus()
-        const navigatedClient = await focusedClient.navigate(target.href)
-
+        const navigatedClient = await client.navigate(target.href)
         if (navigatedClient) {
-          return navigatedClient.focus()
+          await navigatedClient.focus()
+          return navigatedClient
         }
       } catch (error) {
         console.error('Failed to navigate existing PWA window:', error)
