@@ -937,7 +937,12 @@ async function canAccessNotificationTarget(
       hasPermission(env, delivery.recipient_user_id, "surveys.view"),
       hasPermission(env, delivery.recipient_user_id, "surveys.respond"),
     ])
-    if (!canViewSurvey && !canRespondSurvey) return false
+    const responseOnlyEvent =
+      delivery.event_key === "surveys.published" ||
+      delivery.event_key === "surveys.opened" ||
+      delivery.event_key === "surveys.response_reminder_24h" ||
+      delivery.event_key === "surveys.response_reminder_1h"
+    if (responseOnlyEvent ? !canRespondSurvey : (!canViewSurvey && !canRespondSurvey)) return false
 
     const survey = await env.DB.prepare(
       "SELECT status, deadline_at FROM surveys WHERE id = ?",
