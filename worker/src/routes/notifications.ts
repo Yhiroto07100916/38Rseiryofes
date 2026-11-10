@@ -264,6 +264,7 @@ export async function handleNotifications(
   }
 
   if (pathParts.length === 2 && pathParts[1] === "read" && method === "PATCH") {
+    await purgeExpiredNotifications(env, userId)
     const notificationId = pathParts[0]
     let body: { is_read?: unknown }
 
