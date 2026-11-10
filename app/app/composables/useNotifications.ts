@@ -1,4 +1,4 @@
-import { onMounted, onUnmounted, ref } from "vue"
+import { onMounted, onUnmounted, ref, watch } from "vue"
 import { useApi } from "~/composables/useApi"
 import { useAuthStore } from "~/stores/auth"
 import { loadNotificationCache, saveNotificationCache } from "~/utils/notification-cache"
@@ -68,6 +68,7 @@ export const useNotifications = () => {
   let unreadSuccessHandle: ReturnType<typeof setTimeout> | undefined
   let requestInProgress = false
   let unreadRequestInProgress = false
+  let pendingUnreadRefresh = false
   let pendingResetFetch = false
   let manualRefreshRequested = false
   let listFailures = 0
@@ -79,7 +80,8 @@ export const useNotifications = () => {
     const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
     if (readFilter.value !== "all") params.set("read", readFilter.value)
     for (const category of selectedCategories.value) params.append("category", category)
-    if (search.value.trim()) params.set("search", search.value.trim())
+    const searchTerm = String(search.value ?? "").trim()
+    if (searchTerm) params.set("search", searchTerm)
     if (includeCursor && cursor.value) {
       params.set("before_created_at", cursor.value.created_at)
       params.set("before_id", cursor.value.id)
@@ -118,7 +120,7 @@ export const useNotifications = () => {
       const cached = await loadNotificationCache(accountId)
       if (!cached || hasSuccessfulApiFetch || auth.user?.id !== accountId) return
 
-      const term = search.value.trim().toLocaleLowerCase()
+      const term = String(search.value ?? "").trim().toLocaleLowerCase()
       const filtered = cached.notifications.filter(item => {
         if (readFilter.value === "unread" && item.is_read) return false
         if (readFilter.value === "read" && !item.is_read) return false
@@ -353,7 +355,10 @@ export const useNotifications = () => {
   }
 
   const refreshUnreadCount = async (manual = false) => {
-    if (unreadRequestInProgress) return
+    if (unreadRequestInProgress) {
+      pendingUnreadRefresh = true
+      return
+    }
     if (manual) {
       unreadFailures = 0
       clearUnreadRetry()
@@ -382,6 +387,10 @@ export const useNotifications = () => {
     } finally {
       unreadRequestInProgress = false
       unreadCountLoading.value = false
+      if (pendingUnreadRefresh) {
+        pendingUnreadRefresh = false
+        void refreshUnreadCount()
+      }
     }
   }
 
@@ -510,6 +519,34 @@ export const useNotifications = () => {
     void refreshUnreadCount()
     startPolling()
   })
+
+  watch(
+    () => auth.user?.id,
+    (accountId, previousAccountId) => {
+      if (accountId === previousAccountId) return
+
+      notifications.value = []
+      unreadCount.value = 0
+      cursor.value = null
+      hasMore.value = false
+      error.value = ""
+      unreadCountError.value = ""
+      listFailures = 0
+      unreadFailures = 0
+      hasSuccessfulApiFetch = false
+      manualRefreshRequested = false
+      clearListRetry()
+      clearUnreadRetry()
+
+      if (accountId) {
+        void loadCache(accountId)
+        void fetchPage(true)
+        void refreshUnreadCount()
+      } else {
+        stopPolling()
+      }
+    },
+  )
 
   onUnmounted(stopPolling)
 
