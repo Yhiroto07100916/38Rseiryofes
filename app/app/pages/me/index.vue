@@ -811,6 +811,61 @@ const {
   getNewsById,
 } = useApi()
 
+const loadNotificationSettings = async () => {
+  notificationSettingsLoading.value = true
+  try {
+    const settings = await apiFetch<{
+      global_push_enabled: boolean
+      categories: Record<string, boolean>
+    }>('/api/notifications/settings')
+    globalPushEnabled.value = settings.global_push_enabled
+    notificationCategorySettings.value = settings.categories
+  } catch {
+    snackbar.error('通知設定を取得できませんでした。')
+  } finally {
+    notificationSettingsLoading.value = false
+  }
+}
+
+const saveGlobalPushEnabled = async (value: boolean) => {
+  const previous = !value
+  notificationSettingsSaving.value = true
+  globalPushEnabled.value = value
+  try {
+    await apiFetch('/api/notifications/settings', {
+      method: 'PATCH',
+      body: { global_push_enabled: value },
+    })
+  } catch {
+    globalPushEnabled.value = previous
+    snackbar.error('通知設定を保存できませんでした。')
+  } finally {
+    notificationSettingsSaving.value = false
+  }
+}
+
+const saveCategoryPushEnabled = async (category: string, value: boolean) => {
+  const previous = notificationCategorySettings.value[category] !== false
+  notificationCategorySettings.value = {
+    ...notificationCategorySettings.value,
+    [category]: value,
+  }
+  notificationSettingsSaving.value = true
+  try {
+    await apiFetch('/api/notifications/settings', {
+      method: 'PATCH',
+      body: { categories: { [category]: value } },
+    })
+  } catch {
+    notificationCategorySettings.value = {
+      ...notificationCategorySettings.value,
+      [category]: previous,
+    }
+    snackbar.error('通知設定を保存できませんでした。')
+  } finally {
+    notificationSettingsSaving.value = false
+  }
+}
 const loadingEvents = ref(true)
 const loadingTasks = ref(true)
 const loadingNews = ref(true)
@@ -1377,6 +1432,7 @@ onMounted(async () => {
     loadTasks(),
     loadNews(),
     refreshPushStatus(),
+    loadNotificationSettings(),
   ])
 })
 </script>
