@@ -2,6 +2,7 @@ ALTER TABLE push_subscriptions ADD COLUMN user_id TEXT REFERENCES users(id) ON D
 CREATE INDEX idx_push_subscriptions_user_id ON push_subscriptions(user_id);
 
 ALTER TABLE loans ADD COLUMN checkout_user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE loans ADD COLUMN borrower_user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE loans ADD COLUMN presence_due_soon_notified_at TEXT;
 ALTER TABLE loans ADD COLUMN presence_overdue_notified_at TEXT;
 ALTER TABLE loan_items ADD COLUMN timer_alarm_notified_at TEXT;
