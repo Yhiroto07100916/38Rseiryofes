@@ -246,9 +246,20 @@ export async function handleToolRental(
 
       const borrowerId = await getBorrowerId(env.DB, className, name)
       const requestedBorrowerUserId = typeof body.borrower_user_id === "string" ? body.borrower_user_id : null
-      const matchedBorrower = requestedBorrowerUserId
-        ? await env.DB.prepare("SELECT id FROM users WHERE id = ? AND (name = ? OR nickname = ?)").bind(requestedBorrowerUserId, name, name).first<{ id: string }>()
-        : null
+      let borrowerUserId: string | null = null
+      if (requestedBorrowerUserId) {
+        const matchedBorrower = await env.DB.prepare(
+          "SELECT id FROM users WHERE id = ? AND (name = ? OR nickname = ?)",
+        ).bind(requestedBorrowerUserId, name, name).first<{ id: string }>()
+        borrowerUserId = matchedBorrower?.id ?? null
+      } else {
+        const matchingBorrowers = await env.DB.prepare(
+          "SELECT id FROM users WHERE name = ? OR nickname = ? LIMIT 2",
+        ).bind(name, name).all<{ id: string }>()
+        if (matchingBorrowers.results.length === 1) {
+          borrowerUserId = matchingBorrowers.results[0].id
+        }
+      }
       const loan = await env.DB.prepare(`
         INSERT INTO loans (
           borrower_id, tool_id, quantity, borrowed_at, status,
@@ -261,7 +272,7 @@ export async function handleToolRental(
         )
       `).bind(
         borrowerId, item.tool_id, item.tool_name,
-        timeLimitMinutes, timeLimitMinutes, timeLimitMinutes, auth.user.id, matchedBorrower?.id ?? null,
+        timeLimitMinutes, timeLimitMinutes, timeLimitMinutes, auth.user.id, borrowerUserId,
       ).run()
       const loanId = Number(loan.meta.last_row_id)
       const update = await env.DB.prepare(`
