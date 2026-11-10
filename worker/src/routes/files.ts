@@ -1,4 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { createNotificationsForUsers } from "../lib/notifications"
 
 type Env = {
   DB: D1Database
@@ -679,6 +680,7 @@ export async function handleFiles(
 
       const formData = await request.formData()
       const file = formData.get("file")
+      const notifyUpload = formData.get("notify") === "true"
 
       if (!(file instanceof File)) {
         return json(
@@ -771,6 +773,33 @@ export async function handleFiles(
       } catch (error) {
         await env.FILES_BUCKET.delete(objectKey)
         throw error
+      }
+
+      if (notifyUpload) {
+        try {
+          const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
+          const eligible = await Promise.all(users.results.map(async user => ({
+            id: user.id,
+            allowed: user.id !== auth.user.id &&
+              await hasPermission(env, user.id, "files.view"),
+          })))
+
+          await createNotificationsForUsers(env, {
+            recipientUserIds: eligible.filter(user => user.allowed).map(user => user.id),
+            eventKey: "files.uploaded",
+            category: "files",
+            title: "新しいファイルがアップロードされました",
+            body: originalName,
+            targetUrl: "/files",
+            requiredPermission: "files.view",
+            actorUserId: auth.user.id,
+            entityType: "file",
+            entityId: id,
+            dedupeKey: "files.uploaded:" + id,
+          })
+        } catch (notificationError) {
+          console.error("Failed to create file upload notifications:", notificationError)
+        }
       }
 
       return json(
