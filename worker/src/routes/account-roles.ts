@@ -106,9 +106,15 @@ async function handleSiteSettings(
       `).bind(user.id, role.id).first()
       if (existing) return Response.json({ error: "Role already assigned" }, { status: 409 })
 
-      await env.DB.prepare(`
-        INSERT INTO user_account_roles (user_id, account_role_id) VALUES (?, ?)
-      `).bind(user.id, role.id).run()
+      await env.DB.batch([
+        env.DB.prepare(`
+          INSERT INTO user_account_roles (user_id, account_role_id) VALUES (?, ?)
+        `).bind(user.id, role.id),
+        env.DB.prepare(`
+          INSERT INTO site_setting_logs (id, setting_key, old_value, new_value, changed_by)
+          VALUES (?, ?, NULL, 'true', ?)
+        `).bind(crypto.randomUUID(), "important_settings_admin:" + user.id, admin.userId),
+      ])
 
       return Response.json({ success: true }, { status: 201 })
     }
@@ -128,16 +134,22 @@ async function handleSiteSettings(
     `).bind(targetUserId, role.id).first()
     if (!assigned) return Response.json({ error: "Role assignment not found" }, { status: 404 })
 
-    const count = await env.DB.prepare(`
-      SELECT COUNT(*) AS count FROM user_account_roles WHERE account_role_id = ?
-    `).bind(role.id).first<{ count: number }>()
-    if ((count?.count ?? 0) <= 1) {
+    const deletion = await env.DB.batch([
+      env.DB.prepare(`
+        DELETE FROM user_account_roles
+        WHERE user_id = ?
+          AND account_role_id = ?
+          AND (SELECT COUNT(*) FROM user_account_roles WHERE account_role_id = ?) > 1
+      `).bind(targetUserId, role.id, role.id),
+      env.DB.prepare(`
+        INSERT INTO site_setting_logs (id, setting_key, old_value, new_value, changed_by)
+        SELECT ?, ?, 'true', 'false', ?
+        WHERE changes() > 0
+      `).bind(crypto.randomUUID(), "important_settings_admin:" + targetUserId, admin.userId),
+    ])
+    if ((deletion[0]?.meta.changes ?? 0) === 0) {
       return Response.json({ error: "At least one important settings administrator must remain" }, { status: 409 })
     }
-
-    await env.DB.prepare(`
-      DELETE FROM user_account_roles WHERE user_id = ? AND account_role_id = ?
-    `).bind(targetUserId, role.id).run()
     return new Response(null, { status: 204 })
   }
 
@@ -215,7 +227,8 @@ async function handleSiteSettings(
       if (
         (rule.type === "string" && (typeof value !== "string" || value.length > (rule.maxLength ?? 1000))) ||
         (rule.type === "boolean" && typeof value !== "boolean") ||
-        (rule.type === "integer" && (!Number.isInteger(value) || (value as number) < (rule.min ?? -Infinity) || (value as number) > (rule.max ?? Infinity)))
+        (rule.type === "integer" && (!Number.isInteger(value) || (value as number) < (rule.min ?? -Infinity) || (value as number) > (rule.max ?? Infinity))) ||
+        (key === "site_visibility" && value !== "public" && value !== "private")
       ) {
         return Response.json({ error: `Invalid value for setting: ${key}` }, { status: 400 })
       }
