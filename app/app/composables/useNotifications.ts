@@ -81,6 +81,7 @@ export const useNotifications = () => {
   let unreadFailures = 0
   let hasSuccessfulApiFetch = false
   const cacheUpdatePromises = new Map<string, Promise<void>>()
+  const pendingCacheSaves = new Map<string, Set<Promise<void>>>()
   const partialCacheUpdates = new Map<string, {
     notifications: AppNotification[]
     nextCursor: { created_at: string; id: string } | null
@@ -102,10 +103,21 @@ export const useNotifications = () => {
         ? new Date(Date.now() + cachedClockOffsetMs).toISOString()
         : undefined
     )
+    const savePromise = saveNotificationCache(
+      accountId,
+      cacheSnapshot,
+      unreadCount.value,
+      effectiveServerTime,
+      true,
+    ).catch(() => undefined)
+    const pending = pendingCacheSaves.get(accountId) ?? new Set<Promise<void>>()
+    pending.add(savePromise)
+    pendingCacheSaves.set(accountId, pending)
     try {
-      await saveNotificationCache(accountId, cacheSnapshot, unreadCount.value, effectiveServerTime, true)
-    } catch {
-      // キャッシュ保存失敗は通知操作に影響させない。
+      await savePromise
+    } finally {
+      pending.delete(savePromise)
+      if (pending.size === 0) pendingCacheSaves.delete(accountId)
     }
   }
 
@@ -877,6 +889,12 @@ export const useNotifications = () => {
         void (async () => {
           try {
             if (pendingCacheUpdate) await pendingCacheUpdate
+            // 未読件数取得後などに開始済みの単発キャッシュ保存も、完了してから削除する。
+            while (true) {
+              const pendingSaves = [...(pendingCacheSaves.get(previousAccountId) ?? [])]
+              if (pendingSaves.length === 0) break
+              await Promise.all(pendingSaves)
+            }
             await deleteNotificationCache(previousAccountId)
           } finally {
             partialCacheUpdates.delete(previousAccountId)
