@@ -51,6 +51,7 @@ const SETTING_RULES: Record<string, {
   notification_settings: { type: "json" },
   operation_settings: { type: "json" },
   security_settings: { type: "json", critical: true },
+  "security.force_logout_all_sessions": { type: "string", critical: true },
 }
 
 function isValidSettingValue(key: string, value: unknown): boolean {
@@ -132,6 +133,24 @@ async function handleSiteSettings(
       "INSERT INTO site_setting_logs (id, setting_key, old_value, new_value, changed_by) VALUES (?, 'security.force_logout_all_sessions', ?, ?, ?)",
     ).bind(crypto.randomUUID(), String(result.meta?.changes ?? 0), "all_sessions_invalidated", admin.userId).run()
     return Response.json({ success: true, invalidated_sessions: result.meta?.changes ?? 0 })
+  }
+
+  if (subPath.length === 1 && subPath[0] === "system-info" && request.method === "GET") {
+    const admin = await requireAdmin(request, env)
+    if (admin instanceof Response) return admin
+    let databaseStatus = "ok"
+    try {
+      await env.DB.prepare("SELECT 1 AS healthy").first<{ healthy: number }>()
+    } catch {
+      databaseStatus = "error"
+    }
+    const version = (env as Env & { APP_VERSION?: string }).APP_VERSION ?? "未設定"
+    return Response.json({
+      api_status: "ok",
+      database_status: databaseStatus,
+      version,
+      checked_at: new Date().toISOString(),
+    })
   }
 
   if (subPath.length === 1 && subPath[0] === "important-admins") {
