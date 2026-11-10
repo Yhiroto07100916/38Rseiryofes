@@ -1547,7 +1547,10 @@ export async function handleTasks(
             title: "タスクの担当から外されました",
             body: existingTask.title,
             targetUrl: "/tasks",
+            requiredPermission: "tasks.view",
             actorUserId: auth.user.id,
+            entityType: "task",
+            entityId: id,
             dedupeKey: "task.assignee_removed:" + id + ":" + changeId,
           })
         }
