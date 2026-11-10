@@ -63,6 +63,7 @@ const countdownDays = computed(() => {
 
 const todayText = computed(() => {
   return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: siteStatus.value?.timezone || 'Asia/Tokyo',
     month: 'long',
     day: 'numeric',
     weekday: 'short',
