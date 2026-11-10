@@ -27,7 +27,7 @@ afterEach(async () => {
   }
 })
 
-async function createAuthenticatedCookie(): Promise<string> {
+async function createAuthenticatedUser(): Promise<{ cookie: string; userId: string }> {
   const userId = crypto.randomUUID()
   userIds.push(userId)
   await env.DB.prepare(`
@@ -37,7 +37,7 @@ async function createAuthenticatedCookie(): Promise<string> {
 
   const sessionId = await createSession(env, userId)
   sessionIds.push(sessionId)
-  return `session_id=${sessionId}`
+  return { cookie: `session_id=${sessionId}`, userId }
 }
 
 function request(method: string, cookie: string, body?: unknown): Request {
@@ -53,7 +53,7 @@ function request(method: string, cookie: string, body?: unknown): Request {
 
 describe("presence API", () => {
   it("stores only the GPS-derived presence state, not raw coordinates", async () => {
-    const cookie = await createAuthenticatedCookie()
+    const { cookie, userId } = await createAuthenticatedUser()
     const response = await handlePresence(
       request("POST", cookie, { latitude: 35, longitude: 139 }),
       presenceEnv,
@@ -69,8 +69,8 @@ describe("presence API", () => {
     const stored = await env.DB.prepare(`
       SELECT status, method, local_date, expires_at
       FROM presence_states
-      WHERE user_id = (SELECT id FROM users WHERE student_number LIKE 'presence-test-%' ORDER BY created_at DESC LIMIT 1)
-    `).first<{ status: string; method: string; local_date: string; expires_at: string }>()
+      WHERE user_id = ?
+    `).bind(userId).first<{ status: string; method: string; local_date: string; expires_at: string }>()
 
     expect(stored?.status).toBe("inside")
     expect(stored?.method).toBe("gps")
@@ -78,7 +78,7 @@ describe("presence API", () => {
   })
 
   it("lets GPS outside override manual inside and rejects a later manual override", async () => {
-    const cookie = await createAuthenticatedCookie()
+    const { cookie } = await createAuthenticatedUser()
     const manual = await handlePresence(request("POST", cookie), presenceEnv, ["manual"])
     expect(manual.status).toBe(200)
     expect(await manual.json()).toMatchObject({ status: "inside", method: "manual" })
