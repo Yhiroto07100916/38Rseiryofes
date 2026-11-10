@@ -242,6 +242,65 @@ async function getTaskAssignments(
   }
 }
 
+export async function processDueTaskNotifications(env: Env): Promise<void> {
+  const result = await env.DB.prepare(
+    "SELECT id, title, due_at, status FROM tasks " +
+    "WHERE due_at IS NOT NULL AND status != 'done'",
+  ).all<{ id: string; title: string; due_at: string; status: Task["status"] }>()
+
+  const now = Date.now()
+  const localDay = new Date(now + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+  for (const task of result.results) {
+    const dueAt = Date.parse(task.due_at)
+    if (!Number.isFinite(dueAt)) continue
+    const hoursRemaining = (dueAt - now) / 3_600_000
+    const recipients = await getTaskNotificationRecipientIds(env, task.id)
+    if (recipients.length === 0) continue
+
+    const reminders: Array<{ eventKey: string; title: string; dedupeKey: string }> = []
+    if (hoursRemaining <= 24 && hoursRemaining > 23) {
+      reminders.push({
+        eventKey: "task.deadline_reminder_24h",
+        title: "タスクの期限まで24時間です",
+        dedupeKey: "task.deadline_reminder_24h:" + task.id + ":" + task.due_at,
+      })
+    }
+    if (hoursRemaining <= 1 && hoursRemaining > 0) {
+      reminders.push({
+        eventKey: "task.deadline_reminder_1h",
+        title: "タスクの期限まで1時間です",
+        dedupeKey: "task.deadline_reminder_1h:" + task.id + ":" + task.due_at,
+      })
+    }
+    if (hoursRemaining <= 0) {
+      reminders.push({
+        eventKey: "task.deadline_overdue_daily",
+        title: "タスクの期限を過ぎています",
+        dedupeKey: "task.deadline_overdue_daily:" + task.id + ":" + localDay,
+      })
+    }
+
+    for (const reminder of reminders) {
+      try {
+        await createNotificationsForUsers(env, {
+          recipientUserIds: recipients,
+          eventKey: reminder.eventKey,
+          category: "tasks",
+          title: reminder.title,
+          body: task.title,
+          targetUrl: "/tasks/" + task.id,
+          entityType: "task",
+          entityId: task.id,
+          dedupeKey: reminder.dedupeKey,
+        })
+      } catch (notificationError) {
+        console.error("Failed to create task deadline notifications:", notificationError)
+      }
+    }
+  }
+}
+
 export async function handleTasks(
   request: Request,
   env: Env,
