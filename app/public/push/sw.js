@@ -24,9 +24,7 @@ self.addEventListener('push', (event) => {
       url: typeof payload.url === 'string' ? payload.url : '/',
       notificationId: typeof payload.notificationId === 'string'
         ? payload.notificationId
-        : typeof payload.tag === 'string'
-          ? payload.tag
-          : null,
+        : null,
     },
   }
 
