@@ -81,20 +81,7 @@
                 class="mb-3"
               />
 
-              <div class="mb-4">
-                <div class="d-flex align-center justify-space-between mb-2">
-                  <div class="text-subtitle-2 font-weight-medium">関連リンク</div>
-                  <v-btn size="small" variant="tonal" prepend-icon="mdi-plus" @click="editForm.links.push({ title: '', url: '' })">追加</v-btn>
-                </div>
-                <div v-for="taskLink in editLinks" :key="taskLink.title + '|' + taskLink.url" class="d-flex align-start ga-2 mb-2">
-                  <div class="flex-grow-1">
-                    <v-text-field v-model="taskLink.title" label="表示タイトル" placeholder="例：資料・参考ページ" variant="outlined" density="comfortable" hide-details class="mb-2" />
-                    <v-text-field v-model="taskLink.url" label="URL" placeholder="https://example.com" variant="outlined" density="comfortable" hide-details />
-                  </div>
-                  <v-btn icon="mdi-close" variant="text" color="error" aria-label="リンクを削除" @click="removeEditLink(taskLink)" />
-                </div>
-                <div class="text-caption text-medium-emphasis">最大20件。タイトルとURLを両方入力してください。</div>
-              </div>
+              <TaskLinksEditor v-model="editForm.links" />
 
               <v-row>
                 <v-col
@@ -690,13 +677,6 @@ const editForm = ref({
   assigneeUserIds: [] as string[],
   assigneeRoleIds: [] as string[],
 })
-
-const removeEditLink = (link: { title: string; url: string }) => {
-  const index = editForm.value.links.indexOf(link)
-  if (index >= 0) editForm.value.links.splice(index, 1)
-}
-
-const editLinks = computed(() => editForm.value.links)
 
 const canEdit = computed(() =>
   auth.hasPermission('tasks.edit'),
