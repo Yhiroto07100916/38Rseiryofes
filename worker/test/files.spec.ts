@@ -2,6 +2,7 @@ declare const __D1_MIGRATIONS__: string;
 
 import { applyD1Migrations, env, SELF } from "cloudflare:test";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { notifyFileLinked } from "../src/lib/file-notifications";
 
 type Fixture = {
   userId: string;
@@ -466,6 +467,12 @@ describe("Files access permissions", () => {
     const uploaded = await response.json() as { id: string; object_key: string };
     fixture.uploadedFileIds.push(uploaded.id);
     fixture.objectKeys.push(uploaded.object_key);
+
+    await grantPermissions(fixture.recipientUserId, ["tasks.view"]);
+    await env.DB.prepare(
+      "INSERT INTO task_files (task_id, file_id) VALUES (?, ?)",
+    ).bind(fixture.taskId, uploaded.id).run();
+    await notifyFileLinked(env, uploaded.id, fixture.userId);
 
     const notification = await env.DB.prepare(`
       SELECT event_key, recipient_user_id, body, target_url
