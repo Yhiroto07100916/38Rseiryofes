@@ -496,7 +496,7 @@ export async function handleEquipment(
           entityId: equipmentId,
           dedupeKey: "equipment.broken:" + equipmentId + ":" + existing.updated_at,
         })
-      } else if (statusChanged && existing.status === "broken" && status !== "broken") {
+      } else if (statusChanged && existing.status === "broken" && (status === "ready" || status === "in_use")) {
         await createNotificationsForUsers(env, {
           recipientUserIds: recipients,
           eventKey: "equipment.repaired",
