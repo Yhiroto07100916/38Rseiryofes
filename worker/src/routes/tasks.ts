@@ -1562,7 +1562,7 @@ export async function handleTasks(
             body: statusOnly
               ? updatedTask.title + "：" + (statusLabel[updatedTask.status] ?? updatedTask.status)
               : updatedTask.title,
-            targetUrl: "/tasks/" + id,
+            targetUrl: taskTargetUrl(updatedTask.scope, id),
             actorUserId: auth.user.id,
             entityType: "task",
             entityId: id,
