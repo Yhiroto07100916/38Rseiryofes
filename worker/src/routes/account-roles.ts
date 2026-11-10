@@ -44,6 +44,68 @@ const SETTING_RULES: Record<string, {
   maintenance_message: { type: "string", maxLength: 500, critical: true },
   login_enabled: { type: "boolean", critical: true },
   require_login: { type: "boolean", critical: true },
+  timezone: { type: "string", minLength: 1, maxLength: 64 },
+  logo_url: { type: "string", maxLength: 2048 },
+  favicon_url: { type: "string", maxLength: 2048 },
+  feature_settings: { type: "json" },
+  notification_settings: { type: "json" },
+  operation_settings: { type: "json" },
+  security_settings: { type: "json", critical: true },
+}
+
+function isValidSettingValue(key: string, value: unknown): boolean {
+  if (key === "timezone") {
+    if (typeof value !== "string") return false
+    try {
+      new Intl.DateTimeFormat("ja-JP", { timeZone: value })
+      return true
+    } catch {
+      return false
+    }
+  }
+  if (key === "logo_url" || key === "favicon_url") {
+    if (value === "") return true
+    if (typeof value !== "string") return false
+    try { return new URL(value).protocol === "https:" } catch { return false }
+  }
+  if (key === "feature_settings") {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false
+    return Object.entries(value as Record<string, unknown>).every(([feature, config]) =>
+      /^[a-z_]+$/.test(feature) && Boolean(config) && typeof config === "object" &&
+      !Array.isArray(config) &&
+      Object.entries(config as Record<string, unknown>).every(([action, enabled]) =>
+        ["enabled", "view", "create", "edit", "delete", "assign", "comment", "approve", "respond", "export", "share", "revoke"].includes(action) &&
+        typeof enabled === "boolean"
+      )
+    )
+  }
+  if (key === "notification_settings") {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false
+    const settings = value as Record<string, unknown>
+    if (typeof settings.enabled !== "boolean" || settings.return_due_all_users !== true) return false
+    if (!settings.categories || typeof settings.categories !== "object" || Array.isArray(settings.categories)) return false
+    return Object.values(settings.categories as Record<string, unknown>).every(item => typeof item === "boolean")
+  }
+  if (key === "operation_settings") {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false
+    const settings = value as Record<string, unknown>
+    return ["month", "week", "day", "list"].includes(String(settings.calendar_default_view)) &&
+      ["todo", "in_progress", "review", "done"].includes(String(settings.task_default_status)) &&
+      Number.isInteger(settings.upload_max_file_size_mb) &&
+      Number(settings.upload_max_file_size_mb) >= 1 && Number(settings.upload_max_file_size_mb) <= 100
+  }
+  if (key === "security_settings") {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false
+    const settings = value as Record<string, unknown>
+    return Number.isInteger(settings.session_duration_hours) &&
+      Number(settings.session_duration_hours) >= 1 && Number(settings.session_duration_hours) <= 720 &&
+      Number.isInteger(settings.login_attempt_limit) &&
+      Number(settings.login_attempt_limit) >= 3 && Number(settings.login_attempt_limit) <= 20 &&
+      Number.isInteger(settings.login_lock_minutes) &&
+      Number(settings.login_lock_minutes) >= 1 && Number(settings.login_lock_minutes) <= 1440 &&
+      typeof settings.force_password_change === "boolean"
+  }
+  return true
 }
 
 async function requireImportantSettingsAdmin(
