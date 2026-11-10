@@ -375,7 +375,8 @@ export const useNotifications = () => {
   }
 
   const scheduleListRetry = (reset: boolean) => {
-    if (!listActive || listRetryHandle || listFailures >= MAX_FAILURES) return
+    const failureLimit = manualRetryActive ? MAX_FAILURES + 1 : MAX_FAILURES
+    if (!listActive || listRetryHandle || listFailures >= failureLimit) return
     const delay = RETRY_DELAYS[Math.min(listFailures - 1, RETRY_DELAYS.length - 1)]
     refreshMessage.value = "最新情報を再取得しています"
     listRetryHandle = setTimeout(() => {
