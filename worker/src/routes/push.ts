@@ -678,6 +678,41 @@ async function canAccessNotificationTarget(
     return false
   }
 
+  if (delivery.entity_type === "calendar_event" && delivery.entity_id) {
+    const event = await env.DB.prepare(
+      "SELECT 1 FROM calendar_events WHERE id = ?",
+    ).bind(delivery.entity_id).first()
+    if (!event) return false
+  }
+
+  if (delivery.entity_type === "decision" && delivery.entity_id) {
+    const decision = await env.DB.prepare(
+      "SELECT 1 FROM decisions WHERE id = ?",
+    ).bind(delivery.entity_id).first()
+    if (!decision) return false
+  }
+
+  if (delivery.entity_type === "wishlist_item" && delivery.entity_id) {
+    const item = await env.DB.prepare(
+      "SELECT 1 FROM wishlist_items WHERE id = ?",
+    ).bind(delivery.entity_id).first()
+    if (!item) return false
+  }
+
+  if (delivery.entity_type === "milk_collection_request" && delivery.entity_id) {
+    const item = await env.DB.prepare(
+      "SELECT 1 FROM milk_collection_requests WHERE id = ?",
+    ).bind(delivery.entity_id).first()
+    if (!item) return false
+  }
+
+  if (delivery.entity_type === "submission" && delivery.entity_id) {
+    const submission = await env.DB.prepare(
+      "SELECT 1 FROM submissions WHERE id = ?",
+    ).bind(delivery.entity_id).first()
+    if (!submission) return false
+  }
+
   if (delivery.entity_type === "task" && delivery.entity_id) {
     const access = await env.DB.prepare(
       "SELECT 1 FROM tasks t " +
