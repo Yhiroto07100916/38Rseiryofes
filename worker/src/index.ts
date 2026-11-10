@@ -115,7 +115,7 @@ async function enforceSiteAccess(
     }
   }
 
-  if ((settings.visibility === "private" || settings.requireLogin) && !user) {
+  if (settings.visibility === "private" && !user) {
     return Response.json(
       { error: "Authentication required", message: "このサイトは非公開です。ログインしてください。" },
       { status: 401 },
