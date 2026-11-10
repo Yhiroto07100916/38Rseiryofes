@@ -164,13 +164,18 @@ export const useNotifications = () => {
       if (auth.user?.id !== accountId) {
         throw new Error("Notification cache update invalidated by account change")
       }
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 10_000)
       try {
         return await apiFetch<NotificationListResponse>(
           "/api/notifications?" + params.toString(),
+          { signal: controller.signal },
         )
       } catch (error) {
         if (attempt === retryDelays.length) throw error
         await delay(retryDelays[attempt])
+      } finally {
+        clearTimeout(timeout)
       }
     }
     throw new Error("Notification cache page fetch failed")
