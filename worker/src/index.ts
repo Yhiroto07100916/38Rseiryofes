@@ -34,12 +34,16 @@ async function readSiteAccessSettings(env: Env): Promise<{
   maintenanceMessage: string
   requireLogin: boolean
   loginEnabled: boolean
+  siteName: string
+  siteDescription: string
+  eventName: string
+  eventYear: number
 }> {
   try {
     const rows = await env.DB.prepare(`
       SELECT key, value
       FROM site_settings
-      WHERE key IN ('site_visibility', 'maintenance_mode', 'maintenance_message', 'require_login', 'login_enabled')
+      WHERE key IN ('site_visibility', 'maintenance_mode', 'maintenance_message', 'require_login', 'login_enabled', 'site_name', 'site_description', 'event_name', 'event_year')
     `).all<{ key: string; value: string }>()
 
     const settings = new Map(rows.results.map(row => {
@@ -58,6 +62,10 @@ async function readSiteAccessSettings(env: Env): Promise<{
         : "現在メンテナンス中です。しばらくお待ちください。",
       requireLogin: settings.get("require_login") !== false,
       loginEnabled: settings.get("login_enabled") !== false,
+      siteName: typeof settings.get("site_name") === "string" ? settings.get("site_name") as string : "38R星陵祭準備サイト",
+      siteDescription: typeof settings.get("site_description") === "string" ? settings.get("site_description") as string : "38Rの星陵祭準備を管理するサイトです。",
+      eventName: typeof settings.get("event_name") === "string" ? settings.get("event_name") as string : "星陵祭",
+      eventYear: typeof settings.get("event_year") === "number" ? settings.get("event_year") as number : 2026,
     }
   } catch {
     // Keep the existing access behavior until the settings migration is applied.
@@ -67,6 +75,10 @@ async function readSiteAccessSettings(env: Env): Promise<{
       maintenanceMessage: "現在メンテナンス中です。しばらくお待ちください。",
       requireLogin: true,
       loginEnabled: true,
+      siteName: "38R星陵祭準備サイト",
+      siteDescription: "38Rの星陵祭準備を管理するサイトです。",
+      eventName: "星陵祭",
+      eventYear: 2026,
     }
   }
 }
@@ -223,6 +235,10 @@ export default {
         maintenance_message: settings.maintenanceMessage,
         require_login: settings.requireLogin,
         login_enabled: settings.loginEnabled,
+        site_name: settings.siteName,
+        site_description: settings.siteDescription,
+        event_name: settings.eventName,
+        event_year: settings.eventYear,
         is_authenticated: Boolean(user),
         is_admin: isAdmin,
       }))
