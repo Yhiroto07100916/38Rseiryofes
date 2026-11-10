@@ -696,6 +696,19 @@ async function canAccessNotificationTarget(
     return Boolean(access)
   }
 
+  if (delivery.entity_type === "reimbursement" && delivery.entity_id) {
+    const reimbursement = await env.DB.prepare(
+      "SELECT user_id FROM receipt_reimbursements WHERE id = ?",
+    ).bind(delivery.entity_id).first<{ user_id: string }>()
+    if (!reimbursement) return false
+    if (
+      reimbursement.user_id !== delivery.recipient_user_id &&
+      !(await hasPermission(env, delivery.recipient_user_id, "accounting.approve"))
+    ) {
+      return false
+    }
+  }
+
   if (delivery.entity_type === "file" && delivery.entity_id) {
     const file = await env.DB.prepare(
       "SELECT archived_at FROM files WHERE id = ?",
