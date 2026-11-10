@@ -117,7 +117,9 @@ export async function loadNotificationCache(
     !Number.isFinite(record.unreadCount) ||
     (record.clockOffsetMs !== undefined && record.clockOffsetMs !== null && !Number.isFinite(record.clockOffsetMs)) ||
     !Array.isArray(record.notifications) ||
+    record.notifications.length > MAX_NOTIFICATIONS ||
     !record.notifications.every(validNotification) ||
+    record.notifications.some(item => now - Date.parse(item.created_at) > MAX_CACHE_AGE) ||
     record.savedAt > now + 5 * 60 * 1000 ||
     (record.clientTimeAtSave !== undefined && !Number.isFinite(record.clientTimeAtSave)) ||
     (record.serverTimeAtSave !== undefined && record.serverTimeAtSave !== null && !Number.isFinite(record.serverTimeAtSave)) ||
@@ -163,7 +165,11 @@ export async function saveNotificationCache(
       }
     }
     const database = await openDatabase()
-    const cachedNotifications = [...notifications]
+    const retentionNow = serverTime && Number.isFinite(Date.parse(serverTime))
+      ? Date.parse(serverTime)
+      : Date.now()
+    const cachedNotifications = notifications
+      .filter(item => retentionNow - Date.parse(item.created_at) <= MAX_CACHE_AGE)
       .sort((a, b) => {
         const dateDifference = Date.parse(b.created_at) - Date.parse(a.created_at)
         return dateDifference || b.id.localeCompare(a.id)
