@@ -237,6 +237,31 @@ describe("Task write atomicity", () => {
     expect(role?.role_id).toBe(fixture.roleId);
     expect(event?.event_id).toBe(fixture.eventId);
     expect(file?.file_id).toBe(fixture.fileId);
+
+    const notification = await env.DB.prepare(`
+      SELECT event_key, recipient_user_id, title, target_url
+      FROM notifications
+      WHERE entity_type = 'task' AND entity_id = ?
+    `).bind(task.id).first<{
+      event_key: string;
+      recipient_user_id: string;
+      title: string;
+      target_url: string;
+    }>();
+
+    expect(notification).toMatchObject({
+      event_key: "task.created",
+      recipient_user_id: fixture.assigneeId,
+      title: "新しいタスクが割り当てられました",
+      target_url: "/tasks/" + task.id,
+    });
+
+    const actorNotification = await env.DB.prepare(`
+      SELECT id FROM notifications
+      WHERE entity_type = 'task' AND entity_id = ? AND recipient_user_id = ?
+    `).bind(task.id, fixture.actorId).first();
+
+    expect(actorNotification).toBeNull();
   });
 
   it("does not create a task when a linked file is invalid", async () => {
