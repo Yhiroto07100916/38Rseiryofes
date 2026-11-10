@@ -494,7 +494,7 @@ export async function handleEquipment(
           actorUserId: auth.user.id,
           entityType: "equipment",
           entityId: equipmentId,
-          dedupeKey: "equipment.broken:" + equipmentId + ":" + crypto.randomUUID(),
+          dedupeKey: "equipment.broken:" + equipmentId + ":" + existing.updated_at,
         })
       } else if (statusChanged && existing.status === "broken" && status !== "broken") {
         await createNotificationsForUsers(env, {
@@ -508,7 +508,7 @@ export async function handleEquipment(
           actorUserId: auth.user.id,
           entityType: "equipment",
           entityId: equipmentId,
-          dedupeKey: "equipment.repaired:" + equipmentId + ":" + crypto.randomUUID(),
+          dedupeKey: "equipment.repaired:" + equipmentId + ":" + existing.updated_at,
         })
       }
 
@@ -524,7 +524,7 @@ export async function handleEquipment(
           actorUserId: auth.user.id,
           entityType: "equipment",
           entityId: equipmentId,
-          dedupeKey: "equipment.assignee_changed:" + equipmentId + ":" + crypto.randomUUID(),
+          dedupeKey: "equipment.assignee_changed:" + equipmentId + ":" + existing.updated_at + ":" + ownerUserId,
         })
       }
     } catch (notificationError) {
