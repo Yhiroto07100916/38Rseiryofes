@@ -1,5 +1,35 @@
 export default defineNuxtRouteMiddleware(async (to) => {
-  if (to.path === '/login') {
+  if (import.meta.client) {
+    const config = useRuntimeConfig()
+    const apiBaseUrl = String(config.public.apiBaseUrl).replace(/\/$/, "")
+
+    try {
+      const siteStatus = await $fetch<{
+        maintenance_mode: boolean
+        maintenance_message: string
+        is_admin: boolean
+      }>(`${apiBaseUrl}/api/site-status`, {
+        credentials: "include",
+      })
+
+      if (
+        siteStatus.maintenance_mode &&
+        !siteStatus.is_admin &&
+        to.path !== "/maintenance" &&
+        to.path !== "/login"
+      ) {
+        return navigateTo("/maintenance")
+      }
+
+      if (to.path === "/maintenance" && siteStatus.is_admin) {
+        return navigateTo("/")
+      }
+    } catch {
+      // The API access guard remains authoritative if the status endpoint is unavailable.
+    }
+  }
+
+  if (to.path === "/login" || to.path === "/maintenance") {
     return
   }
 
@@ -13,7 +43,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
 
   if (!auth.isLoggedIn) {
-    return navigateTo('/login')
+    return navigateTo("/login")
   }
 
   const routeMeta = to.meta as typeof to.meta & {
@@ -25,7 +55,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   )
 
   if (!hasAllRequiredPermissions) {
-    return navigateTo('/')
+    return navigateTo("/")
   }
 
   const routeMiddleware = to.meta.middleware
@@ -35,25 +65,25 @@ export default defineNuxtRouteMiddleware(async (to) => {
       ? [routeMiddleware]
       : []
 
-  if (middlewareNames.includes('admin')) {
+  if (middlewareNames.includes("admin")) {
     const isAdmin = auth.accountRoles.some(
-      (role) => role.name === 'admin',
+      (role) => role.name === "admin",
     )
 
     if (!isAdmin) {
-      return navigateTo('/')
+      return navigateTo("/")
     }
   }
 
-  if (middlewareNames.includes('class-representative')) {
+  if (middlewareNames.includes("class-representative")) {
     const isClassRepresentative = auth.accountRoles.some(
       (role) =>
-        role.name === 'class_representative' ||
-        role.name === 'admin',
+        role.name === "class_representative" ||
+        role.name === "admin",
     )
 
     if (!isClassRepresentative) {
-      return navigateTo('/')
+      return navigateTo("/")
     }
   }
 })
