@@ -1078,9 +1078,12 @@ async function addComment() {
   }
 }
 
-onMounted(() => {
-  if (auth.hasPermission('milk_collection.view')) {
-    void loadRequests()
-  }
+const route = useRoute()
+
+onMounted(async () => {
+  if (!auth.hasPermission('milk_collection.view')) return
+  await loadRequests()
+  const openId = typeof route.query.open === 'string' ? route.query.open : ''
+  if (openId) await openDetail(openId)
 })
 </script>
