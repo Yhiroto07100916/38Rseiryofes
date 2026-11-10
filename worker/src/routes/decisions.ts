@@ -414,7 +414,7 @@ export async function handleDecisions(
       ).bind(decisionId).all<{ id: string }>()
     ).results.map((row) => row.id)
 
-    const currentFileIds = fileIds ?? (
+    const previousFileIds = (
       await env.DB.prepare(`
         SELECT df.file_id AS id
         FROM decision_files df
@@ -423,6 +423,7 @@ export async function handleDecisions(
           AND f.archived_at IS NULL
       `).bind(decisionId).all<{ id: string }>()
     ).results.map((row) => row.id)
+    const currentFileIds = fileIds ?? previousFileIds
 
     const validationError = await validateLinks(
       env, currentTaskIds, currentFileIds, nextSurveyId,
@@ -485,7 +486,8 @@ export async function handleDecisions(
     await env.DB.batch(statements)
     if (fileIds !== null) {
       try {
-        for (const fileId of fileIds) await notifyFileLinked(env, fileId, userId)
+        const newlyLinkedFileIds = fileIds.filter(fileId => !previousFileIds.includes(fileId))
+        for (const fileId of newlyLinkedFileIds) await notifyFileLinked(env, fileId, userId)
       } catch (notificationError) {
         console.error("Failed to create linked-file notifications:", notificationError)
       }
