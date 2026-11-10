@@ -87,7 +87,7 @@ export const useNotifications = () => {
   let listActive = true
 
   const saveCacheSnapshot = async (accountId: string | null, serverTime?: string) => {
-    if (!accountId || cacheDeletionRequests.has(accountId) || auth.user?.id !== accountId || cacheSnapshot.length === 0) return
+    if (!accountId || !cacheInitialized || cacheDeletionRequests.has(accountId) || auth.user?.id !== accountId) return
     const effectiveServerTime = serverTime ?? (
       cachedClockOffsetMs !== null
         ? new Date(Date.now() + cachedClockOffsetMs).toISOString()
@@ -180,6 +180,8 @@ export const useNotifications = () => {
       const visible = filtered.slice(0, PAGE_SIZE)
       notifications.value = visible.map(mapCachedNotification)
       unreadCount.value = cached.unreadCount
+      cacheSnapshot = cached.notifications.map(mapCachedNotification)
+      cacheInitialized = true
       const cursorItem = filtered.length > PAGE_SIZE
         ? filtered[PAGE_SIZE - 1]
         : cached.notifications.length >= 100
@@ -273,8 +275,11 @@ export const useNotifications = () => {
       // 取得済みデータは元アカウントの領域にだけ保存する。
       // アカウント切替後に共有UI用スナップショットを書き換えない。
       const snapshot = merged.slice(0, 100)
-      if (auth.user?.id === accountId) cacheSnapshot = snapshot
       await saveNotificationCache(accountId, snapshot, unreadCount.value, latest.server_time)
+      if (auth.user?.id === accountId) {
+        cacheSnapshot = snapshot
+        cacheInitialized = true
+      }
     })().catch(() => {
       // 不完全な取得結果では既存キャッシュを置き換えない。
     }).finally(() => {
@@ -624,18 +629,20 @@ export const useNotifications = () => {
         ...merged,
         ...updatedExisting.filter(item => !incomingIds.has(item.id)),
       ]
-      const cachedById = new Map(cacheSnapshot.map(item => [item.id, item]))
-      for (const item of response.known_notifications ?? []) {
-        const cachedItem = cachedById.get(item.id)
-        if (cachedItem) cachedById.set(item.id, { ...cachedItem, is_read: item.is_read })
+      if (cacheInitialized) {
+        const cachedById = new Map(cacheSnapshot.map(item => [item.id, item]))
+        for (const item of response.known_notifications ?? []) {
+          const cachedItem = cachedById.get(item.id)
+          if (cachedItem) cachedById.set(item.id, { ...cachedItem, is_read: item.is_read })
+        }
+        for (const item of response.notifications) {
+          cachedById.set(item.id, item)
+        }
+        cacheSnapshot = [...cachedById.values()]
+          .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.id.localeCompare(a.id))
+          .slice(0, 100)
+        void saveCacheSnapshot(requestAccountId, response.server_time)
       }
-      for (const item of response.notifications) {
-        cachedById.set(item.id, item)
-      }
-      cacheSnapshot = [...cachedById.values()]
-        .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.id.localeCompare(a.id))
-        .slice(0, 100)
-      void saveCacheSnapshot(requestAccountId, response.server_time)
       listFailures = 0
       clearListRetry()
       error.value = ""
@@ -737,6 +744,7 @@ export const useNotifications = () => {
       hasSuccessfulApiFetch = false
       cachedClockOffsetMs = null
       cacheSnapshot = []
+      cacheInitialized = false
       pendingReadOperations.clear()
       readStateWriteCompletedAt.clear()
       manualRefreshRequested = false
