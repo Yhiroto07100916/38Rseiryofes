@@ -87,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { getDefaultTimeZone } from '~/utils/jst'
+import { getDefaultTimeZone, jstDateTimeLocalToIso } from '~/utils/jst'
 import type { Tool, CurrentLoanItem } from '~/types/tool-rental'
 
 definePageMeta({ middleware: 'auth' })
@@ -121,7 +121,7 @@ const formatDate = (value: string) => {
   const normalized = value.replace(' ', 'T')
   const date = /(?:Z|[+-]\d{2}:\d{2})$/.test(normalized)
     ? new Date(normalized)
-    : new Date(`${normalized}+09:00`)
+    : new Date(jstDateTimeLocalToIso(normalized.replace(' ', 'T'), getDefaultTimeZone()))
   return date.toLocaleString('ja-JP', { timeZone: getDefaultTimeZone() })
 }
 
