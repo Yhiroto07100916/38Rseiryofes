@@ -127,7 +127,7 @@ async function enforceSiteAccess(
 
   const featurePathMap: Array<[string, string]> = [
     ["/api/tasks", "tasks"],
-    ["/api/calendar-categories", "calendar"],
+    ["/api/calendar/categories", "calendar"],
     ["/api/calendar", pathname.includes("/attendance") ? "attendance" : "calendar"],
     ["/api/news", "news"],
     ["/api/scripts", "scripts"],
@@ -135,13 +135,16 @@ async function enforceSiteAccess(
     ["/api/equipment", "equipment"],
     ["/api/surveys", "surveys"],
     ["/api/files", "files"],
-    ["/api/public-files", "files"],
+    ["/api/public/files", "files"],
     ["/api/submissions", "submissions"],
     ["/api/decisions", "decisions"],
     ["/api/minutes", "minutes"],
     ["/api/tool-rental", "tool_rental"],
     ["/api/wishlist", "wishlist"],
     ["/api/milk-collection", "milk_collection"],
+    ["/api/auth/avatar", "members"],
+    ["/api/avatars", "members"],
+    ["/api/presence", "members"],
     ["/api/users", "members"],
   ]
   const matchedFeature = featurePathMap.find(([prefix]) =>
