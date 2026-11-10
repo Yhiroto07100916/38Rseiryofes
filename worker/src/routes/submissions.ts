@@ -695,8 +695,12 @@ export async function handleSubmissions(
     }
 
     try {
+      const updatedSubmission = await getSubmission(env, id)
       const recipients = [...new Set([
-        ...await getSubmissionRoleMemberIds(env, current.assigned_role_id),
+        ...await getSubmissionRoleMemberIds(
+          env,
+          updatedSubmission?.assigned_role_id ?? current.assigned_role_id,
+        ),
         current.created_by,
       ])]
       await createNotificationsForUsers(env, {
