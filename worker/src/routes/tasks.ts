@@ -1503,9 +1503,13 @@ export async function handleTasks(
 
       await env.DB.batch(statements)
 
-      if (hasFileUpdate) {
+      if (
+        hasFileUpdate &&
+        JSON.stringify(requestedFileIds.slice().sort()) !== JSON.stringify(previousFileIds)
+      ) {
         try {
-          for (const fileId of requestedFileIds) await notifyFileLinked(env, fileId, auth.user.id)
+          const newlyLinkedFileIds = requestedFileIds.filter(fileId => !previousFileIds.includes(fileId))
+          for (const fileId of newlyLinkedFileIds) await notifyFileLinked(env, fileId, auth.user.id)
         } catch (notificationError) {
           console.error("Failed to create linked-file notifications:", notificationError)
         }
