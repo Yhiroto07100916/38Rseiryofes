@@ -176,3 +176,127 @@ describe("role member endpoints", () => {
     ).toBe(0)
   })
 })
+
+
+async function createImportantAdminSession() {
+  const cookie = await createAdminSession()
+  const sessionId = cookie.slice("session_id=".length)
+  const session = await env.DB.prepare(
+    "SELECT user_id FROM sessions WHERE id = ?",
+  ).bind(sessionId).first<{ user_id: string }>()
+  if (!session) throw new Error("Test session was not found")
+
+  const role = await env.DB.prepare(
+    "SELECT id FROM account_roles WHERE name = 'important_settings_admin'",
+  ).first<{ id: string }>()
+  if (!role) throw new Error("Seeded important settings role was not found")
+
+  await env.DB.prepare(`
+    INSERT INTO user_account_roles (user_id, account_role_id)
+    VALUES (?, ?)
+  `).bind(session.user_id, role.id).run()
+
+  return { cookie, userId: session.user_id, roleId: role.id }
+}
+
+describe("site settings authorization", () => {
+  it("hides critical settings and rejects critical updates for regular admins", async () => {
+    const cookie = await createAdminSession()
+
+    const getResponse = await SELF.fetch(
+      "http://example.com/api/account-roles/settings",
+      { headers: { Cookie: cookie } },
+    )
+    expect(getResponse.status).toBe(200)
+    const getBody = await getResponse.json() as {
+      settings: Record<string, unknown>
+    }
+    expect(getBody.settings.site_name).toBe("38R星陵祭準備サイト")
+    expect(getBody.settings.site_visibility).toBeUndefined()
+    expect(getBody.settings.maintenance_mode).toBeUndefined()
+
+    const patchResponse = await SELF.fetch(
+      "http://example.com/api/account-roles/settings",
+      {
+        method: "PATCH",
+        headers: {
+          Cookie: cookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          settings: { site_visibility: "private" },
+        }),
+      },
+    )
+    expect(patchResponse.status).toBe(403)
+
+    const logsResponse = await SELF.fetch(
+      "http://example.com/api/account-roles/settings/logs",
+      { headers: { Cookie: cookie } },
+    )
+    expect(logsResponse.status).toBe(200)
+    const logsBody = await logsResponse.json() as {
+      logs: Array<{ setting_key: string; new_value: string }>
+    }
+    expect(
+      logsBody.logs
+        .filter(log => log.setting_key === "site_visibility")
+        .every(log => log.new_value === "[redacted]"),
+    ).toBe(true)
+  })
+
+  it("allows important admins to update critical settings and prevents removing the final one", async () => {
+    const { cookie, userId, roleId } = await createImportantAdminSession()
+
+    const patchResponse = await SELF.fetch(
+      "http://example.com/api/account-roles/settings",
+      {
+        method: "PATCH",
+        headers: {
+          Cookie: cookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          settings: { site_visibility: "private" },
+        }),
+      },
+    )
+    expect(patchResponse.status).toBe(200)
+
+    const getResponse = await SELF.fetch(
+      "http://example.com/api/account-roles/settings",
+      { headers: { Cookie: cookie } },
+    )
+    const getBody = await getResponse.json() as {
+      settings: Record<string, unknown>
+    }
+    expect(getBody.settings.site_visibility).toBe("private")
+
+    const genericRoleRemoval = await SELF.fetch(
+      `http://example.com/api/users/${userId}/account-roles/${roleId}`,
+      { method: "DELETE", headers: { Cookie: cookie } },
+    )
+    expect(genericRoleRemoval.status).toBe(403)
+
+    const finalAdminRemoval = await SELF.fetch(
+      `http://example.com/api/account-roles/settings/important-admins/${userId}`,
+      { method: "DELETE", headers: { Cookie: cookie } },
+    )
+    expect(finalAdminRemoval.status).toBe(409)
+
+    const restoreResponse = await SELF.fetch(
+      "http://example.com/api/account-roles/settings",
+      {
+        method: "PATCH",
+        headers: {
+          Cookie: cookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          settings: { site_visibility: "public" },
+        }),
+      },
+    )
+    expect(restoreResponse.status).toBe(200)
+  })
+})
