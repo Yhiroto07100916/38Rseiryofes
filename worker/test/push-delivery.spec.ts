@@ -228,6 +228,26 @@ describe("Web Push delivery queue", () => {
     expect(delivery?.status).toBe("failed")
   })
 
+  it("suppresses queued legacy news Push when the category is turned off", async () => {
+    const subscriptionId = await createSubscription()
+    const newsId = await createNews()
+    const owner = await env.DB.prepare(
+      "SELECT user_id FROM push_subscriptions WHERE id = ?",
+    ).bind(subscriptionId).first<{ user_id: string }>()
+    await env.DB.prepare(
+      "INSERT INTO notification_category_settings (user_id, category, push_enabled) VALUES (?, 'news', 0)",
+    ).bind(owner!.user_id).run()
+
+    await enqueueNewsPushDeliveries(pushEnv, { id: newsId })
+    const fetchMock = vi.fn(async () => new Response(null, { status: 201 }))
+    vi.stubGlobal("fetch", fetchMock)
+    await processDuePushDeliveries(pushEnv)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    const delivery = await getDelivery(newsId)
+    expect(delivery?.status).toBe("failed")
+  })
+
   it("requeues an existing news notification for all current subscriptions", async () => {
     await createSubscription()
     const newsId = await createNews()
