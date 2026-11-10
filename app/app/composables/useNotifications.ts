@@ -637,6 +637,7 @@ export const useNotifications = () => {
         updated_count: number
         updated_ids: string[]
         updated_read_states: Array<{ id: string; read_updated_at: string; read_version: number }>
+        unread_count: number
       }>("/api/notifications/read-all", {
         method: "POST",
       })
@@ -664,8 +665,8 @@ export const useNotifications = () => {
       if (readFilter.value === "unread") {
         notifications.value = notifications.value.filter(item => !updatedIds.has(item.id))
       }
+      unreadCount.value = response.unread_count
       void saveCacheSnapshot(requestAccountId)
-      void refreshUnreadCount()
       return response.updated_count
     } catch {
       if (auth.user?.id !== requestAccountId) return null
