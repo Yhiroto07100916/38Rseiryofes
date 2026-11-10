@@ -26,6 +26,97 @@ import { handleAvatarImage, handleAvatarMutation, processQueuedAvatarDeletions }
 import { handleSubmissions, processDueSubmissionNotifications } from "./routes/submissions"
 import { handleWishlist } from "./routes/wishlist"
 import { processDueCalendarNotifications } from "./routes/calendar-reminders"
+import { getSessionUser } from "./lib/session"
+
+async function readSiteAccessSettings(env: Env): Promise<{
+  visibility: "public" | "private"
+  maintenanceMode: boolean
+  maintenanceMessage: string
+}> {
+  try {
+    const rows = await env.DB.prepare(`
+      SELECT key, value
+      FROM site_settings
+      WHERE key IN ('site_visibility', 'maintenance_mode', 'maintenance_message')
+    `).all<{ key: string; value: string }>()
+
+    const settings = new Map(rows.results.map(row => {
+      try {
+        return [row.key, JSON.parse(row.value)] as const
+      } catch {
+        return [row.key, null] as const
+      }
+    }))
+
+    return {
+      visibility: settings.get("site_visibility") === "private" ? "private" : "public",
+      maintenanceMode: settings.get("maintenance_mode") === true,
+      maintenanceMessage: typeof settings.get("maintenance_message") === "string"
+        ? settings.get("maintenance_message") as string
+        : "現在メンテナンス中です。しばらくお待ちください。",
+    }
+  } catch {
+    // Keep the existing access behavior until the settings migration is applied.
+    return {
+      visibility: "public",
+      maintenanceMode: false,
+      maintenanceMessage: "現在メンテナンス中です。しばらくお待ちください。",
+    }
+  }
+}
+
+async function enforceSiteAccess(
+  request: Request,
+  env: Env,
+  pathname: string,
+): Promise<Response | null> {
+  if (
+    pathname === "/health" ||
+    pathname === "/health/db" ||
+    pathname === "/api/site-status" ||
+    pathname === "/api/auth/login" ||
+    pathname === "/api/auth/me" ||
+    pathname === "/api/auth/logout"
+  ) {
+    return null
+  }
+
+  const settings = await readSiteAccessSettings(env)
+  const user = await getSessionUser(request, env)
+
+  if (settings.maintenanceMode) {
+    if (!user) {
+      return Response.json(
+        { error: "Maintenance mode", message: settings.maintenanceMessage },
+        { status: 503 },
+      )
+    }
+
+    const admin = await env.DB.prepare(`
+      SELECT 1
+      FROM user_account_roles uar
+      INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+      WHERE uar.user_id = ? AND ar.name = 'admin'
+      LIMIT 1
+    `).bind(user.id).first()
+
+    if (!admin) {
+      return Response.json(
+        { error: "Maintenance mode", message: settings.maintenanceMessage },
+        { status: 503 },
+      )
+    }
+  }
+
+  if (settings.visibility === "private" && !user) {
+    return Response.json(
+      { error: "Authentication required", message: "このサイトは非公開です。ログインしてください。" },
+      { status: 401 },
+    )
+  }
+
+  return null
+}
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -104,6 +195,33 @@ export default {
           service: "38r-seiryofes",
         }),
       )
+    }
+
+    if (url.pathname === "/api/site-status" && request.method === "GET") {
+      const settings = await readSiteAccessSettings(env)
+      const user = await getSessionUser(request, env)
+      const isAdmin = user
+        ? Boolean(await env.DB.prepare(`
+            SELECT 1
+            FROM user_account_roles uar
+            INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+            WHERE uar.user_id = ? AND ar.name = 'admin'
+            LIMIT 1
+          `).bind(user.id).first())
+        : false
+
+      return withCors(request, Response.json({
+        site_visibility: settings.visibility,
+        maintenance_mode: settings.maintenanceMode,
+        maintenance_message: settings.maintenanceMessage,
+        is_authenticated: Boolean(user),
+        is_admin: isAdmin,
+      }))
+    }
+
+    const siteAccessError = await enforceSiteAccess(request, env, url.pathname)
+    if (siteAccessError) {
+      return withCors(request, siteAccessError)
     }
 
     if (url.pathname === "/health/db") {
