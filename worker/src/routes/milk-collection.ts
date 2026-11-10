@@ -73,7 +73,7 @@ export async function handleMilkCollection(request: Request, env: Env, path: str
   await history(env,id,auth.user.id,"commented",current.status,current.status,{comment_id:cid})
   try {
    await createNotificationsForUsers(env,{
-    recipientUserIds:[current.created_by,...await usersWithPermission(env,"milk_collection.view")],
+    recipientUserIds:[current.created_by,...await usersWithPermission(env,"milk_collection.review")],
     eventKey:"milk_collection.comment_added",category:"milk_collection",
     title:"牛乳パック候補にコメントが追加されました",body:b.body.trim(),
     targetUrl:"/milk-collection/"+id,requiredPermission:"milk_collection.view",
