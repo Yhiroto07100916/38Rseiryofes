@@ -294,12 +294,16 @@ export async function handleNotifications(
     }>()
 
     if (!current) return jsonError("Notification not found", 404)
+    const unreadCount = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM notifications WHERE recipient_user_id = ? AND is_read = 0",
+    ).bind(userId).first<{ count: number }>()
 
     return Response.json({
       success: true,
       is_read: current.is_read === 1,
       read_updated_at: current.read_updated_at,
       read_version: current.read_version,
+      unread_count: unreadCount?.count ?? 0,
     })
   }
 
