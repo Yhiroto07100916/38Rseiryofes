@@ -169,11 +169,11 @@ export const useNotifications = () => {
     if (cacheDeletionRequests.has(accountId)) return
     try {
       const cached = await loadNotificationCache(accountId)
-      if (!cached || auth.user?.id !== accountId) return
+      // API取得が先に完了していた場合、遅れて返った古いキャッシュで最新状態を上書きしない。
+      if (!cached || auth.user?.id !== accountId || hasSuccessfulApiFetch) return
       cachedClockOffsetMs = cached.clockOffsetMs
       cacheSnapshot = cached.notifications.map(mapCachedNotification)
       cacheInitialized = true
-      if (hasSuccessfulApiFetch) return
       cacheExpired.value = cached.expired
 
       const term = String(search.value ?? "").trim().toLocaleLowerCase()
