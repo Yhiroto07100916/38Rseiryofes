@@ -12,6 +12,7 @@ interface PushDeliveryRecord {
   delivery_id: string
   news_id: string
   subscription_id: string
+  recipient_user_id: string
   attempt_count: number
   endpoint: string
   p256dh: string
@@ -446,6 +447,34 @@ async function processOneDelivery(
   }
 
   try {
+    const [subscription, newsExists, canViewNews] = await Promise.all([
+      env.DB.prepare(
+        "SELECT COALESCE(us.global_push_enabled, 1) AS global_push_enabled, " +
+        "COALESCE(cs.push_enabled, 1) AS category_push_enabled " +
+        "FROM push_subscriptions s " +
+        "LEFT JOIN notification_user_settings us ON us.user_id = s.user_id " +
+        "LEFT JOIN notification_category_settings cs ON cs.user_id = s.user_id AND cs.category = 'news' " +
+        "WHERE s.id = ? AND s.user_id = ?",
+      ).bind(delivery.subscription_id, delivery.recipient_user_id).first<{
+        global_push_enabled: number
+        category_push_enabled: number
+      }>(),
+      env.DB.prepare("SELECT 1 FROM news WHERE id = ?").bind(delivery.news_id).first(),
+      hasPermission(env, delivery.recipient_user_id, "news.view"),
+    ])
+
+    if (
+      !subscription || subscription.global_push_enabled !== 1 ||
+      subscription.category_push_enabled !== 1 || !newsExists || !canViewNews
+    ) {
+      await updateDelivery(env, delivery.delivery_id, {
+        status: "failed",
+        attemptCount: attemptNumber,
+        error: "News Push suppressed by current subscription ownership, settings, or access permissions",
+      })
+      return
+    }
+
     const response = await sendPush(env, delivery, {
       id: delivery.news_id,
       title: delivery.title,
@@ -530,6 +559,7 @@ export async function processDuePushDeliveries(env: Env): Promise<void> {
         d.id AS delivery_id,
         d.news_id,
         d.subscription_id,
+        s.user_id AS recipient_user_id,
         d.attempt_count,
         s.endpoint,
         s.p256dh,
