@@ -671,7 +671,7 @@ export async function handleNews(
       )
     }
 
-    const result = await reenqueueNewsPushDeliveries(env, { id: newsId })
+    const result = await reenqueueNewsPushDeliveries(env, { id: newsId }, auth.user.id)
 
     if (!result.configured) {
       return Response.json(
