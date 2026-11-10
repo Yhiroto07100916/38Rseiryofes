@@ -184,6 +184,7 @@ export async function handleNotifications(
     return Response.json({
       updated_count: result.results.length,
       updated_ids: result.results.map(row => row.id),
+      updated_read_states: result.results,
     })
   }
 
