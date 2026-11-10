@@ -90,7 +90,7 @@ function isValidSettingValue(key: string, value: unknown): boolean {
   if (key === "operation_settings") {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false
     const settings = value as Record<string, unknown>
-    return ["month", "week", "day", "list"].includes(String(settings.calendar_default_view)) &&
+    return ["month", "list"].includes(String(settings.calendar_default_view)) &&
       ["todo", "in_progress", "review", "done"].includes(String(settings.task_default_status)) &&
       Number.isInteger(settings.upload_max_file_size_mb) &&
       Number(settings.upload_max_file_size_mb) >= 1 && Number(settings.upload_max_file_size_mb) <= 100
