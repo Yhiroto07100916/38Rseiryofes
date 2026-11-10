@@ -198,7 +198,7 @@ async function notifySurveyReminder(
     title,
     body: survey.title,
     targetUrl: "/surveys?open=" + encodeURIComponent(survey.id),
-    requiredPermission: "surveys.view",
+    requiredPermission: null,
     entityType: "survey",
     entityId: survey.id,
     dedupeKey: eventKey + ":" + survey.id + ":" + (survey.deadline_at ?? ""),
