@@ -27,7 +27,7 @@ import { handleSubmissions, processDueSubmissionNotifications } from "./routes/s
 import { handleWishlist } from "./routes/wishlist"
 import { processDueCalendarNotifications } from "./routes/calendar-reminders"
 import { getSessionUser } from "./lib/session"
-import { getSecuritySettings } from "./lib/site-settings"
+import { getSecuritySettings, getSiteSetting } from "./lib/site-settings"
 
 async function readSiteAccessSettings(env: Env): Promise<{
   visibility: "public" | "private"
@@ -112,6 +112,42 @@ async function enforceSiteAccess(
 
   const settings = await readSiteAccessSettings(env)
   const user = await getSessionUser(request, env)
+
+  const featurePathMap: Array<[string, string]> = [
+    ["/api/tasks", "tasks"],
+    ["/api/calendar-categories", "calendar"],
+    ["/api/calendar", pathname.includes("/attendance") ? "attendance" : "calendar"],
+    ["/api/news", "news"],
+    ["/api/scripts", "scripts"],
+    ["/api/accounting", "accounting"],
+    ["/api/equipment", "equipment"],
+    ["/api/surveys", "surveys"],
+    ["/api/files", "files"],
+    ["/api/public-files", "files"],
+    ["/api/submissions", "submissions"],
+    ["/api/decisions", "decisions"],
+    ["/api/minutes", "minutes"],
+    ["/api/tool-rental", "tool_rental"],
+    ["/api/wishlist", "wishlist"],
+    ["/api/milk-collection", "milk_collection"],
+    ["/api/users", "members"],
+  ]
+  const matchedFeature = featurePathMap.find(([prefix]) =>
+    pathname === prefix || pathname.startsWith(prefix + "/"),
+  )
+  if (matchedFeature) {
+    const featureSettings = await getSiteSetting<Record<string, { enabled?: boolean }>>(
+      env,
+      "feature_settings",
+      {},
+    )
+    if (featureSettings[matchedFeature[1]]?.enabled === false) {
+      return Response.json(
+        { error: "This feature is currently disabled", feature: matchedFeature[1] },
+        { status: 503 },
+      )
+    }
+  }
 
   if (user) {
     const securitySettings = await getSecuritySettings(env)
