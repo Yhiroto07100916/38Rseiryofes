@@ -662,9 +662,6 @@ export const useNotifications = () => {
     () => auth.user?.id,
     (accountId, previousAccountId) => {
       if (accountId === previousAccountId) return
-      if (previousAccountId) {
-        void deleteNotificationCache(previousAccountId).catch(() => undefined)
-      }
 
       notifications.value = []
       cacheExpired.value = false
