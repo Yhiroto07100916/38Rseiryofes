@@ -2,6 +2,15 @@
 
 
     <main class="home-intro">
+      <v-img
+        v-if="siteStatus?.logo_url"
+        :src="siteStatus.logo_url"
+        alt="サイトロゴ"
+        max-width="120"
+        max-height="80"
+        contain
+        class="mb-5"
+      />
       <p class="home-event">
         {{ siteStatus ? `${siteStatus.event_year}年度 ${siteStatus.event_name}` : "38R 星陵祭準備" }}
       </p>
