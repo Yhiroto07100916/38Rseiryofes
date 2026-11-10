@@ -32,6 +32,7 @@ const CACHE_TTL = 5 * 60 * 1000
 const MAX_NOTIFICATIONS = 100
 
 let databasePromise: Promise<IDBDatabase> | null = null
+const pendingCacheSaves = new Map<string, Promise<void>>()
 
 function openDatabase(): Promise<IDBDatabase> {
   if (typeof indexedDB === "undefined") {
@@ -142,40 +143,66 @@ export async function saveNotificationCache(
   unreadCount: number,
 ): Promise<void> {
   if (!accountId) return
-  const database = await openDatabase()
-  const cachedNotifications = [...notifications]
-    .sort((a, b) => {
-      const dateDifference = Date.parse(b.created_at) - Date.parse(a.created_at)
-      return dateDifference || b.id.localeCompare(a.id)
-    })
-    .slice(0, MAX_NOTIFICATIONS)
-    .map(item => ({
-      id: item.id,
-      title: item.title,
-      body: item.body,
-      category: item.category,
-      target_url: item.target_url,
-      is_read: item.is_read ? 1 : 0,
-      created_at: item.created_at,
-    }))
 
-  await new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(STORE_NAME, "readwrite")
-    transaction.objectStore(STORE_NAME).put({
-      accountId,
-      version: CACHE_VERSION,
-      savedAt: Date.now(),
-      unreadCount: Math.max(0, Math.floor(unreadCount)),
-      notifications: cachedNotifications,
-    } satisfies NotificationCacheRecord)
-    transaction.oncomplete = () => resolve()
-    transaction.onerror = () => reject(transaction.error ?? new Error("Cache write failed"))
-    transaction.onabort = () => reject(transaction.error ?? new Error("Cache write aborted"))
-  })
+  const existing = pendingCacheSaves.get(accountId)
+  if (existing) {
+    await existing
+    return
+  }
+
+  const operation = (async () => {
+    const database = await openDatabase()
+    const cachedNotifications = [...notifications]
+      .sort((a, b) => {
+        const dateDifference = Date.parse(b.created_at) - Date.parse(a.created_at)
+        return dateDifference || b.id.localeCompare(a.id)
+      })
+      .slice(0, MAX_NOTIFICATIONS)
+      .map(item => ({
+        id: item.id,
+        title: item.title,
+        body: item.body,
+        category: item.category,
+        target_url: item.target_url,
+        is_read: item.is_read ? 1 : 0,
+        created_at: item.created_at,
+      }))
+
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(STORE_NAME, "readwrite")
+      transaction.objectStore(STORE_NAME).put({
+        accountId,
+        version: CACHE_VERSION,
+        savedAt: Date.now(),
+        unreadCount: Math.max(0, Math.floor(unreadCount)),
+        notifications: cachedNotifications,
+      } satisfies NotificationCacheRecord)
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error ?? new Error("Cache write failed"))
+      transaction.onabort = () => reject(transaction.error ?? new Error("Cache write aborted"))
+    })
+  })()
+
+  pendingCacheSaves.set(accountId, operation)
+  try {
+    await operation
+  } finally {
+    if (pendingCacheSaves.get(accountId) === operation) {
+      pendingCacheSaves.delete(accountId)
+    }
+  }
 }
 
 export async function deleteNotificationCache(accountId: string): Promise<void> {
   if (!accountId) return
+
+  // API取得完了後、保存処理だけが残っている場合はその保存を優先して保持する。
+  const pendingSave = pendingCacheSaves.get(accountId)
+  if (pendingSave) {
+    await pendingSave
+    return
+  }
+
   const database = await openDatabase()
   await deleteRecord(database, accountId)
 }
