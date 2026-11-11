@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "38r-seiryofes-local",
+  "account_id": "b075c6dae1350c9fa806b1935c6a5c25",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-16",
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "38r-festival-db",
+      "database_id": "3079b483-4140-45f2-b444-0661cb334cef",
+      "migrations_dir": "../migrations"
+    }
+  ],
+  "ai_search_namespaces": [
+    { "binding": "AI_SEARCH", "namespace": "default", "remote": true }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES_BUCKET",
+      "bucket_name": "38r-seiryofes-files"
+    }
+  ]
+}

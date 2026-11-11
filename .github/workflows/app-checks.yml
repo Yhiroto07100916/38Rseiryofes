@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/notification-center
+      - feature/ai-search
     paths:
       - "app/**"
       - ".github/workflows/app-checks.yml"
