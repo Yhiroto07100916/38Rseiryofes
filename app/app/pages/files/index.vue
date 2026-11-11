@@ -194,6 +194,9 @@
             <div class="text-caption text-medium-emphasis">
               1ファイル最大25 MiB
             </div>
+            <div class="text-caption text-medium-emphasis mt-1">
+              AI検索の対象はPDF・テキスト系10 MiBまで、画像・Office系4 MiBまでです。対象外のファイルも通常どおり保存できます。
+            </div>
           </div>
           <v-btn
             color="primary"
@@ -285,6 +288,25 @@
                     · {{ formatSize(file.size) }}
                     · {{ formatDate(file.created_at) }}
                   </div>
+
+                  <v-chip
+                    v-if="file.ai_status === 'pending' || file.ai_status === 'processing'"
+                    size="x-small"
+                    color="info"
+                    variant="tonal"
+                    class="mt-2"
+                  >
+                    AI解析中
+                  </v-chip>
+                  <v-chip
+                    v-else-if="file.ai_status === 'failed'"
+                    size="x-small"
+                    color="warning"
+                    variant="tonal"
+                    class="mt-2"
+                  >
+                    AI検索未登録
+                  </v-chip>
 
                   <div
                     v-if="file.ai_summary"
