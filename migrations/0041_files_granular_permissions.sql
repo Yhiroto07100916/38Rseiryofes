@@ -20,11 +20,12 @@ JOIN permissions p ON p.key IN (
 )
 WHERE ar.name IN ('classmate', 'class_representative');
 
-INSERT OR IGNORE INTO account_role_permissions (account_role_id, permission_id, effect)
-SELECT ar.id, p.id, 'allow'
-FROM account_roles ar
+INSERT OR IGNORE INTO role_permissions (role_id, permission_id, effect)
+SELECT r.id, p.id, 'allow'
+FROM roles r
 JOIN permissions p ON p.key IN (
+  'files.view', 'files.download', 'files.upload', 'files.folders.create',
   'files.move', 'files.archive', 'files.restore', 'files.categories.manage',
   'files.folders.manage', 'files.ai_search.manage'
 )
-WHERE ar.name = 'class_representative';
+WHERE r.name = 'class_representative';
