@@ -1221,6 +1221,14 @@ const loadFiles = async () => {
   errorMessage.value = ''
 
   try {
+    if (canManageFiles.value && !showArchived.value) {
+      try {
+        await apiFetch('/api/files/ai-search/sync-status', { method: 'POST' })
+      } catch (syncError) {
+        console.warn('AI Search status refresh failed:', syncError)
+      }
+    }
+
     const params = new URLSearchParams()
     params.set('limit', '200')
     if (search.value.trim()) params.set('search', search.value.trim())
