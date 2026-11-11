@@ -1030,26 +1030,17 @@ const retryFailedFiles = async () => {
   aiSearchError.value = ""
 
   try {
-    let remainingFailed = 1
-    let totalQueued = 0
-    let batches = 0
+    const response = await apiFetch<{
+      queued: number
+      remainingFailed: number
+    }>("/api/files/ai-search/retry-failed", {
+      method: "POST",
+    })
 
-    while (remainingFailed > 0 && batches < 100) {
-      const response = await apiFetch<{
-        queued: number
-        remainingFailed: number
-      }>("/api/files/ai-search/retry-failed", {
-        method: "POST",
-      })
-
-      totalQueued += response.queued
-      remainingFailed = response.remainingFailed
-      batches += 1
-      if (response.queued === 0) break
-    }
-
-    aiIndexMessage.value = totalQueued
-      ? totalQueued + "件の資料の再登録を開始しました。解析完了まで少し時間がかかります。"
+    aiIndexMessage.value = response.queued
+      ? response.remainingFailed > 0
+        ? response.queued + "件の資料の再登録を開始しました。未処理の失敗資料が" + response.remainingFailed + "件あります。残りは処理状況を確認してから再試行してください。"
+        : response.queued + "件の資料の再登録を開始しました。解析完了まで少し時間がかかります。"
       : "再試行できる資料はありませんでした。"
 
     await loadFiles()
