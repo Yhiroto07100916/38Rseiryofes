@@ -14,7 +14,7 @@
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
-import { watch } from 'vue'
+import { computed } from 'vue'
 
 const props = withDefaults(defineProps<{
   modelValue: string
@@ -62,6 +62,7 @@ const editor = useEditor({
     attributes: {
       class: 'script-rich-editor-content',
       spellcheck: 'true',
+      'aria-label': props.ariaLabel,
     },
   },
   onUpdate: ({ editor: currentEditor }) => {
@@ -75,18 +76,6 @@ watch(() => props.modelValue, (value) => {
   if (currentText !== value) {
     editor.value.commands.setContent(toEditorHtml(value), { emitUpdate: false })
   }
-})
-
-watch(() => props.placeholder, (value) => {
-  editor.value?.setOptions({
-    editorProps: {
-      attributes: {
-        class: 'script-rich-editor-content',
-        spellcheck: 'true',
-        'data-placeholder': value,
-      },
-    },
-  })
 })
 
 const focused = computed(() => editor.value?.isFocused ?? false)
