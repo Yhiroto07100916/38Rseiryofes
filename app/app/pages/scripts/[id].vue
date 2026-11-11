@@ -270,14 +270,14 @@
                     </button>
                   </template>
   
-                  <ScriptBlockInput
-                    :ref="(element: Element | ComponentPublicInstance | null) => setBlockRef(block.id, element)"
-                    :model-value="block.content"
+                  <textarea
+                    :ref="(element) => setBlockRef(block.id, element)"
+                    :value="block.content"
                     class="block-textarea"
                     :placeholder="blockPlaceholder(block.type)"
                     :aria-label="`${blockLabel(block.type)}の本文`"
-                    @update:model-value="onBlockInput(block, $event)"
-                    @add-after="addBlockAfter(block)"
+                    @input="onBlockInput(block, $event)"
+                    @keydown.enter="handleBlockEnter(block, $event)"
                   />
   
                   <button
@@ -916,19 +916,15 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   const pendingAfterBlock = ref<Block | null>(null)
   
   const canvasRef = ref<HTMLElement | null>(null)
-  interface ScriptBlockInputHandle {
-    focus: () => void
-  }
-
-  const blockRefs = new Map<string, ScriptBlockInputHandle>()
+  const blockRefs = new Map<string, HTMLTextAreaElement>()
   const draggingBlockId = ref<string | null>(null)
   
   const setBlockRef = (
     id: string,
     element: Element | ComponentPublicInstance | null,
   ) => {
-    if (element && 'focus' in element && typeof element.focus === 'function') {
-      blockRefs.set(id, element as ScriptBlockInputHandle)
+    if (element instanceof HTMLTextAreaElement) {
+      blockRefs.set(id, element)
     } else {
       blockRefs.delete(id)
     }
@@ -2722,8 +2718,9 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
     }
   }
 
-  const onBlockInput = (block: Block, content: string) => {
-    block.content = content
+  const onBlockInput = (block: Block, event: Event) => {
+    const target = event.target as HTMLTextAreaElement
+    block.content = target.value
 
     const nextDirtyBlockIds = new Set(dirtyBlockIds.value)
     nextDirtyBlockIds.add(block.id)
@@ -2873,6 +2870,11 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
     if (last) blockRefs.get(last.id)?.focus()
   }
 
+  const handleBlockEnter = (block: Block, event: KeyboardEvent) => {
+    if (!event.shiftKey) return
+    event.preventDefault()
+    addBlockAfter(block)
+  }
 
   onMounted(loadScript)
   </script>
@@ -3141,12 +3143,19 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   width: 100%;
   min-height: 430px;
   height: 100%;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
   color: #222;
   font-family: inherit;
   font-size: 19px;
   font-weight: 500;
   line-height: 1.9;
   letter-spacing: 0.04em;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  padding: 0;
 }
 
 .block-dialogue .block-textarea {
