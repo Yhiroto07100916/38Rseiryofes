@@ -3163,7 +3163,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 .block-dialogue .block-textarea {
   min-height: 480px;
   font-size: 20px;
-  line-height: 2;
+  line-height: 1.35;
   font-weight: 500;
 }
 
