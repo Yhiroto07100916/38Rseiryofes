@@ -7,7 +7,7 @@
     class="app-navigation-drawer"
   >
     <div class="drawer-content">
-      <header class="site-branding">
+      <!--<header class="site-branding">
         <v-img
           v-if="siteStatus?.logo_url"
           :src="siteStatus.logo_url"
@@ -22,7 +22,7 @@
         <div class="site-branding-event">
           {{ siteStatus ? `${siteStatus.event_year}年度 ${siteStatus.event_name}` : "38R 準備サイト" }}
         </div>
-      </header>
+      </header>-->
 
       <section class="account-section">
         <template v-if="auth.isLoggedIn">
