@@ -271,7 +271,7 @@
                   </template>
   
                   <ScriptBlockInput
-                    :ref="(element) => setBlockRef(block.id, element)"
+                    :ref="(element: Element | ComponentPublicInstance | null) => setBlockRef(block.id, element)"
                     :model-value="block.content"
                     class="block-textarea"
                     :placeholder="blockPlaceholder(block.type)"
