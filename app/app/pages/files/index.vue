@@ -725,7 +725,7 @@ definePageMeta({
   middleware: ['auth'],
 })
 
-import { nextTick } from "vue"
+import { nextTick, onBeforeUnmount } from "vue"
 import { useConfirmDialog } from '~/composables/useConfirmDialog'
 
 interface FileCategory {
@@ -774,6 +774,8 @@ const { confirm } = useConfirmDialog()
 const config = useRuntimeConfig()
 const auth = useAuthStore()
 const siteStatus = useSiteStatus()
+
+let aiSearchStatusPollTimer: ReturnType<typeof setTimeout> | null = null
 
 const loading = ref(false)
 const uploading = ref(false)
@@ -1217,6 +1219,11 @@ const createFolder = async () => {
 }
 
 const loadFiles = async () => {
+  if (aiSearchStatusPollTimer) {
+    clearTimeout(aiSearchStatusPollTimer)
+    aiSearchStatusPollTimer = null
+  }
+
   loading.value = true
   errorMessage.value = ''
 
@@ -1250,6 +1257,16 @@ const loadFiles = async () => {
       ...file,
       folder_path: file.folder_id ? folderPaths.get(file.folder_id) ?? '不明なフォルダ' : 'ルート',
     }))
+
+    if (
+      canManageFiles.value &&
+      !showArchived.value &&
+      files.value.some(file => file.ai_status === 'processing')
+    ) {
+      aiSearchStatusPollTimer = setTimeout(() => {
+        void loadFiles()
+      }, 5000)
+    }
   } catch (error) {
     console.error(error)
     errorMessage.value = 'ファイル一覧を取得できませんでした。'
@@ -1646,6 +1663,13 @@ const changeArchive = async (
 watch([categoryFilter, showArchived], () => {
   void loadFolders()
   void loadFiles()
+})
+
+onBeforeUnmount(() => {
+  if (aiSearchStatusPollTimer) {
+    clearTimeout(aiSearchStatusPollTimer)
+    aiSearchStatusPollTimer = null
+  }
 })
 
 onMounted(async () => {
