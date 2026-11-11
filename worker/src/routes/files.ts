@@ -200,6 +200,12 @@ export async function handleFiles(
         `).bind(auth.user.id).first()
 
         if (!canManage) return json({ error: "Forbidden" }, 403)
+        if (!env.AI_SEARCH) {
+          return json({
+            error: "AI Search is not configured for this Worker environment. Start local development with the AI Search config.",
+            code: "AI_SEARCH_NOT_CONFIGURED",
+          }, 503)
+        }
 
         const pending = await env.DB.prepare(`
           SELECT id, object_key, original_name, content_type, size, category, uploaded_by, ai_search_item_id
