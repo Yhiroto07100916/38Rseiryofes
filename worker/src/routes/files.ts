@@ -211,7 +211,11 @@ export async function handleFiles(
         const processing = await env.DB.prepare(`
           SELECT id, object_key, original_name, ai_search_item_id
           FROM files
-          WHERE archived_at IS NULL AND ai_status = 'processing'
+          WHERE archived_at IS NULL
+            AND (
+              ai_status = 'processing'
+              OR (ai_status = 'failed' AND ai_error LIKE '%uploadAndPoll timed out%')
+            )
           ORDER BY created_at ASC
           LIMIT 10
         `).all<{
