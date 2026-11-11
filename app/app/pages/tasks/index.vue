@@ -990,7 +990,11 @@ onMounted(async () => {
   min-width: 0;
 }
 
-.task-sort-select {\n  flex: 0 1 190px;\n}\n\n.task-card {
+.task-sort-select {
+  flex: 0 1 190px;
+}
+
+.task-card {
   cursor: pointer;
 }
 
