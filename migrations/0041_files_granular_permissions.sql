@@ -18,7 +18,7 @@ FROM account_roles ar
 JOIN permissions p ON p.key IN (
   'files.view', 'files.download', 'files.upload', 'files.folders.create'
 )
-WHERE ar.name = 'classmate';
+WHERE ar.name IN ('classmate', 'class_representative');
 
 INSERT OR IGNORE INTO account_role_permissions (account_role_id, permission_id, effect)
 SELECT ar.id, p.id, 'allow'
