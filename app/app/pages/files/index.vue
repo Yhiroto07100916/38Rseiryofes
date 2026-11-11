@@ -109,6 +109,17 @@
           >
             既存資料を検索対象に登録
           </v-btn>
+          <v-btn
+            v-if="canManageFiles"
+            color="warning"
+            variant="outlined"
+            prepend-icon="mdi-replay"
+            :loading="aiRetrying"
+            :disabled="aiIndexing || aiRetrying"
+            @click="retryFailedFiles"
+          >
+            失敗した資料を再試行
+          </v-btn>
         </div>
         <v-alert v-if="aiSearchError" type="error" variant="tonal" density="compact" class="mt-3">
           {{ aiSearchError }}
@@ -373,6 +384,12 @@
                   >
                     AI検索未登録
                   </v-chip>
+                  <div
+                    v-if="file.ai_status === 'failed' && file.ai_error"
+                    class="text-caption text-warning mt-1"
+                  >
+                    {{ file.ai_error }}
+                  </div>
 
                   <div
                     v-if="file.ai_summary"
@@ -747,6 +764,7 @@ interface ManagedFile {
   archived_at: string | null
   ai_status?: string
   ai_summary?: string | null
+  ai_error?: string | null
 }
 
 const { apiFetch } = useApi()
@@ -765,6 +783,7 @@ const aiSearchAnswer = ref("")
 const aiSearchError = ref("")
 const aiSearchCompleted = ref(false)
 const aiIndexing = ref(false)
+const aiRetrying = ref(false)
 const aiIndexMessage = ref("")
 const aiSearchResults = ref<Array<{
   file: ManagedFile
@@ -1000,6 +1019,45 @@ const registerExistingFiles = async () => {
     aiSearchError.value = "既存資料の登録に失敗しました。"
   } finally {
     aiIndexing.value = false
+  }
+}
+
+const retryFailedFiles = async () => {
+  if (aiRetrying.value || aiIndexing.value) return
+
+  aiRetrying.value = true
+  aiIndexMessage.value = ""
+  aiSearchError.value = ""
+
+  try {
+    let remainingFailed = 1
+    let totalQueued = 0
+    let batches = 0
+
+    while (remainingFailed > 0 && batches < 100) {
+      const response = await apiFetch<{
+        queued: number
+        remainingFailed: number
+      }>("/api/files/ai-search/retry-failed", {
+        method: "POST",
+      })
+
+      totalQueued += response.queued
+      remainingFailed = response.remainingFailed
+      batches += 1
+      if (response.queued === 0) break
+    }
+
+    aiIndexMessage.value = totalQueued
+      ? totalQueued + "件の資料の再登録を開始しました。解析完了まで少し時間がかかります。"
+      : "再試行できる資料はありませんでした。"
+
+    await loadFiles()
+  } catch (error) {
+    console.error(error)
+    aiSearchError.value = "失敗した資料の再試行に失敗しました。AI Searchの接続設定を確認してください。"
+  } finally {
+    aiRetrying.value = false
   }
 }
 
