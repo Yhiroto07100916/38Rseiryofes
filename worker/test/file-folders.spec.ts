@@ -194,20 +194,16 @@ describe("File folder management", () => {
   });
 
   it("prevents another user from editing or deleting a folder", async () => {
-    const owner = await createFixture()
-    const other = await createFixture()
-    const folderId = await createFolder(owner, "所有者限定")
-
+    const owner = await createFixture();
+    const other = await createFixture();
+    const folderId = await createFolder(owner, "所有者限定");
     const editResponse = await request(other, `/api/file-folders/${folderId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: "不正な変更" }),
-    })
-    expect(editResponse.status).toBe(403)
-
-    const deleteResponse = await request(other, `/api/file-folders/${folderId}`, {
-      method: "DELETE",
-    })
-    expect(deleteResponse.status).toBe(403)
-  })
+    });
+    expect(editResponse.status).toBe(403);
+    const deleteResponse = await request(other, `/api/file-folders/${folderId}`, { method: "DELETE" });
+    expect(deleteResponse.status).toBe(403);
+  });
 });

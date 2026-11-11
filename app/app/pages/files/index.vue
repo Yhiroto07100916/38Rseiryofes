@@ -1426,10 +1426,10 @@ onMounted(async () => {
   if (highlightedFileId.value) {
     await nextTick()
     document.getElementById(`file-item-${highlightedFileId.value}`)
-      ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      ?.scrollIntoView({ behavior: "smooth", block: "center" })
   }
 })
-</script>\n
+</script>\n\n
 <style scoped>
 .file-list-item-highlight {
   outline: 2px solid rgb(var(--v-theme-primary));

@@ -9,14 +9,8 @@ CREATE TABLE IF NOT EXISTS file_folders (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_file_folders_parent_id
-  ON file_folders(parent_id, name);
+CREATE INDEX IF NOT EXISTS idx_file_folders_parent_id ON file_folders(parent_id, name);
+CREATE INDEX IF NOT EXISTS idx_file_folders_category ON file_folders(category);
 
-CREATE INDEX IF NOT EXISTS idx_file_folders_category
-  ON file_folders(category);
-
-ALTER TABLE files
-  ADD COLUMN folder_id TEXT REFERENCES file_folders(id) ON DELETE SET NULL;
-
-CREATE INDEX IF NOT EXISTS idx_files_folder_id
-  ON files(folder_id, archived_at, created_at);
+ALTER TABLE files ADD COLUMN folder_id TEXT REFERENCES file_folders(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_files_folder_id ON files(folder_id, archived_at, created_at);

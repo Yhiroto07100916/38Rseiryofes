@@ -497,12 +497,6 @@ export async function handleFiles(
         WHERE ${archived ? "f.archived_at IS NOT NULL" : "f.archived_at IS NULL"}
       `
       const bindings: (string | number)[] = []
-
-      if (category) {
-        query += " AND f.category = ?"
-        bindings.push(category)
-      }
-
       const requestedFolderId = url.searchParams.get("folder_id")
       if (!archived && requestedFolderId !== null) {
         if (requestedFolderId === "root") {
@@ -511,6 +505,11 @@ export async function handleFiles(
           query += " AND f.folder_id = ?"
           bindings.push(requestedFolderId)
         }
+      }
+
+      if (category) {
+        query += " AND f.category = ?"
+        bindings.push(category)
       }
 
       if (search) {
@@ -765,6 +764,7 @@ export async function handleFiles(
         }
         throw error
       }
+
       if (folderId) {
         const folder = await env.DB.prepare("SELECT id FROM file_folders WHERE id = ? LIMIT 1").bind(folderId).first()
         if (!folder) return json({ error: "Folder not found" }, 404)
