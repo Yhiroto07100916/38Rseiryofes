@@ -776,7 +776,8 @@ export async function handleFiles(
           f.created_at,
           f.archived_at,
           f.ai_status,
-          f.ai_summary
+          f.ai_summary,
+          f.ai_error
         FROM files f
         WHERE ${archived ? "f.archived_at IS NOT NULL" : "f.archived_at IS NULL"}
       `
@@ -866,6 +867,7 @@ export async function handleFiles(
           archived_at: string | null
           ai_status: string
           ai_summary: string | null
+          ai_error: string | null
         }>()
 
       const visibleFiles = result.results ?? []
