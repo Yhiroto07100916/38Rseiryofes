@@ -290,10 +290,21 @@
       <v-list class="pa-0">
         <template v-for="(folder, index) in folders" :key="folder.id">
           <v-list-item
+            class="folder-list-item"
             :title="folder.name"
-            :subtitle="(folder.category_name ? folder.category_name + ' · ' : '') + 'フォルダ ' + folder.folder_count + '件 · ファイル ' + folder.file_count + '件'"
             @click="openFolder(folder)"
           >
+            <template #subtitle>
+              <div class="folder-counts">
+                <span v-if="folder.category_name" class="text-caption">{{ folder.category_name }}</span>
+                <v-chip size="x-small" variant="tonal" prepend-icon="mdi-folder-outline">
+                  フォルダ {{ folder.folder_count }}件
+                </v-chip>
+                <v-chip size="x-small" variant="tonal" prepend-icon="mdi-file-outline">
+                  ファイル {{ folder.file_count }}件
+                </v-chip>
+              </div>
+            </template>
             <template #prepend>
               <v-avatar color="amber" variant="tonal" rounded="lg">
                 <v-icon icon="mdi-folder" />
@@ -1687,6 +1698,21 @@ onMounted(async () => {
 })
 </script>\n\n
 <style scoped>
+.folder-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.folder-list-item :deep(.v-list-item-subtitle) {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  -webkit-line-clamp: unset;
+}
+
 .file-list-item-highlight {
   outline: 2px solid rgb(var(--v-theme-primary));
   outline-offset: -2px;
