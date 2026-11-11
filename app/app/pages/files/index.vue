@@ -87,7 +87,7 @@
           density="comfortable"
           hide-details
           :disabled="aiSearching"
-          @keydown.enter="runAiSearch"
+          @keydown.enter="handleAiSearchEnter"
         />
         <div class="d-flex flex-wrap align-center ga-2 mt-3">
           <v-btn
@@ -938,6 +938,14 @@ const fileIcon = (contentType: string) => {
     return 'mdi-file-excel-outline'
   }
   return 'mdi-file-outline'
+}
+
+const handleAiSearchEnter = (event: KeyboardEvent) => {
+  // 日本語IMEの変換確定 Enter では検索を開始しない
+  if (event.isComposing || event.keyCode === 229) return
+
+  event.preventDefault()
+  void runAiSearch()
 }
 
 const runAiSearch = async () => {
