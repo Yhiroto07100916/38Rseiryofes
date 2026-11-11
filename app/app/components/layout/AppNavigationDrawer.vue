@@ -143,6 +143,20 @@
         </template>
       </nav>
 
+      <footer v-if="socialLinks.length" class="drawer-social-links" aria-label="SNSリンク">
+        <a
+          v-for="item in socialLinks"
+          :key="item.key"
+          :href="item.url"
+          :aria-label="item.label"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="drawer-social-link"
+        >
+          <v-icon v-if="item.icon" :icon="item.icon" size="24" />
+          <span v-else class="drawer-social-x">𝕏</span>
+        </a>
+      </footer>
     </div>
   </v-navigation-drawer>
 </template>
@@ -164,6 +178,22 @@ const isOpen = defineModel<boolean>({
 const route = useRoute()
 const auth = useAuthStore()
 const siteStatus = useSiteStatus()
+
+const socialLinkOptions = [
+  { key: 'instagram', label: 'Instagram', icon: 'mdi-instagram' },
+  { key: 'x', label: 'X', icon: '' },
+  { key: 'tiktok', label: 'TikTok', icon: 'mdi-music-note' },
+  { key: 'youtube', label: 'YouTube', icon: 'mdi-youtube' },
+  { key: 'github', label: 'GitHub', icon: 'mdi-github' },
+  { key: 'discord', label: 'Discord', icon: 'mdi-discord' },
+] as const
+
+const socialLinks = computed(() =>
+  socialLinkOptions.flatMap((item) => {
+    const url = siteStatus.value?.social_links?.[item.key]?.trim()
+    return url ? [{ ...item, url }] : []
+  }),
+)
 
 const isAdmin = computed(() =>
   auth.accountRoles.some((role) => role.name === 'admin'),
@@ -202,6 +232,8 @@ const handleLogout = async () => {
 }
 
 .drawer-content {
+  display: flex;
+  flex-direction: column;
   min-height: 100%;
   background: white;
 }
@@ -305,5 +337,38 @@ const handleLogout = async () => {
 
 .drawer-item-icon {
   flex: 0 0 24px;
+}
+
+.drawer-social-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  margin-top: auto;
+  padding: 18px 16px max(18px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgb(18 58 92 / 8%);
+}
+
+.drawer-social-link {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #78909c;
+  text-decoration: none;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.drawer-social-link:hover {
+  color: var(--color-primary);
+  background: rgb(18 58 92 / 7%);
+}
+
+.drawer-social-x {
+  font-size: 23px;
+  font-weight: 700;
+  line-height: 1;
 }
 </style>

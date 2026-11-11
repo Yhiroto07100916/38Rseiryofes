@@ -47,6 +47,7 @@ const SETTING_RULES: Record<string, {
   timezone: { type: "string", minLength: 1, maxLength: 64 },
   logo_url: { type: "string", maxLength: 2048 },
   favicon_url: { type: "string", maxLength: 2048 },
+  social_links: { type: "json" },
   feature_settings: { type: "json" },
   notification_settings: { type: "json" },
   operation_settings: { type: "json" },
@@ -68,6 +69,18 @@ function isValidSettingValue(key: string, value: unknown): boolean {
     if (value === "") return true
     if (typeof value !== "string") return false
     try { return new URL(value).protocol === "https:" } catch { return false }
+  }
+  if (key === "social_links") {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false
+    const links = value as Record<string, unknown>
+    const allowedPlatforms = ["instagram", "x", "tiktok", "youtube", "github", "discord"]
+    if (Object.keys(links).some(platform => !allowedPlatforms.includes(platform))) return false
+    return allowedPlatforms.every(platform => {
+      const url = links[platform]
+      if (url === undefined || url === "") return true
+      if (typeof url !== "string" || url.length > 2048) return false
+      try { return new URL(url).protocol === "https:" } catch { return false }
+    })
   }
   if (key === "feature_settings") {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false

@@ -42,6 +42,7 @@ async function readSiteAccessSettings(env: Env): Promise<{
   timezone: string
   logoUrl: string
   faviconUrl: string
+  socialLinks: Record<string, string>
   calendarDefaultView: "month" | "list"
   taskDefaultStatus: "todo" | "in_progress" | "review" | "done"
   uploadMaxFileSizeMb: number
@@ -51,7 +52,7 @@ async function readSiteAccessSettings(env: Env): Promise<{
     const rows = await env.DB.prepare(`
       SELECT key, value
       FROM site_settings
-      WHERE key IN ('site_visibility', 'maintenance_mode', 'maintenance_message', 'require_login', 'login_enabled', 'site_name', 'site_description', 'event_name', 'event_year', 'timezone', 'logo_url', 'favicon_url', 'operation_settings', 'feature_settings')
+      WHERE key IN ('site_visibility', 'maintenance_mode', 'maintenance_message', 'require_login', 'login_enabled', 'site_name', 'site_description', 'event_name', 'event_year', 'timezone', 'logo_url', 'favicon_url', 'social_links', 'operation_settings', 'feature_settings')
     `).all<{ key: string; value: string }>()
 
     const settings = new Map(rows.results.map(row => {
@@ -77,6 +78,14 @@ async function readSiteAccessSettings(env: Env): Promise<{
       timezone: typeof settings.get("timezone") === "string" ? settings.get("timezone") as string : "Asia/Tokyo",
       logoUrl: typeof settings.get("logo_url") === "string" ? settings.get("logo_url") as string : "",
       faviconUrl: typeof settings.get("favicon_url") === "string" ? settings.get("favicon_url") as string : "",
+      socialLinks: (() => {
+        const links = settings.get("social_links")
+        if (!links || typeof links !== "object" || Array.isArray(links)) return {}
+        return Object.fromEntries(
+          Object.entries(links as Record<string, unknown>)
+            .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].startsWith("https://")),
+        )
+      })(),
       calendarDefaultView: (() => {
         const operation = settings.get("operation_settings") as { calendar_default_view?: unknown } | null
         return operation?.calendar_default_view === "list" ? "list" : "month"
@@ -111,6 +120,7 @@ async function readSiteAccessSettings(env: Env): Promise<{
       timezone: "Asia/Tokyo",
       logoUrl: "",
       faviconUrl: "",
+      socialLinks: {},
       calendarDefaultView: "month",
       taskDefaultStatus: "todo",
       uploadMaxFileSizeMb: 25,
@@ -343,6 +353,7 @@ export default {
         timezone: settings.timezone,
         logo_url: settings.logoUrl,
         favicon_url: settings.faviconUrl,
+        social_links: settings.socialLinks,
         calendar_default_view: settings.calendarDefaultView,
         task_default_status: settings.taskDefaultStatus,
         upload_max_file_size_mb: settings.uploadMaxFileSizeMb,
@@ -381,6 +392,7 @@ export default {
         timezone: settings.timezone,
         logo_url: settings.logoUrl,
         favicon_url: settings.faviconUrl,
+        social_links: settings.socialLinks,
         calendar_default_view: settings.calendarDefaultView,
         task_default_status: settings.taskDefaultStatus,
         upload_max_file_size_mb: settings.uploadMaxFileSizeMb,

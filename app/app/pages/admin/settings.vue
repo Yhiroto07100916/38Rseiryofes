@@ -22,6 +22,14 @@ interface SiteSettings {
   timezone: string
   logo_url: string
   favicon_url: string
+  social_links: {
+    instagram: string
+    x: string
+    tiktok: string
+    youtube: string
+    github: string
+    discord: string
+  }
   site_visibility?: 'public' | 'private'
   maintenance_mode?: boolean
   maintenance_message?: string
@@ -118,6 +126,14 @@ const defaultSettings = (): SiteSettings => ({
   timezone: 'Asia/Tokyo',
   logo_url: '',
   favicon_url: '',
+  social_links: {
+    instagram: '',
+    x: '',
+    tiktok: '',
+    youtube: '',
+    github: '',
+    discord: '',
+  },
   site_visibility: 'public',
   maintenance_mode: false,
   maintenance_message: '現在メンテナンス中です。しばらくお待ちください。',
@@ -173,6 +189,10 @@ async function loadSettings() {
       '/api/admin/settings',
     )
     Object.assign(settings, response.settings)
+    settings.social_links = {
+      ...defaultSettings().social_links,
+      ...(response.settings.social_links ?? {}),
+    }
     const featureDefaults = defaultFeatureSettings()
     const storedFeatures = response.settings.feature_settings ?? {}
     settings.feature_settings = Object.fromEntries(
@@ -260,6 +280,7 @@ async function saveSettings() {
     timezone: settings.timezone,
     logo_url: settings.logo_url.trim(),
     favicon_url: settings.favicon_url.trim(),
+    social_links: settings.social_links,
     feature_settings: settings.feature_settings,
     notification_settings: {
       ...settings.notification_settings,
@@ -456,6 +477,23 @@ onBeforeUnmount(() => {
           <v-text-field v-model="settings.timezone" label="タイムゾーン" hint="例: Asia/Tokyo" persistent-hint />
           <v-text-field v-model="settings.logo_url" label="ロゴ画像URL" placeholder="https://..." />
           <v-text-field v-model="settings.favicon_url" label="favicon URL" placeholder="https://..." />
+        </v-card-text>
+      </v-card>
+
+      <v-card rounded="xl" variant="outlined" class="mt-5">
+        <v-card-item>
+          <template #prepend><v-icon icon="mdi-share-variant-outline" size="30" color="primary" /></template>
+          <v-card-title>SNS・外部リンク</v-card-title>
+          <v-card-subtitle>ドロワー下部に表示するSNSなどのURLを設定します。空欄のリンクは表示されません。</v-card-subtitle>
+        </v-card-item>
+        <v-divider />
+        <v-card-text class="pa-5">
+          <v-text-field v-model="settings.social_links.instagram" label="Instagram URL" placeholder="https://www.instagram.com/..." prepend-inner-icon="mdi-instagram" />
+          <v-text-field v-model="settings.social_links.x" label="X URL" placeholder="https://x.com/..." prepend-inner-icon="mdi-alpha-x" />
+          <v-text-field v-model="settings.social_links.tiktok" label="TikTok URL" placeholder="https://www.tiktok.com/@..." prepend-inner-icon="mdi-music-note" />
+          <v-text-field v-model="settings.social_links.youtube" label="YouTube URL" placeholder="https://www.youtube.com/@..." prepend-inner-icon="mdi-youtube" />
+          <v-text-field v-model="settings.social_links.github" label="GitHub URL" placeholder="https://github.com/..." prepend-inner-icon="mdi-github" />
+          <v-text-field v-model="settings.social_links.discord" label="Discord URL" placeholder="https://discord.gg/..." prepend-inner-icon="mdi-discord" />
         </v-card-text>
       </v-card>
 

@@ -11,6 +11,7 @@ export interface SiteStatus {
   timezone: string
   logo_url: string
   favicon_url: string
+  social_links: Record<string, string>
   calendar_default_view: "month" | "list"
   task_default_status: "todo" | "in_progress" | "review" | "done"
   upload_max_file_size_mb: number
