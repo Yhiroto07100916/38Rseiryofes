@@ -64,13 +64,12 @@
       </v-col>
     </v-row>
 
-    <LegalLinks />
   </v-container>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import LegalLinks from '~/components/layout/LegalLinks.vue'
+
 
 definePageMeta({
   layout: false,

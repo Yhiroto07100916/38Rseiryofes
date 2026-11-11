@@ -1,10 +1,5 @@
 <template>
   <footer class="legal-links">
-    <nav aria-label="法的情報">
-      <NuxtLink to="/privacy-policy">プライバシーポリシー</NuxtLink>
-      <span aria-hidden="true">·</span>
-      <NuxtLink to="/terms">利用規約</NuxtLink>
-    </nav>
     <p>© {{ new Date().getFullYear() }} 38R 星陵祭準備サイト</p>
   </footer>
 </template>
