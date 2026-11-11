@@ -43,6 +43,7 @@ const toEditorHtml = (value: string) => {
 }
 
 const editor = useEditor({
+  immediatelyRender: false,
   content: toEditorHtml(props.modelValue),
   extensions: [
     StarterKit.configure({
