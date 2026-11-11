@@ -391,12 +391,6 @@
                     {{ file.ai_error }}
                   </div>
 
-                  <div
-                    v-if="file.ai_summary"
-                    class="text-medium-emphasis text-body-2 file-summary"
-                  >
-                    {{ file.ai_summary }}
-                  </div>
                 </div>
               </div>
 
@@ -1739,8 +1733,7 @@ onMounted(async () => {
   line-height: 1.5;
 }
 
-.file-metadata,
-.file-summary {
+.file-metadata {
   overflow-wrap: anywhere;
   word-break: break-word;
   line-height: 1.5;
