@@ -3141,6 +3141,8 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 
 .block-textarea {
   width: 100%;
+  direction: ltr;
+  text-align: start;
   min-height: 430px;
   height: 100%;
   resize: none;
