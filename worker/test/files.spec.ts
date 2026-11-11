@@ -78,6 +78,13 @@ async function createFixture(): Promise<Fixture> {
     VALUES (?, ?, ?, NULL)
   `).bind(recipientUserId, `files-recipient-${recipientUserId}`, "通知受信ユーザー").run();
 
+  await grantPermissions(userId, [
+    "files.view",
+    "files.upload",
+    "files.download",
+    "files.folders.create",
+  ])
+
   await env.DB.prepare(`
     INSERT INTO sessions (id, user_id, expires_at)
     VALUES (?, ?, datetime('now', '+1 day'))
@@ -244,6 +251,56 @@ afterEach(async () => {
 });
 
 describe("Files access permissions", () => {
+  it("enforces dedicated file permissions for upload, download, archive, and delete", async () => {
+    const fixture = await createFixture()
+    const objectKey = fixture.objectKeys[0]
+    const fileId = fixture.fileIds.receipt
+
+    await env.DB.prepare(`
+      DELETE FROM user_permissions
+      WHERE user_id = ?
+        AND permission_id = (SELECT id FROM permissions WHERE key = 'files.upload')
+    `).bind(fixture.userId).run()
+
+    const category = await env.DB.prepare(
+      "SELECT slug FROM file_categories WHERE is_active = 1 LIMIT 1",
+    ).first<{ slug: string }>()
+    expect(category).not.toBeNull()
+
+    const formData = new FormData()
+    formData.set("file", new File(["denied"], "denied.txt", { type: "text/plain" }))
+    formData.set("category", category!.slug)
+    const uploadResponse = await SELF.fetch("http://example.com/api/files", {
+      method: "POST",
+      headers: { Cookie: fixture.cookie },
+      body: formData,
+    })
+    expect(uploadResponse.status).toBe(403)
+
+    await grantPermissions(fixture.userId, ["accounting.view"])
+
+    await env.DB.prepare(`
+      DELETE FROM user_permissions
+      WHERE user_id = ?
+        AND permission_id = (SELECT id FROM permissions WHERE key = 'files.download')
+    `).bind(fixture.userId).run()
+
+    expect((await request(fixture, `/api/files/${objectKey}`)).status).toBe(200)
+    expect((await request(fixture, `/api/files/${objectKey}?download=true`)).status).toBe(403)
+
+    const archiveResponse = await SELF.fetch(`http://example.com/api/files/${fileId}/archive`, {
+      method: "POST",
+      headers: { Cookie: fixture.cookie },
+    })
+    expect(archiveResponse.status).toBe(403)
+
+    const deleteResponse = await SELF.fetch(`http://example.com/api/files/${objectKey}`, {
+      method: "DELETE",
+      headers: { Cookie: fixture.cookie },
+    })
+    expect(deleteResponse.status).toBe(403)
+  })
+
   it("excludes linked files without their corresponding view permissions", async () => {
     const fixture = await createFixture();
 

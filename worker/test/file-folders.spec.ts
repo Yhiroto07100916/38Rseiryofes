@@ -17,6 +17,17 @@ beforeAll(async () => {
   await applyD1Migrations(env.DB, JSON.parse(__D1_MIGRATIONS__));
 });
 
+async function grantPermissions(userId: string, keys: string[]) {
+  for (const key of keys) {
+    await env.DB.prepare(`
+      INSERT INTO user_permissions (user_id, permission_id, effect)
+      SELECT ?, id, 'allow'
+      FROM permissions
+      WHERE key = ?
+    `).bind(userId, key).run()
+  }
+}
+
 async function createFixture(): Promise<Fixture> {
   const userId = crypto.randomUUID();
   const sessionId = crypto.randomUUID();
@@ -33,6 +44,8 @@ async function createFixture(): Promise<Fixture> {
     INSERT INTO users (id, student_number, name, nickname)
     VALUES (?, ?, ?, NULL)
   `).bind(userId, `folder-test-${userId}`, "フォルダテストユーザー").run();
+
+  await grantPermissions(userId, ["files.view", "files.folders.create"])
 
   await env.DB.prepare(`
     INSERT INTO sessions (id, user_id, expires_at)
@@ -80,6 +93,7 @@ afterEach(async () => {
     }
 
     await env.DB.prepare("DELETE FROM sessions WHERE id = ?").bind(fixture.sessionId).run();
+    await env.DB.prepare("DELETE FROM user_permissions WHERE user_id = ?").bind(fixture.userId).run();
     await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(fixture.userId).run();
   }
 });
