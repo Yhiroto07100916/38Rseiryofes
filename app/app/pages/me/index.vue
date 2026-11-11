@@ -19,7 +19,7 @@
         color="primary"
         aria-label="通知を開く"
         to="/notifications"
-        class="ml-2"
+        class="ml-2 notification-badge-button"
       >
         <v-badge
           :content="unreadCount > 99 ? '99+' : unreadCount"
@@ -1560,5 +1560,22 @@ onMounted(async () => {
   padding: 24px 8px;
   text-align: center;
   color: rgba(0, 0, 0, 0.6);
+}
+
+.notification-badge-button {
+  overflow: visible !important;
+}
+
+.notification-badge-button :deep(.v-btn__content),
+.notification-badge-button :deep(.v-badge__wrapper) {
+  overflow: visible;
+}
+
+.notification-badge-button :deep(.v-badge__badge) {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  font-size: 11px;
+  line-height: 22px;
 }
 </style>
