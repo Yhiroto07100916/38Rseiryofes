@@ -24,7 +24,7 @@ export interface AiSearchInstance {
   items: {
     uploadAndPoll(
       name: string,
-      content: ArrayBuffer,
+      content: ReadableStream | Blob | ArrayBuffer | string,
       options?: {
         metadata?: Record<string, string>
         pollIntervalMs?: number
@@ -159,7 +159,7 @@ export async function indexFileForAiSearch(
     const extension = getExtension(file.original_name)
     const item = await instance.items.uploadAndPoll(
       `${file.id}${extension}`,
-      await object.arrayBuffer(),
+      object.body,
       {
         metadata: {
           file_id: file.id,
