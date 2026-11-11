@@ -53,8 +53,7 @@ export interface AiSearchNamespace {
 }
 
 const INSTANCE_ID = "38r-files-knowledge-base"
-const MAX_PDF_OR_TEXT_SIZE = 10 * 1024 * 1024
-const MAX_OTHER_SIZE = 4 * 1024 * 1024
+const MAX_INDEXABLE_FILE_SIZE = 4 * 1024 * 1024
 
 function getExtension(filename: string): string {
   return filename.match(/\.[a-z0-9]{1,10}$/i)?.[0]?.toLowerCase() ?? ""
@@ -67,14 +66,11 @@ function isSupportedFile(filename: string, contentType: string, size: number): b
     ["application/json", "application/xml"].includes(contentType) ||
     [".txt", ".md", ".csv", ".json", ".xml", ".html", ".htm"].includes(extension)
 
-  if (isPdf || isText) return size <= MAX_PDF_OR_TEXT_SIZE
-  if (
+  const isSupportedType = isPdf || isText ||
     contentType.startsWith("image/") ||
     [".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt", ".rtf"].includes(extension)
-  ) {
-    return size <= MAX_OTHER_SIZE
-  }
-  return false
+
+  return isSupportedType && size <= MAX_INDEXABLE_FILE_SIZE
 }
 
 export async function getFileSearchInstance(env: FileSearchEnv): Promise<AiSearchInstance> {

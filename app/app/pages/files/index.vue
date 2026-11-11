@@ -195,7 +195,7 @@
               1ファイル最大25 MiB
             </div>
             <div class="text-caption text-medium-emphasis mt-1">
-              AI検索の対象はPDF・テキスト系10 MiBまで、画像・Office系4 MiBまでです。対象外のファイルも通常どおり保存できます。
+              AI検索の対象は対応形式の4 MiBまでです。対象外のファイルも通常どおり保存できます。
             </div>
           </div>
           <v-btn
