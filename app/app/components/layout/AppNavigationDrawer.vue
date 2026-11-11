@@ -259,7 +259,7 @@ const handleLogout = async () => {
 }
 
 .account-section {
-  padding: 16px;
+  padding: 60px 16px 16px;
 }
 
 .account-header {
