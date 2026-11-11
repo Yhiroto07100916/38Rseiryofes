@@ -976,20 +976,24 @@ const registerExistingFiles = async () => {
   try {
     let remaining = 1
     let totalQueued = 0
+    let failedCount = 0
     let batches = 0
     while (remaining > 0 && batches < 100) {
-      const response = await apiFetch<{ queued: number; remaining: number }>(
+      const response = await apiFetch<{ queued: number; remaining: number; failed: number }>(
         "/api/files/ai-search/reindex",
         { method: "POST" },
       )
       totalQueued += response.queued
       remaining = response.remaining
+      failedCount = response.failed
       batches += 1
       if (response.queued === 0) break
     }
     aiIndexMessage.value = totalQueued
-      ? `${totalQueued}件の資料をAI検索に登録しました。解析完了まで少し時間がかかります。`
-      : "追加で登録する資料はありません。"
+      ? `${totalQueued}件の資料の登録処理を開始しました。解析完了まで少し時間がかかります。${failedCount > 0 ? `（別途、登録に失敗している資料が${failedCount}件あります。再試行は行っていません。）` : ""}`
+      : failedCount > 0
+        ? `新たに登録する資料はありません。登録に失敗している資料が${failedCount}件あります。`
+        : "追加で登録する資料はありません。"
     await loadFiles()
   } catch (error) {
     console.error(error)
