@@ -1,5 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
-import { processDuePushDeliveries, processDueNotificationPushDeliveries, reenqueueNewsPushDeliveries } from "./push"
+import { processDuePushDeliveries, reenqueueNewsPushDeliveries } from "./push"
 import { createNotificationsForUsers } from "../lib/notifications"
 
 export interface News {
@@ -630,13 +630,6 @@ export async function handleNews(
         dedupeKey: `news.created:${newsId}`,
       })
 
-      if (ctx) {
-        ctx.waitUntil(
-          processDueNotificationPushDeliveries(env).catch((error) => {
-            console.error("Background notification push delivery failed:", error)
-          }),
-        )
-      }
     } catch (error) {
       console.error("Failed to create news notifications:", error)
     }
