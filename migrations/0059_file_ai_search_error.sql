@@ -1,0 +1,1 @@
+ALTER TABLE files ADD COLUMN ai_error TEXT;
