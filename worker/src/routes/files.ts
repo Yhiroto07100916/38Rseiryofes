@@ -220,7 +220,7 @@ export async function handleFiles(
 
         const results = await Promise.all((processing.results ?? []).map(async file => {
           try {
-            return await refreshFileAiSearchStatus(env, file)
+            return await refreshFileAiSearchStatus(env, file, ctx)
           } catch (error) {
             console.error("AI Search item status refresh failed:", file.id, error)
             return "check_failed"
@@ -283,7 +283,7 @@ export async function handleFiles(
           if (claimed.meta.changes > 0) claimedFiles.push(file)
         }
 
-        const indexing = Promise.all(claimedFiles.map(file => indexFileForAiSearch(env, file)))
+        const indexing = Promise.all(claimedFiles.map(file => indexFileForAiSearch(env, file, ctx)))
         if (ctx) ctx.waitUntil(indexing)
         else await indexing
 
@@ -332,7 +332,7 @@ export async function handleFiles(
             `UPDATE files SET ai_status = 'processing' WHERE id IN (${placeholders})`,
           ).bind(...filesToIndex.map(file => file.id)).run()
 
-          const indexing = Promise.all(filesToIndex.map(file => indexFileForAiSearch(env, file)))
+          const indexing = Promise.all(filesToIndex.map(file => indexFileForAiSearch(env, file, ctx)))
           if (ctx) ctx.waitUntil(indexing)
           else await indexing
         }
@@ -1107,7 +1107,7 @@ export async function handleFiles(
           size: file.size,
           category,
           uploaded_by: auth.user.id,
-        }))
+        }, ctx))
       }
 
       return json(
