@@ -5,6 +5,7 @@ import {
   getAiSearchAnswer,
   getFileSearchInstance,
   indexFileForAiSearch,
+  refreshFileAiSearchStatus,
   type AiSearchChunk,
 } from "../lib/ai-search"
 
@@ -190,6 +191,54 @@ export async function handleFiles(
 
 
     if (pathParts[0] === "ai-search" && request.method === "POST") {
+      if (pathParts[1] === "sync-status") {
+        const canManage = await env.DB.prepare(`
+          SELECT 1
+          FROM user_account_roles uar
+          INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+          WHERE uar.user_id = ? AND ar.name IN ('admin', 'class_representative')
+          LIMIT 1
+        `).bind(auth.user.id).first()
+
+        if (!canManage) return json({ error: "Forbidden" }, 403)
+        if (!env.AI_SEARCH) {
+          return json({
+            error: "AI Search is not configured for this Worker environment.",
+            code: "AI_SEARCH_NOT_CONFIGURED",
+          }, 503)
+        }
+
+        const processing = await env.DB.prepare(`
+          SELECT id, object_key, original_name, ai_search_item_id
+          FROM files
+          WHERE archived_at IS NULL AND ai_status = 'processing'
+          ORDER BY created_at ASC
+          LIMIT 10
+        `).all<{
+          id: string
+          object_key: string
+          original_name: string
+          ai_search_item_id: string | null
+        }>()
+
+        const results = await Promise.all((processing.results ?? []).map(async file => {
+          try {
+            return await refreshFileAiSearchStatus(env, file)
+          } catch (error) {
+            console.error("AI Search item status refresh failed:", file.id, error)
+            return "check_failed"
+          }
+        }))
+
+        return json({
+          checked: results.length,
+          completed: results.filter(status => status === "completed").length,
+          failed: results.filter(status => ["error", "skipped", "outdated"].includes(status)).length,
+          processing: results.filter(status => ["queued", "running"].includes(status)).length,
+          notFound: results.filter(status => status === "not_found").length,
+        })
+      }
+
       if (pathParts[1] === "retry-failed") {
         const canManage = await env.DB.prepare(`
           SELECT 1
