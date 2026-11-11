@@ -46,6 +46,91 @@
 
     <v-card rounded="xl" variant="outlined" class="mb-5">
       <v-card-text>
+        <div class="d-flex align-center ga-2 mb-3">
+          <v-icon icon="mdi-brain" color="primary" />
+          <div class="text-subtitle-1 font-weight-bold">AI資料検索</div>
+          <v-chip size="x-small" color="primary" variant="tonal">β</v-chip>
+        </div>
+        <div class="text-body-2 text-medium-emphasis mb-3">
+          資料の中身について質問すると、関連するファイルを探して回答します。
+        </div>
+        <v-text-field
+          v-model="aiSearchQuery"
+          label="資料について質問"
+          placeholder="例：提出期限や必要な準備物が書かれた資料は？"
+          prepend-inner-icon="mdi-magnify"
+          variant="outlined"
+          density="comfortable"
+          hide-details
+          :disabled="aiSearching"
+          @keydown.enter="runAiSearch"
+        />
+        <div class="d-flex flex-wrap align-center ga-2 mt-3">
+          <v-btn
+            color="primary"
+            prepend-icon="mdi-auto-fix"
+            :loading="aiSearching"
+            :disabled="!aiSearchQuery.trim() || aiSearching || showArchived"
+            @click="runAiSearch"
+          >
+            AIに質問
+          </v-btn>
+          <v-btn
+            v-if="canManageFiles"
+            variant="outlined"
+            prepend-icon="mdi-database-sync-outline"
+            :loading="aiIndexing"
+            :disabled="aiIndexing"
+            @click="registerExistingFiles"
+          >
+            既存資料を検索対象に登録
+          </v-btn>
+        </div>
+        <v-alert v-if="aiSearchError" type="error" variant="tonal" density="compact" class="mt-3">
+          {{ aiSearchError }}
+        </v-alert>
+        <v-alert v-if="aiIndexMessage" type="info" variant="tonal" density="compact" class="mt-3">
+          {{ aiIndexMessage }}
+        </v-alert>
+        <div v-if="aiSearchAnswer" class="mt-4">
+          <div class="text-subtitle-2 font-weight-bold mb-2">回答</div>
+          <div class="text-body-2 ai-search-answer">{{ aiSearchAnswer }}</div>
+        </div>
+        <div v-if="aiSearchResults.length" class="mt-4">
+          <div class="text-subtitle-2 font-weight-bold mb-2">参照した資料</div>
+          <v-list density="compact" class="pa-0">
+            <v-list-item
+              v-for="result in aiSearchResults"
+              :key="result.file.id"
+              rounded="lg"
+              class="mb-1"
+              @click="previewFile(result.file)"
+            >
+              <template #prepend>
+                <v-icon :icon="fileIcon(result.file.content_type)" />
+              </template>
+              <v-list-item-title class="text-wrap">{{ result.file.original_name }}</v-list-item-title>
+              <v-list-item-subtitle class="text-wrap">
+                {{ categoryName(result.file.category) }} · {{ Math.round(result.score * 100) }}% 関連
+              </v-list-item-subtitle>
+              <div
+                v-for="(snippet, index) in result.snippets.slice(0, 2)"
+                :key="index"
+                class="text-caption text-medium-emphasis mt-2 text-wrap"
+              >
+                {{ snippet }}
+              </div>
+            </v-list-item>
+          </v-list>
+        </div>
+        <div v-else-if="aiSearchCompleted" class="text-body-2 text-medium-emphasis mt-3">
+          関連する資料は見つかりませんでした。
+        </div>
+      </v-card-text>
+    </v-card>
+
+    <v-card rounded="xl" variant="outlined" class="mb-5">
+      <v-card-text>
         <v-row align="center">
           <v-col cols="12" md="5">
             <v-text-field
@@ -516,6 +601,18 @@ const siteStatus = useSiteStatus()
 
 const loading = ref(false)
 const uploading = ref(false)
+const aiSearchQuery = ref("")
+const aiSearching = ref(false)
+const aiSearchAnswer = ref("")
+const aiSearchError = ref("")
+const aiSearchCompleted = ref(false)
+const aiIndexing = ref(false)
+const aiIndexMessage = ref("")
+const aiSearchResults = ref<Array<{
+  file: ManagedFile
+  score: number
+  snippets: string[]
+}>>([])
 const search = ref('')
 const categoryFilter = ref<string | null>(null)
 const uploadCategory = ref('uploads')
@@ -621,6 +718,68 @@ const fileIcon = (contentType: string) => {
     return 'mdi-file-excel-outline'
   }
   return 'mdi-file-outline'
+}
+
+const runAiSearch = async () => {
+  const query = aiSearchQuery.value.trim()
+  if (!query || aiSearching.value || showArchived.value) return
+
+  aiSearching.value = true
+  aiSearchError.value = ""
+  aiSearchAnswer.value = ""
+  aiSearchResults.value = []
+  aiSearchCompleted.value = false
+
+  try {
+    const response = await apiFetch<{
+      answer: string
+      results: Array<{ file: ManagedFile; score: number; snippets: string[] }>
+      message?: string
+    }>("/api/files/ai-search", {
+      method: "POST",
+      body: { query, category: categoryFilter.value },
+    })
+    aiSearchAnswer.value = response.answer || response.message || ""
+    aiSearchResults.value = response.results ?? []
+    aiSearchCompleted.value = true
+  } catch (error) {
+    console.error(error)
+    aiSearchError.value = "AI検索に失敗しました。資料が登録済みか、時間をおいて再度お試しください。"
+  } finally {
+    aiSearching.value = false
+  }
+}
+
+const registerExistingFiles = async () => {
+  if (aiIndexing.value) return
+  aiIndexing.value = true
+  aiIndexMessage.value = ""
+  aiSearchError.value = ""
+
+  try {
+    let remaining = 1
+    let totalQueued = 0
+    let batches = 0
+    while (remaining > 0 && batches < 100) {
+      const response = await apiFetch<{ queued: number; remaining: number }>(
+        "/api/files/ai-search/reindex",
+        { method: "POST" },
+      )
+      totalQueued += response.queued
+      remaining = response.remaining
+      batches += 1
+      if (response.queued === 0) break
+    }
+    aiIndexMessage.value = totalQueued
+      ? `${totalQueued}件の資料をAI検索に登録しました。解析完了まで少し時間がかかります。`
+      : "追加で登録する資料はありません。"
+    await loadFiles()
+  } catch (error) {
+    console.error(error)
+    aiSearchError.value = "既存資料の登録に失敗しました。"
+  } finally {
+    aiIndexing.value = false
+  }
 }
 
 const loadCategories = async () => {

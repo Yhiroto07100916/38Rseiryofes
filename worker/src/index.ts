@@ -574,7 +574,7 @@ export default {
       try {
         return withCors(
           request,
-          await handleFiles(request, env, pathParts),
+          await handleFiles(request, env, pathParts, ctx),
         )
       } catch (error) {
         console.error("Files API error:", error)

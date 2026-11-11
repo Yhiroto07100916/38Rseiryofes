@@ -1,10 +1,12 @@
 import { hasPermission, requireAuth } from "../lib/authz"
 import { getSiteSetting } from "../lib/site-settings"
+import { deleteFileFromAiSearch, getAiSearchAnswer, getFileSearchInstance, indexFileForAiSearch, type AiSearchChunk } from "../lib/ai-search"
 
 type Env = {
   DB: D1Database
   FILES_BUCKET: R2Bucket
   AI: Ai
+  AI_SEARCH?: import("../lib/ai-search").AiSearchNamespace
 }
 
 
@@ -68,6 +70,7 @@ async function getFile(
   uploaded_by: string
   created_at: string
   archived_at: string | null
+  ai_search_item_id: string | null
 } | null> {
   return env.DB
     .prepare(`
@@ -80,7 +83,8 @@ async function getFile(
         category,
         uploaded_by,
         created_at,
-        archived_at
+        archived_at,
+        ai_search_item_id
       FROM files
       WHERE object_key = ?
       LIMIT 1
@@ -160,6 +164,7 @@ export async function handleFiles(
   request: Request,
   env: Env,
   pathParts: string[],
+  ctx?: ExecutionContext,
 ): Promise<Response> {
   const auth = await requireAuth(request, env)
 
@@ -176,6 +181,191 @@ export async function handleFiles(
 
   try {
     const url = new URL(request.url)
+
+
+    if (pathParts[0] === "ai-search" && request.method === "POST") {
+      if (pathParts[1] === "reindex") {
+        const canManage = await env.DB.prepare(`
+          SELECT 1
+          FROM user_account_roles uar
+          INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+          WHERE uar.user_id = ? AND ar.name IN ('admin', 'class_representative')
+          LIMIT 1
+        `).bind(auth.user.id).first()
+
+        if (!canManage) return json({ error: "Forbidden" }, 403)
+
+        const pending = await env.DB.prepare(`
+          SELECT id, object_key, original_name, content_type, size, category, uploaded_by
+          FROM files
+          WHERE archived_at IS NULL AND ai_status IN ('pending', 'failed')
+          ORDER BY created_at DESC
+          LIMIT 10
+        `).all<{
+          id: string
+          object_key: string
+          original_name: string
+          content_type: string
+          size: number
+          category: string
+          uploaded_by: string
+        }>()
+
+        const filesToIndex = pending.results ?? []
+        if (filesToIndex.length) {
+          const placeholders = filesToIndex.map(() => "?").join(", ")
+          await env.DB.prepare(
+            `UPDATE files SET ai_status = 'processing' WHERE id IN (${placeholders})`,
+          ).bind(...filesToIndex.map(file => file.id)).run()
+
+          const indexing = Promise.all(filesToIndex.map(file => indexFileForAiSearch(env, file)))
+          if (ctx) ctx.waitUntil(indexing)
+          else await indexing
+        }
+
+        const remaining = await env.DB.prepare(`
+          SELECT COUNT(*) AS count
+          FROM files
+          WHERE archived_at IS NULL AND ai_status IN ('pending', 'failed')
+        `).first<{ count: number }>()
+
+        return json({ queued: filesToIndex.length, remaining: Number(remaining?.count ?? 0) }, 202)
+      }
+
+      let body: { query?: unknown; category?: unknown }
+      try {
+        body = await request.json()
+      } catch {
+        return json({ error: "Invalid JSON" }, 400)
+      }
+
+      const queryText = typeof body.query === "string" ? body.query.trim() : ""
+      const category = typeof body.category === "string" ? body.category.trim() : ""
+      if (!queryText || queryText.length > 300) {
+        return json({ error: "検索文は1〜300文字で入力してください。" }, 400)
+      }
+
+      const [canViewReceipts, canViewTasks, canViewDecisions] = await Promise.all([
+        hasPermission(env, auth.user.id, "accounting.view"),
+        hasPermission(env, auth.user.id, "tasks.view"),
+        hasPermission(env, auth.user.id, "decisions.view"),
+      ])
+
+      let visibleQuery = `
+        SELECT f.id, f.original_name, f.object_key, f.content_type, f.size,
+               f.category, f.uploaded_by, f.created_at, f.ai_summary, f.ai_status
+        FROM files f
+        WHERE f.archived_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM submission_record_files srf WHERE srf.file_id = f.id
+          )
+          AND (NOT EXISTS (
+            SELECT 1 FROM receipt_files rf WHERE rf.file_id = f.id
+          ) OR ?)
+          AND (NOT EXISTS (
+            SELECT 1 FROM task_files tf WHERE tf.file_id = f.id
+          ) OR ?)
+          AND (NOT EXISTS (
+            SELECT 1 FROM decision_files df WHERE df.file_id = f.id
+          ) OR ?)
+      `
+      const visibleBindings: (string | number)[] = [
+        canViewReceipts ? 1 : 0,
+        canViewTasks ? 1 : 0,
+        canViewDecisions ? 1 : 0,
+      ]
+      if (category) {
+        visibleQuery += " AND f.category = ?"
+        visibleBindings.push(category)
+      }
+      visibleQuery += " ORDER BY f.created_at DESC LIMIT 200"
+
+      const visibleResult = await env.DB.prepare(visibleQuery)
+        .bind(...visibleBindings)
+        .all<{
+          id: string
+          original_name: string
+          object_key: string
+          content_type: string
+          size: number
+          category: string
+          uploaded_by: string
+          created_at: string
+          ai_summary: string | null
+          ai_status: string
+        }>()
+
+      const visibleFiles = visibleResult.results ?? []
+      const indexedFiles = visibleFiles.filter(file => file.ai_status === "completed")
+      if (!indexedFiles.length) {
+        return json({
+          answer: "",
+          results: [],
+          message: "検索対象の資料がまだ登録されていません。管理者に既存資料のAI検索登録を依頼してください。",
+          indexed_count: 0,
+        })
+      }
+
+      try {
+        const instance = await getFileSearchInstance(env)
+        const response = await instance.chatCompletions({
+          messages: [
+            {
+              role: "system",
+              content: "あなたは38R星陵祭準備サイトの資料検索アシスタントです。検索で取得した資料の内容だけを根拠に日本語で回答してください。根拠が見つからない場合は、資料内では確認できないと答えてください。回答の最後に参照した資料名を列挙してください。資料にない情報を推測しないでください。",
+            },
+            { role: "user", content: queryText },
+          ],
+          ai_search_options: {
+            retrieval: {
+              retrieval_type: "hybrid",
+              max_num_results: 10,
+              keyword_match_mode: "or",
+              filters: { file_id: { "$in": indexedFiles.map(file => file.id) } },
+            },
+          },
+        })
+
+        const fileMap = new Map(indexedFiles.map(file => [file.id, file]))
+        const grouped = new Map<string, {
+          file: typeof indexedFiles[number]
+          score: number
+          snippets: string[]
+        }>()
+        for (const chunk of (response.chunks ?? []) as AiSearchChunk[]) {
+          const fileId = String(chunk.item?.metadata?.file_id ?? "")
+          const file = fileMap.get(fileId)
+          if (!file || !chunk.text) continue
+          const existing = grouped.get(fileId) ?? {
+            file,
+            score: Number(chunk.score ?? 0),
+            snippets: [],
+          }
+          existing.score = Math.max(existing.score, Number(chunk.score ?? 0))
+          if (existing.snippets.length < 3) existing.snippets.push(chunk.text.slice(0, 1200))
+          grouped.set(fileId, existing)
+        }
+
+        return json({
+          answer: getAiSearchAnswer(response),
+          results: [...grouped.values()]
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 10)
+            .map(result => ({
+              file: result.file,
+              score: result.score,
+              snippets: result.snippets,
+            })),
+          indexed_count: indexedFiles.length,
+        })
+      } catch (error) {
+        console.error("AI Search query failed:", error)
+        return json({
+          error: "AI検索を実行できませんでした。AI Searchの設定を確認してください。",
+          code: "AI_SEARCH_UNAVAILABLE",
+        }, 503)
+      }
+    }
 
     if (pathParts[0] === "categories") {
       const categorySlug = pathParts.length >= 2
@@ -783,6 +973,19 @@ export async function handleFiles(
         throw error
       }
 
+      await env.DB.prepare("UPDATE files SET ai_status = 'processing' WHERE id = ?").bind(id).run()
+      if (ctx) {
+        ctx.waitUntil(indexFileForAiSearch(env, {
+          id,
+          object_key: objectKey,
+          original_name: originalName,
+          content_type: contentType,
+          size: file.size,
+          category,
+          uploaded_by: auth.user.id,
+        }))
+      }
+
       return json(
         {
           id,
@@ -960,6 +1163,12 @@ export async function handleFiles(
           },
           409,
         )
+      }
+
+      try {
+        await deleteFileFromAiSearch(env, file.ai_search_item_id)
+      } catch (error) {
+        console.error("AI Search item cleanup failed:", file.id, error)
       }
 
       await env.FILES_BUCKET.delete(objectKey)

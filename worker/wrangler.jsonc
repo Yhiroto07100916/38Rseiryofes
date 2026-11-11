@@ -44,9 +44,10 @@
 			"bucket_name": "38r-seiryofes-files"
 		}
 	],
-	"ai": {
-		"binding": "AI"
-	},
+	"ai": { "binding": "AI" },
+	"ai_search_namespaces": [
+		{ "binding": "AI_SEARCH", "namespace": "default" }
+	],
 	"routes": [
 		{
 			"pattern": "api.38r-seiryofes.com",

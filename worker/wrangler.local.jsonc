@@ -17,6 +17,9 @@
       "migrations_dir": "../migrations"
     }
   ],
+  "ai_search_namespaces": [
+    { "binding": "AI_SEARCH", "namespace": "default", "remote": true }
+  ],
   "r2_buckets": [
     {
       "binding": "FILES_BUCKET",
