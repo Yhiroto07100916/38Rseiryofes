@@ -16,6 +16,7 @@ import { handleEquipment } from "./routes/equipment"
 import { handleToolRental, processDueToolRentalNotifications } from "./routes/tool-rental"
 import { handleAccounting } from "./routes/accounting"
 import { handleFiles } from "./routes/files"
+import { handleFileFolders } from "./routes/file-folders"
 import { handlePublicFiles } from "./routes/public-files"
 import { handleReceiptOcr } from "./routes/receipt-ocr"
 import { handleSurveys, processDueSurveyNotifications } from "./routes/surveys"
@@ -159,6 +160,7 @@ async function enforceSiteAccess(
     ["/api/equipment", "equipment"],
     ["/api/surveys", "surveys"],
     ["/api/files", "files"],
+    ["/api/file-folders", "files"],
     ["/api/public/files", "files"],
     ["/api/submissions", "submissions"],
     ["/api/decisions", "decisions"],
@@ -560,6 +562,20 @@ export default {
       const path = url.pathname.slice("/api/public/files".length)
       const pathParts = path.split("/").filter(Boolean)
       return withCors(request, await handlePublicFiles(request, env, pathParts))
+    }
+
+    if (
+      url.pathname === "/api/file-folders" ||
+      url.pathname.startsWith("/api/file-folders/")
+    ) {
+      const path = url.pathname.slice("/api/file-folders".length)
+      const pathParts = path.split("/").filter(Boolean)
+      try {
+        return withCors(request, await handleFileFolders(request, env, pathParts))
+      } catch (error) {
+        console.error("File folders API error:", error)
+        return withCors(request, Response.json({ error: "Internal Server Error" }, { status: 500 }))
+      }
     }
 
     if (

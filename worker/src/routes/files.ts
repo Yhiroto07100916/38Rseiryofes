@@ -487,6 +487,7 @@ export async function handleFiles(
           f.content_type,
           f.size,
           f.category,
+          f.folder_id,
           f.uploaded_by,
           f.created_at,
           f.archived_at,
@@ -500,6 +501,16 @@ export async function handleFiles(
       if (category) {
         query += " AND f.category = ?"
         bindings.push(category)
+      }
+
+      const requestedFolderId = url.searchParams.get("folder_id")
+      if (!archived && requestedFolderId !== null) {
+        if (requestedFolderId === "root") {
+          query += " AND f.folder_id IS NULL"
+        } else {
+          query += " AND f.folder_id = ?"
+          bindings.push(requestedFolderId)
+        }
       }
 
       if (search) {
@@ -566,6 +577,7 @@ export async function handleFiles(
           content_type: string
           size: number
           category: string
+          folder_id: string | null
           uploaded_by: string
           created_at: string
           archived_at: string | null
@@ -579,6 +591,31 @@ export async function handleFiles(
         files: visibleFiles,
         count: visibleFiles.length,
       })
+    }
+
+    if (request.method === "PATCH" && pathParts.length === 2 && pathParts[1] === "move") {
+      const fileId = decodeURIComponent(pathParts[0])
+      const file = await env.DB.prepare(
+        "SELECT id, uploaded_by, archived_at FROM files WHERE id = ? LIMIT 1",
+      ).bind(fileId).first<{ id: string; uploaded_by: string; archived_at: string | null }>()
+      if (!file) return json({ error: "File not found" }, 404)
+      const manager = await env.DB.prepare(
+        "SELECT 1 FROM user_account_roles uar INNER JOIN account_roles ar ON ar.id = uar.account_role_id WHERE uar.user_id = ? AND ar.name IN ('admin', 'class_representative') LIMIT 1",
+      ).bind(auth.user.id).first()
+      if (!manager && file.uploaded_by !== auth.user.id) return json({ error: "Forbidden" }, 403)
+      if (file.archived_at) return json({ error: "Archived files cannot be moved" }, 409)
+      let body: { folder_id?: unknown }
+      try { body = await request.json() } catch { return json({ error: "Invalid JSON" }, 400) }
+      const folderId = body.folder_id === null || body.folder_id === "" || body.folder_id === undefined
+        ? null
+        : typeof body.folder_id === "string" ? body.folder_id.trim() : false
+      if (folderId === false) return json({ error: "Invalid folder_id" }, 400)
+      if (folderId) {
+        const folder = await env.DB.prepare("SELECT id FROM file_folders WHERE id = ? LIMIT 1").bind(folderId).first()
+        if (!folder) return json({ error: "Folder not found" }, 404)
+      }
+      await env.DB.prepare("UPDATE files SET folder_id = ? WHERE id = ?").bind(folderId, fileId).run()
+      return json({ success: true, id: fileId, folder_id: folderId })
     }
 
     if (
@@ -687,6 +724,9 @@ export async function handleFiles(
       const formData = await request.formData()
       const file = formData.get("file")
       const notifyUpload = formData.get("notify") === "true"
+      const rawFolderId = formData.get("folder_id")
+      if (rawFolderId !== null && typeof rawFolderId !== "string") return json({ error: "Invalid folder_id" }, 400)
+      const folderId = typeof rawFolderId === "string" ? rawFolderId.trim() || null : null
 
       if (!(file instanceof File)) {
         return json(
@@ -725,6 +765,10 @@ export async function handleFiles(
         }
         throw error
       }
+      if (folderId) {
+        const folder = await env.DB.prepare("SELECT id FROM file_folders WHERE id = ? LIMIT 1").bind(folderId).first()
+        if (!folder) return json({ error: "Folder not found" }, 404)
+      }
 
       const originalName = file.name.trim() || "file"
       const contentType =
@@ -762,10 +806,11 @@ export async function handleFiles(
               content_type,
               size,
               category,
+              folder_id,
               uploaded_by,
               notify_on_upload
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           `)
           .bind(
             id,
@@ -774,6 +819,7 @@ export async function handleFiles(
             contentType,
             file.size,
             category,
+            folderId,
             auth.user.id,
             notifyUpload ? 1 : 0,
           )
@@ -791,6 +837,7 @@ export async function handleFiles(
           content_type: contentType,
           size: file.size,
           category,
+          folder_id: folderId,
           uploaded_by: auth.user.id,
         },
         201,
