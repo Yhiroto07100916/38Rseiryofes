@@ -7,7 +7,6 @@
       </v-avatar>
       <div>
         <h1 class="text-h5 font-weight-bold">工具・機材の貸出記録</h1>
-        <p class="text-body-2 text-medium-emphasis mb-0">38Rで管理する工具の個体と、貸出・返却の記録を確認できます。</p>
       </div>
       <v-spacer />
       <v-btn icon="mdi-refresh" variant="text" :loading="loading" aria-label="更新" @click="loadSummary" />

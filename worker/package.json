@@ -5,6 +5,7 @@
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev --config wrangler.local.jsonc",
+    "dev:ai-search": "wrangler dev --config wrangler.ai-search.local.jsonc",
     "start": "wrangler dev --config wrangler.local.jsonc",
     "test": "vitest run --pool=forks --maxWorkers=1",
     "cf-typegen": "wrangler types",

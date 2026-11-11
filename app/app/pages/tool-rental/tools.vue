@@ -4,7 +4,6 @@
       <LayoutBackButton />
       <div>
         <h1 class="text-h5 font-weight-bold">工具・機材一覧</h1>
-        <p class="text-body-2 text-medium-emphasis mb-0">工具の種類と、管理番号ごとの登録・貸出状態を確認します。</p>
       </div>
       <v-spacer />
       <v-btn v-if="canManage" color="primary" prepend-icon="mdi-plus" @click="openCreate">工具を登録</v-btn>
