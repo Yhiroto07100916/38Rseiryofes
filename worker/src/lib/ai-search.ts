@@ -55,6 +55,17 @@ export interface AiSearchNamespace {
 const INSTANCE_ID = "38r-files-knowledge-base"
 const MAX_INDEXABLE_FILE_SIZE = 4 * 1024 * 1024
 
+function getIndexingErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (message === "FILE_OBJECT_NOT_FOUND") {
+    return "保存先のファイルデータを取得できませんでした。"
+  }
+  if (message === "AI_SEARCH_BINDING_NOT_CONFIGURED") {
+    return "AI Searchの接続設定がありません。"
+  }
+  return message.slice(0, 500) || "原因不明のエラー"
+}
+
 function getExtension(filename: string): string {
   return filename.match(/\.[a-z0-9]{1,10}$/i)?.[0]?.toLowerCase() ?? ""
 }
@@ -123,8 +134,8 @@ export async function indexFileForAiSearch(
   try {
     if (!isSupportedFile(file.original_name, file.content_type, file.size)) {
       await env.DB.prepare(
-        "UPDATE files SET ai_status = 'failed', ai_summary = NULL, ai_search_item_id = NULL WHERE id = ?",
-      ).bind(file.id).run()
+        "UPDATE files SET ai_status = 'failed', ai_summary = NULL, ai_search_item_id = NULL, ai_error = ? WHERE id = ?",
+      ).bind("AI検索対象外の形式またはサイズです（上限4 MiB）。", file.id).run()
       return
     }
 
@@ -157,8 +168,13 @@ export async function indexFileForAiSearch(
     )
 
     await env.DB.prepare(
-      "UPDATE files SET ai_search_item_id = ?, ai_status = ? WHERE id = ?",
-    ).bind(item.id, item.status === "completed" ? "completed" : "failed", file.id).run()
+      "UPDATE files SET ai_search_item_id = ?, ai_status = ?, ai_error = ? WHERE id = ?",
+    ).bind(
+      item.id,
+      item.status === "completed" ? "completed" : "failed",
+      item.status === "completed" ? null : `AI Searchの解析が完了しませんでした（status: ${item.status}）。`,
+      file.id,
+    ).run()
 
     if (item.status !== "completed") return
 
@@ -192,19 +208,19 @@ export async function indexFileForAiSearch(
         .slice(0, 50000)
 
       await env.DB.prepare(
-        "UPDATE files SET ai_summary = ?, extracted_text = ?, ai_status = 'completed' WHERE id = ?",
+        "UPDATE files SET ai_summary = ?, extracted_text = ?, ai_status = 'completed', ai_error = NULL WHERE id = ?",
       ).bind(summary, extractedText || null, file.id).run()
     } catch (error) {
       console.error("AI file summary failed:", file.id, error)
       await env.DB.prepare(
-        "UPDATE files SET ai_status = 'completed' WHERE id = ?",
+        "UPDATE files SET ai_status = 'completed', ai_error = NULL WHERE id = ?",
       ).bind(file.id).run()
     }
   } catch (error) {
     console.error("AI file indexing failed:", file.id, error)
     await env.DB.prepare(
-      "UPDATE files SET ai_status = 'failed' WHERE id = ?",
-    ).bind(file.id).run()
+      "UPDATE files SET ai_status = 'failed', ai_error = ? WHERE id = ?",
+    ).bind(getIndexingErrorMessage(error), file.id).run()
   }
 }
 
