@@ -139,23 +139,11 @@
               :key="result.file.id"
               rounded="lg"
               class="mb-1"
+              :title="result.file.original_name"
+              :prepend-icon="fileIcon(result.file.content_type)"
+              append-icon="mdi-open-in-new"
               @click="previewFile(result.file)"
-            >
-              <template #prepend>
-                <v-icon :icon="fileIcon(result.file.content_type)" />
-              </template>
-              <v-list-item-title class="text-wrap">{{ result.file.original_name }}</v-list-item-title>
-              <v-list-item-subtitle class="text-wrap">
-                {{ categoryName(result.file.category) }} · {{ Math.round(result.score * 100) }}% 関連
-              </v-list-item-subtitle>
-              <div
-                v-for="(snippet, index) in result.snippets.slice(0, 2)"
-                :key="index"
-                class="text-caption text-medium-emphasis mt-2 text-wrap"
-              >
-                {{ snippet }}
-              </div>
-            </v-list-item>
+            />
           </v-list>
         </div>
         <div v-else-if="aiSearchCompleted" class="text-body-2 text-medium-emphasis mt-3">
