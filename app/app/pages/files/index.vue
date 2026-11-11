@@ -14,7 +14,7 @@
 
       <div class="d-flex align-center flex-wrap ga-2 justify-end">
         <v-btn
-          v-if="canManageFiles"
+          v-if="canManageCategories"
           to="/files/categories"
           prepend-icon="mdi-folder-cog-outline"
           variant="outlined"
@@ -100,7 +100,7 @@
             AIに質問
           </v-btn>
           <v-btn
-            v-if="canManageFiles"
+            v-if="canManageAiSearch"
             variant="outlined"
             prepend-icon="mdi-database-sync-outline"
             :loading="aiIndexing"
@@ -110,7 +110,7 @@
             既存資料を検索対象に登録
           </v-btn>
           <v-btn
-            v-if="canManageFiles"
+            v-if="canManageAiSearch"
             color="warning"
             variant="outlined"
             prepend-icon="mdi-replay"
@@ -185,6 +185,7 @@
           <v-col cols="12" sm="6" md="4">
             <div class="d-flex align-center justify-space-between flex-wrap ga-2">
               <v-btn-toggle
+                v-if="canArchiveFiles || canRestoreFiles"
                 v-model="showArchived"
                 mandatory
                 color="primary"
@@ -222,6 +223,7 @@
             </div>
           </div>
           <v-btn
+            v-if="canUploadFiles"
             color="primary"
             prepend-icon="mdi-upload"
             :loading="uploading"
@@ -232,7 +234,7 @@
           </v-btn>
         </div>
 
-        <v-row align="center">
+        <v-row v-if="canUploadFiles" align="center">
           <v-col cols="12" sm="4">
             <v-select
               v-model="uploadCategory"
@@ -301,8 +303,8 @@
             </template>
             <template #append>
               <div class="d-flex align-center ga-1">
-                <v-btn v-if="canManageFiles || folder.created_by === auth.user?.id" icon="mdi-pencil-outline" size="small" variant="text" aria-label="フォルダを編集" @click.stop="editFolder(folder)" />
-                <v-btn v-if="canManageFiles || folder.created_by === auth.user?.id" icon="mdi-delete-outline" size="small" color="error" variant="text" aria-label="フォルダを削除" @click.stop="removeFolder(folder)" />
+                <v-btn v-if="canManageFolders || folder.created_by === auth.user?.id" icon="mdi-pencil-outline" size="small" variant="text" aria-label="フォルダを編集" @click.stop="editFolder(folder)" />
+                <v-btn v-if="canManageFolders || folder.created_by === auth.user?.id" icon="mdi-delete-outline" size="small" color="error" variant="text" aria-label="フォルダを削除" @click.stop="removeFolder(folder)" />
                 <v-icon icon="mdi-chevron-right" color="medium-emphasis" />
               </div>
             </template>
@@ -402,7 +404,7 @@
                   </template>
                   <v-list density="compact" min-width="190">
                     <v-list-item
-                      v-if="canManageFiles || file.uploaded_by === auth.user?.id"
+                      v-if="canMoveFiles || file.uploaded_by === auth.user?.id"
                       prepend-icon="mdi-folder-move-outline"
                       title="フォルダへ移動"
                       @click="openMoveDialog(file)"
@@ -413,34 +415,35 @@
                       @click="openFile(file)"
                     />
                     <v-list-item
+                      v-if="canDownloadFiles"
                       prepend-icon="mdi-download"
                       title="ダウンロード"
                       :disabled="downloadingId === file.id"
                       @click="downloadFile(file)"
                     />
-                    <v-divider v-if="canManageFiles" class="my-1" />
+                    <v-divider v-if="canViewShareLinks || canArchiveFiles || canRestoreFiles || canDeleteFiles" class="my-1" />
                     <v-list-item
-                      v-if="canManageFiles && !showArchived"
+                      v-if="canViewShareLinks && !showArchived"
                       prepend-icon="mdi-export-variant"
                       title="共有リンク管理"
                       @click="openShareDialog(file)"
                     />
                     <v-list-item
-                      v-if="canManageFiles && !showArchived"
+                      v-if="canArchiveFiles && !showArchived"
                       prepend-icon="mdi-archive-arrow-down-outline"
                       title="アーカイブ"
                       :disabled="actionFileId === file.id"
                       @click="changeArchive(file, 'archive')"
                     />
                     <v-list-item
-                      v-if="canManageFiles && showArchived"
+                      v-if="canRestoreFiles && showArchived"
                       prepend-icon="mdi-archive-arrow-up-outline"
                       title="復元"
                       :disabled="actionFileId === file.id"
                       @click="changeArchive(file, 'restore')"
                     />
                     <v-list-item
-                      v-if="isAdmin && showArchived"
+                      v-if="canDeleteFiles && showArchived"
                       prepend-icon="mdi-delete-forever-outline"
                       title="完全削除"
                       base-color="error"
@@ -705,6 +708,7 @@
 <script setup lang="ts">
 definePageMeta({
   middleware: ['auth'],
+  permissions: ['files.view'],
 })
 
 import { nextTick, onBeforeUnmount } from "vue"
@@ -831,15 +835,15 @@ const deleteTarget = ref<ManagedFile | null>(null)
 const deleteError = ref('')
 const deleting = ref(false)
 
-const isAdmin = computed(() =>
-  auth.accountRoles.some(role => role.name === 'admin'),
-)
-
-const canManageFiles = computed(() =>
-  auth.accountRoles.some(role =>
-    ['admin', 'class_representative'].includes(role.name),
-  ),
-)
+const canUploadFiles = computed(() => auth.hasPermission('files.upload'))
+const canDownloadFiles = computed(() => auth.hasPermission('files.download'))
+const canMoveFiles = computed(() => auth.hasPermission('files.move'))
+const canArchiveFiles = computed(() => auth.hasPermission('files.archive'))
+const canRestoreFiles = computed(() => auth.hasPermission('files.restore'))
+const canDeleteFiles = computed(() => auth.hasPermission('files.delete'))
+const canManageCategories = computed(() => auth.hasPermission('files.categories.manage'))
+const canManageFolders = computed(() => auth.hasPermission('files.folders.manage'))
+const canManageAiSearch = computed(() => auth.hasPermission('files.ai_search.manage'))
 
 const canCreateShareLink = computed(() =>
   auth.hasPermission('files.share.create'),
@@ -1218,7 +1222,7 @@ const loadFiles = async () => {
   errorMessage.value = ''
 
   try {
-    if (canManageFiles.value && !showArchived.value) {
+    if (canManageAiSearch.value && !showArchived.value) {
       try {
         await apiFetch('/api/files/ai-search/sync-status', { method: 'POST' })
       } catch (syncError) {
@@ -1249,7 +1253,7 @@ const loadFiles = async () => {
     }))
 
     if (
-      canManageFiles.value &&
+      canManageAiSearch.value &&
       !showArchived.value &&
       files.value.some(file => file.ai_status === 'processing')
     ) {
@@ -1448,7 +1452,7 @@ const confirmPermanentDelete = (file: ManagedFile) => {
 const permanentlyDeleteFile = async () => {
   const file = deleteTarget.value
 
-  if (!file || !isAdmin.value || !showArchived.value || deleting.value) {
+  if (!file || !canDeleteFiles.value || !showArchived.value || deleting.value) {
     return
   }
 
@@ -1474,7 +1478,7 @@ const permanentlyDeleteFile = async () => {
         throw new Error('先にファイルをアーカイブしてください。')
       }
       if (response.status === 403) {
-        throw new Error('物理削除は管理者のみ実行できます。')
+        throw new Error('ファイル完全削除の権限がありません。')
       }
       throw new Error(result.error || `削除に失敗しました (HTTP ${response.status})`)
     }
@@ -1504,7 +1508,7 @@ const downloadFile = async (file: ManagedFile) => {
       .split('/')
       .map(part => encodeURIComponent(part))
       .join('/')
-    const response = await fetch(`${baseURL}/api/files/${objectKey}`, {
+    const response = await fetch(`${baseURL}/api/files/${objectKey}?download=true`, {
       credentials: 'include',
     })
 
