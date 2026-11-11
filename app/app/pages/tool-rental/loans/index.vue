@@ -3,7 +3,6 @@
     <div class="d-flex align-center ga-3 mb-6">
       <LayoutBackButton />
       <h1 class="text-h5 font-weight-bold">貸出を記録</h1>
-      <p class="text-body-2 text-medium-emphasis mb-0">借りる人と工具の管理番号を選び、貸出の事実を記録します。</p>
     </div>
 
     <v-card rounded="lg" variant="outlined" max-width="760">

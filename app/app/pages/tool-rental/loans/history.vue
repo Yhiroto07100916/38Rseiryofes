@@ -4,7 +4,6 @@
       <LayoutBackButton />
       <div>
         <h1 class="text-h5 font-weight-bold">貸出・返却履歴</h1>
-        <p class="text-body-2 text-medium-emphasis mb-0">個体ごとの貸出者・返却者・記録日時を確認できます。</p>
       </div>
       <v-spacer />
       <v-btn variant="outlined" prepend-icon="mdi-refresh" :loading="loading" @click="loadHistory">更新</v-btn>
