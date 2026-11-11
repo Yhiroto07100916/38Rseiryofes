@@ -219,6 +219,18 @@
 
       <v-spacer />
 
+      <v-select
+        v-model="sortOrder"
+        :items="sortItems"
+        label="並び替え"
+        variant="outlined"
+        density="compact"
+        hide-details
+        max-width="190"
+        class="task-sort-select"
+        @update:model-value="saveSortOrder"
+      />
+
       <v-btn
         icon="mdi-refresh"
         variant="text"
@@ -261,7 +273,7 @@
       </v-card>
 
       <v-card
-        v-for="task in filteredTasks"
+        v-for="task in sortedTasks"
         :key="task.id"
         variant="outlined"
         class="rounded-xl mb-3 task-card"
@@ -484,6 +496,27 @@ const snackbar = useSnackbar()
 const tasks = ref<Task[]>([])
 const loading = ref(false)
 
+type TaskSortOrder = 'due_asc' | 'due_desc' | 'priority_desc' | 'priority_asc'
+
+const TASK_SORT_STORAGE_KEY = '38r-seiryofes.tasks.sort-order'
+const sortOrder = ref<TaskSortOrder>('due_asc')
+const sortItems = [
+  { title: '期限が早い順', value: 'due_asc' },
+  { title: '期限が遅い順', value: 'due_desc' },
+  { title: '優先度が高い順', value: 'priority_desc' },
+  { title: '優先度が低い順', value: 'priority_asc' },
+]
+
+const saveSortOrder = (value: TaskSortOrder) => {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.localStorage.setItem(TASK_SORT_STORAGE_KEY, value)
+  } catch (error) {
+    console.warn('タスク一覧の並び順を保存できませんでした。', error)
+  }
+}
+
 const keyword = ref('')
 const scopeFilter = ref<Task['scope'] | null>(null)
 const statusFilter = ref<Task['status'] | null>(null)
@@ -658,6 +691,47 @@ const filteredTasks = computed(() => {
 
     return true
   })
+})
+
+const sortedTasks = computed(() => {
+  const priorityRank: Record<Task['priority'], number> = {
+    low: 1,
+    medium: 2,
+    high: 3,
+    urgent: 4,
+  }
+
+  return filteredTasks.value
+    .map((task, index) => ({ task, index }))
+    .sort((a, b) => {
+      if (sortOrder.value === 'due_asc' || sortOrder.value === 'due_desc') {
+        const aDue = a.task.due_at ? new Date(a.task.due_at).getTime() : null
+        const bDue = b.task.due_at ? new Date(b.task.due_at).getTime() : null
+        const aHasDue = aDue !== null && Number.isFinite(aDue)
+        const bHasDue = bDue !== null && Number.isFinite(bDue)
+
+        // 期限未設定のタスクは常に最後に表示する
+        if (aHasDue !== bHasDue) return aHasDue ? -1 : 1
+        if (aHasDue && bHasDue && aDue !== bDue) {
+          return sortOrder.value === 'due_asc'
+            ? aDue! - bDue!
+            : bDue! - aDue!
+        }
+      } else {
+        const priorityDifference =
+          priorityRank[a.task.priority] - priorityRank[b.task.priority]
+
+        if (priorityDifference !== 0) {
+          return sortOrder.value === 'priority_desc'
+            ? -priorityDifference
+            : priorityDifference
+        }
+      }
+
+      // 同順位の場合はAPIの並び順を維持する
+      return a.index - b.index
+    })
+    .map(({ task }) => task)
 })
 
 const summaryItems = computed(() => [
@@ -888,6 +962,21 @@ const formatDueDate = (value: string) => {
 }
 
 onMounted(async () => {
+  try {
+    const savedSortOrder = window.localStorage.getItem(TASK_SORT_STORAGE_KEY)
+
+    if (
+      savedSortOrder === 'due_asc' ||
+      savedSortOrder === 'due_desc' ||
+      savedSortOrder === 'priority_desc' ||
+      savedSortOrder === 'priority_asc'
+    ) {
+      sortOrder.value = savedSortOrder
+    }
+  } catch (error) {
+    console.warn('タスク一覧の並び順を読み込めませんでした。', error)
+  }
+
   if (!auth.initialized) {
     await auth.fetchMe()
   }
@@ -899,6 +988,10 @@ onMounted(async () => {
 <style scoped>
 .min-width-0 {
   min-width: 0;
+}
+
+.task-sort-select {
+  flex: 0 1 190px;
 }
 
 .task-card {
