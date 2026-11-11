@@ -58,6 +58,7 @@
 
 <script setup lang="ts">
 import type { CurrentLoanItem } from '~/types/tool-rental'
+import { getDefaultTimeZone, jstDateTimeLocalToIso } from '~/utils/jst'
 
 const auth = useAuthStore()
 const { request } = useToolRentalApi()
@@ -119,7 +120,7 @@ function deadlineMs(loan: CurrentLoanItem): number {
   const normalized = value.replace(' ', 'T')
   const date = /(?:Z|[+-]\d{2}:\d{2})$/.test(normalized)
     ? new Date(normalized)
-    : new Date(`${normalized}+09:00`)
+    : new Date(jstDateTimeLocalToIso(normalized, getDefaultTimeZone()))
   return date.getTime()
 }
 

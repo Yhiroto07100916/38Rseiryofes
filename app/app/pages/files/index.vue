@@ -476,6 +476,7 @@
 </template>
 
 <script setup lang="ts">
+import { getDefaultTimeZone } from '~/utils/jst'
 import { nextTick } from "vue"
 definePageMeta({
   middleware: ['auth'],
@@ -511,6 +512,7 @@ const highlightedFileId = ref(typeof route.query.open === "string" ? route.query
 const { confirm } = useConfirmDialog()
 const config = useRuntimeConfig()
 const auth = useAuthStore()
+const siteStatus = useSiteStatus()
 
 const loading = ref(false)
 const uploading = ref(false)
@@ -608,7 +610,7 @@ const formatDate = (value: string) => {
   const date = new Date(value)
   return Number.isNaN(date.getTime())
     ? value
-    : date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+    : date.toLocaleString('ja-JP', { timeZone: getDefaultTimeZone() })
 }
 
 const fileIcon = (contentType: string) => {
@@ -662,8 +664,9 @@ const uploadFile = async () => {
 
   if (!file) return
 
-  if (file.size > 25 * 1024 * 1024) {
-    errorMessage.value = 'ファイルサイズは25 MiB以下にしてください。'
+  const maxFileSizeMb = siteStatus.value?.upload_max_file_size_mb ?? 25
+  if (file.size > maxFileSizeMb * 1024 * 1024) {
+    errorMessage.value = `ファイルサイズは${maxFileSizeMb} MiB以下にしてください。`
     return
   }
 

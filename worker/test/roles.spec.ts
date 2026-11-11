@@ -2,6 +2,7 @@ declare const __D1_MIGRATIONS__: string
 
 import { applyD1Migrations, env, SELF } from "cloudflare:test"
 import { afterEach, beforeAll, describe, expect, it } from "vitest"
+import { hashPassword } from "../src/lib/password"
 
 const userIds: string[] = []
 const sessionIds: string[] = []
@@ -175,4 +176,468 @@ describe("role member endpoints", () => {
       accountRoleMembers.users.find(user => user.id === secondUserId)?.assigned,
     ).toBe(0)
   })
+})
+
+
+async function createUserSession() {
+  const userId = await createUser("サイトアクセス制御テスト")
+  const sessionId = crypto.randomUUID()
+  sessionIds.push(sessionId)
+
+  await env.DB.prepare(`
+    INSERT INTO sessions (id, user_id, expires_at)
+    VALUES (?, ?, datetime('now', '+1 day'))
+  `).bind(sessionId, userId).run()
+
+  return `session_id=${sessionId}`
+}
+
+async function createImportantAdminSession() {
+  const cookie = await createAdminSession()
+  const sessionId = cookie.slice("session_id=".length)
+  const session = await env.DB.prepare(
+    "SELECT user_id FROM sessions WHERE id = ?",
+  ).bind(sessionId).first<{ user_id: string }>()
+  if (!session) throw new Error("Test session was not found")
+
+  const role = await env.DB.prepare(
+    "SELECT id FROM account_roles WHERE name = 'important_settings_admin'",
+  ).first<{ id: string }>()
+  if (!role) throw new Error("Seeded important settings role was not found")
+
+  await env.DB.prepare(`
+    INSERT INTO user_account_roles (user_id, account_role_id)
+    VALUES (?, ?)
+  `).bind(session.user_id, role.id).run()
+
+  return { cookie, userId: session.user_id, roleId: role.id }
+}
+
+describe("site settings authorization", () => {
+  it("hides critical settings and rejects critical updates for regular admins", async () => {
+    const cookie = await createAdminSession()
+    const sessionId = cookie.slice("session_id=".length)
+    const session = await env.DB.prepare(
+      "SELECT user_id FROM sessions WHERE id = ?",
+    ).bind(sessionId).first<{ user_id: string }>()
+    if (!session) throw new Error("Test session was not found")
+
+    await env.DB.prepare(`
+      INSERT INTO site_setting_logs (
+        id, setting_key, old_value, new_value, changed_by
+      ) VALUES (?, 'site_visibility', '"public"', '"private"', ?)
+    `).bind(crypto.randomUUID(), session.user_id).run()
+
+    const getResponse = await SELF.fetch(
+      "http://example.com/api/account-roles/settings",
+      { headers: { Cookie: cookie } },
+    )
+    expect(getResponse.status).toBe(200)
+    const getBody = await getResponse.json() as {
+      settings: Record<string, unknown>
+    }
+    expect(getBody.settings.site_name).toBe("38R星陵祭準備サイト")
+    expect(getBody.settings.site_visibility).toBeUndefined()
+    expect(getBody.settings.maintenance_mode).toBeUndefined()
+
+    const patchResponse = await SELF.fetch(
+      "http://example.com/api/account-roles/settings",
+      {
+        method: "PATCH",
+        headers: {
+          Cookie: cookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          settings: { site_visibility: "private" },
+        }),
+      },
+    )
+    expect(patchResponse.status).toBe(403)
+
+    const logsResponse = await SELF.fetch(
+      "http://example.com/api/account-roles/settings/logs",
+      { headers: { Cookie: cookie } },
+    )
+    expect(logsResponse.status).toBe(200)
+    const logsBody = await logsResponse.json() as {
+      logs: Array<{ setting_key: string; new_value: string }>
+    }
+    expect(
+      logsBody.logs
+        .filter(log => log.setting_key === "site_visibility")
+        .every(log => log.new_value === "[redacted]"),
+    ).toBe(true)
+  })
+
+  it("allows important admins to update critical settings and prevents removing the final one", async () => {
+    const { cookie, userId, roleId } = await createImportantAdminSession()
+
+    const patchResponse = await SELF.fetch(
+      "http://example.com/api/account-roles/settings",
+      {
+        method: "PATCH",
+        headers: {
+          Cookie: cookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          settings: { site_visibility: "private" },
+        }),
+      },
+    )
+    expect(patchResponse.status).toBe(200)
+
+    const getResponse = await SELF.fetch(
+      "http://example.com/api/account-roles/settings",
+      { headers: { Cookie: cookie } },
+    )
+    const getBody = await getResponse.json() as {
+      settings: Record<string, unknown>
+    }
+    expect(getBody.settings.site_visibility).toBe("private")
+
+    const genericRoleAssignment = await SELF.fetch(
+      `http://example.com/api/users/${userId}/account-roles`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: cookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ account_role_id: roleId }),
+      },
+    )
+    expect(genericRoleAssignment.status).toBe(403)
+
+    const finalAdminRemoval = await SELF.fetch(
+      `http://example.com/api/account-roles/settings/important-admins/${userId}`,
+      { method: "DELETE", headers: { Cookie: cookie } },
+    )
+    expect(finalAdminRemoval.status).toBe(409)
+
+    const restoreResponse = await SELF.fetch(
+      "http://example.com/api/account-roles/settings",
+      {
+        method: "PATCH",
+        headers: {
+          Cookie: cookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          settings: { site_visibility: "public" },
+        }),
+      },
+    )
+    expect(restoreResponse.status).toBe(200)
+  })
+
+  it("blocks regular logins but keeps administrator recovery available", async () => {
+    await env.DB.prepare(
+      "UPDATE site_settings SET value = 'false' WHERE key = 'login_enabled'",
+    ).run()
+
+    try {
+      const regularUserId = await createUser("通常ユーザー")
+      await env.DB.prepare(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+      ).bind(await hashPassword("test-password"), regularUserId).run()
+
+      const regularLogin = await SELF.fetch("http://example.com/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          student_number: `role-test-${regularUserId}`,
+          password: "test-password",
+        }),
+      })
+      expect(regularLogin.status).toBe(403)
+
+      const { userId: importantAdminUserId } = await createImportantAdminSession()
+
+      await env.DB.prepare(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+      ).bind(await hashPassword("admin-password"), importantAdminUserId).run()
+
+      const adminUser = await env.DB.prepare(
+        "SELECT student_number FROM users WHERE id = ?",
+      ).bind(importantAdminUserId).first<{ student_number: string }>()
+
+      const adminLogin = await SELF.fetch("http://example.com/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          student_number: adminUser?.student_number,
+          password: "admin-password",
+        }),
+      })
+      expect(adminLogin.status).toBe(200)
+    } finally {
+      await env.DB.prepare(
+        "UPDATE site_settings SET value = 'true' WHERE key = 'login_enabled'",
+      ).run()
+    }
+  })
+
+  it("reflects basic site branding settings through the public status endpoint", async () => {
+    const cookie = await createAdminSession()
+    const patch = await SELF.fetch("http://example.com/api/account-roles/settings", {
+      method: "PATCH",
+      headers: {
+        Cookie: cookie,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        settings: {
+          site_name: "38R テストサイト",
+          site_description: "設定反映のテスト説明",
+          event_name: "文化祭テスト",
+          event_year: 2027,
+        },
+      }),
+    })
+    expect(patch.status).toBe(200)
+
+    try {
+      const response = await SELF.fetch("http://example.com/api/site-status")
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        site_name: "38R テストサイト",
+        site_description: "設定反映のテスト説明",
+        event_name: "文化祭テスト",
+        event_year: 2027,
+      })
+    } finally {
+      await env.DB.batch([
+        env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'site_name'")
+          .bind(JSON.stringify("38R星陵祭準備サイト")),
+        env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'site_description'")
+          .bind(JSON.stringify("38Rの星陵祭準備を管理するサイトです。")),
+        env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'event_name'")
+          .bind(JSON.stringify("星陵祭")),
+        env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'event_year'")
+          .bind(JSON.stringify(2026)),
+      ])
+    }
+  })
+
+  it("enforces and can disable the global login requirement", async () => {
+    const initialStatus = await SELF.fetch("http://example.com/api/site-status")
+    expect(await initialStatus.json()).toMatchObject({
+      require_login: true,
+      login_enabled: true,
+    })
+
+    await env.DB.prepare(
+      "UPDATE site_settings SET value = 'false' WHERE key = 'require_login'",
+    ).run()
+
+    try {
+      const publicAccess = await SELF.fetch("http://example.com/api/not-a-real-route")
+      expect(publicAccess.status).toBe(404)
+
+      const status = await SELF.fetch("http://example.com/api/site-status")
+      expect(await status.json()).toMatchObject({
+        require_login: false,
+        login_enabled: true,
+      })
+    } finally {
+      await env.DB.prepare(
+        "UPDATE site_settings SET value = 'true' WHERE key = 'require_login'",
+      ).run()
+    }
+  })
+
+  it("requires a session when the site is private", async () => {
+    await env.DB.prepare(
+      "UPDATE site_settings SET value = ? WHERE key = 'site_visibility'",
+    ).bind(JSON.stringify("private")).run()
+
+    try {
+      const anonymous = await SELF.fetch("http://example.com/api/not-a-real-route")
+      expect(anonymous.status).toBe(401)
+      expect(await anonymous.json()).toMatchObject({
+        error: "Authentication required",
+      })
+
+      const authenticated = await SELF.fetch("http://example.com/api/not-a-real-route", {
+        headers: { Cookie: await createUserSession() },
+      })
+      expect(authenticated.status).toBe(404)
+
+      const status = await SELF.fetch("http://example.com/api/site-status")
+      expect(status.status).toBe(200)
+      expect(await status.json()).toMatchObject({
+        site_visibility: "private",
+        maintenance_mode: false,
+      })
+    } finally {
+        await env.DB.prepare(
+        "UPDATE site_settings SET value = ? WHERE key = 'site_visibility'",
+      ).bind(JSON.stringify("public")).run()
+    }
+  })
+
+  it("restricts maintenance mode to important settings admins while allowing the login flow", async () => {
+    await env.DB.prepare(
+      "UPDATE site_settings SET value = 'true' WHERE key = 'maintenance_mode'",
+    ).run()
+
+    try {
+      const anonymous = await SELF.fetch("http://example.com/api/not-a-real-route")
+      expect(anonymous.status).toBe(503)
+
+      const regularUser = await SELF.fetch("http://example.com/api/not-a-real-route", {
+        headers: { Cookie: await createUserSession() },
+      })
+      expect(regularUser.status).toBe(503)
+      expect(await regularUser.json()).toMatchObject({
+        error: "Maintenance mode",
+      })
+
+      const regularAdmin = await SELF.fetch("http://example.com/api/not-a-real-route", {
+        headers: { Cookie: await createAdminSession() },
+      })
+      expect(regularAdmin.status).toBe(503)
+
+      const importantAdmin = await SELF.fetch("http://example.com/api/not-a-real-route", {
+        headers: { Cookie: (await createImportantAdminSession()).cookie },
+      })
+      expect(importantAdmin.status).toBe(404)
+
+      const login = await SELF.fetch("http://example.com/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+      expect(login.status).toBe(400)
+    } finally {
+      await env.DB.prepare(
+        "UPDATE site_settings SET value = 'false' WHERE key = 'maintenance_mode'",
+      ).run()
+    }
+  })
+
+  it("serves only public configuration through the site-config endpoint", async () => {
+    const response = await SELF.fetch("http://example.com/api/site-config")
+    expect(response.status).toBe(200)
+    const body = await response.json() as Record<string, unknown>
+    expect(body).toHaveProperty("site_name")
+    expect(body).toHaveProperty("timezone")
+    expect(body).toHaveProperty("feature_enabled")
+    expect(body).not.toHaveProperty("site_visibility")
+    expect(body).not.toHaveProperty("maintenance_mode")
+    expect(body).not.toHaveProperty("login_enabled")
+    expect(body).not.toHaveProperty("security_settings")
+  })
+
+  it("validates extended settings and exposes system health to admins", async () => {
+    const cookie = await createAdminSession()
+    const invalidNotification = await SELF.fetch(
+      "http://example.com/api/admin/settings",
+      {
+        method: "PATCH",
+        headers: { Cookie: cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: {
+            notification_settings: {
+              enabled: true,
+              categories: { tool_rental: true },
+              return_due_all_users: false,
+            },
+          },
+        }),
+      },
+    )
+    expect(invalidNotification.status).toBe(400)
+
+    const invalidSecurity = await SELF.fetch(
+      "http://example.com/api/admin/settings",
+      {
+        method: "PATCH",
+        headers: { Cookie: cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: {
+            security_settings: {
+              session_duration_hours: 24,
+              login_attempt_limit: 5,
+              login_lock_minutes: 15,
+              force_password_change: false,
+            },
+          },
+        }),
+      },
+    )
+    expect(invalidSecurity.status).toBe(403)
+
+    const systemInfo = await SELF.fetch(
+      "http://example.com/api/admin/settings/system-info",
+      { headers: { Cookie: cookie } },
+    )
+    expect(systemInfo.status).toBe(200)
+    expect(await systemInfo.json()).toMatchObject({
+      api_status: "ok",
+      database_status: "ok",
+    })
+  })
+
+  it("invalidates all sessions only through the important-admin endpoint", async () => {
+    const { cookie } = await createImportantAdminSession()
+    const response = await SELF.fetch(
+      "http://example.com/api/admin/settings/force-logout",
+      { method: "POST", headers: { Cookie: cookie } },
+    )
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ success: true })
+    const sessions = await env.DB.prepare("SELECT COUNT(*) AS count FROM sessions")
+      .first<{ count: number }>()
+    expect(sessions?.count ?? 0).toBe(0)
+  })
+
+  it("locks repeated failed login attempts using the configured threshold", async () => {
+    const userId = await createUser("ログインロックテスト")
+    const studentNumber = `role-test-${userId}`
+    const password = "valid-test-password"
+    await env.DB.prepare(
+      "UPDATE users SET password_hash = ? WHERE id = ?",
+    ).bind(await hashPassword(password), userId).run()
+
+    const previous = await env.DB.prepare(
+      "SELECT value FROM site_settings WHERE key = 'security_settings'",
+    ).first<{ value: string }>()
+    const securitySettings = previous ? JSON.parse(previous.value) : {}
+    await env.DB.prepare(
+      "UPDATE site_settings SET value = ? WHERE key = 'security_settings'",
+    ).bind(JSON.stringify({
+      ...securitySettings,
+      login_attempt_limit: 3,
+      login_lock_minutes: 5,
+    })).run()
+
+    try {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const failed = await SELF.fetch("http://example.com/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ student_number: studentNumber, password: "wrong-password" }),
+        })
+        expect(failed.status).toBe(401)
+      }
+
+      const locked = await SELF.fetch("http://example.com/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ student_number: studentNumber, password }),
+      })
+      expect(locked.status).toBe(429)
+      expect(locked.headers.get("Retry-After")).toBeTruthy()
+    } finally {
+      if (previous) {
+        await env.DB.prepare(
+          "UPDATE site_settings SET value = ? WHERE key = 'security_settings'",
+        ).bind(previous.value).run()
+      }
+    }
+  })
+
 })

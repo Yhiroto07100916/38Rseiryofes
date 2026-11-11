@@ -25,6 +25,7 @@ import { useApi } from '~/composables/useApi'
 import { useAuthStore } from '~/stores/auth'
 
 const auth = useAuthStore()
+const siteStatus = useSiteStatus()
 const snackbar = useSnackbar()
 const { apiFetch } = useApi()
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -46,8 +47,9 @@ const selectAvatar = (event: Event) => {
     input.value = ''
     return
   }
-  if (file.size === 0 || file.size > 4 * 1024 * 1024) {
-    snackbar.error('画像は4MB以下にしてください。')
+  const maxAvatarSizeMb = Math.min(4, siteStatus.value?.upload_max_file_size_mb ?? 25)
+  if (file.size === 0 || file.size > maxAvatarSizeMb * 1024 * 1024) {
+    snackbar.error(`画像は${maxAvatarSizeMb}MB以下にしてください。`)
     input.value = ''
     return
   }

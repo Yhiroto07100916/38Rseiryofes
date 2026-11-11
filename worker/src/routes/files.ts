@@ -1,4 +1,5 @@
 import { hasPermission, requireAuth } from "../lib/authz"
+import { getSiteSetting } from "../lib/site-settings"
 
 type Env = {
   DB: D1Database
@@ -6,7 +7,6 @@ type Env = {
   AI: Ai
 }
 
-const MAX_FILE_SIZE = 25 * 1024 * 1024
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -166,6 +166,13 @@ export async function handleFiles(
   if (auth instanceof Response) {
     return auth
   }
+
+  const operationSettings = await getSiteSetting<{ upload_max_file_size_mb?: number }>(
+    env,
+    "operation_settings",
+    { upload_max_file_size_mb: 25 },
+  )
+  const maxFileSize = Math.max(1, Math.min(100, Number(operationSettings.upload_max_file_size_mb) || 25)) * 1024 * 1024
 
   try {
     const url = new URL(request.url)
@@ -666,12 +673,12 @@ export async function handleFiles(
 
       if (
         Number.isFinite(contentLength) &&
-        contentLength > MAX_FILE_SIZE + 1024 * 1024
+        contentLength > maxFileSize + 1024 * 1024
       ) {
         return json(
           {
             error: "File is too large",
-            max_size: MAX_FILE_SIZE,
+            max_size: maxFileSize,
           },
           413,
         )
@@ -695,11 +702,11 @@ export async function handleFiles(
         )
       }
 
-      if (file.size > MAX_FILE_SIZE) {
+      if (file.size > maxFileSize) {
         return json(
           {
             error: "File is too large",
-            max_size: MAX_FILE_SIZE,
+            max_size: maxFileSize,
           },
           413,
         )

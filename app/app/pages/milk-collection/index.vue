@@ -696,6 +696,7 @@
 </template>
 
 <script setup lang="ts">
+import { getDefaultTimeZone } from '~/utils/jst'
 import {
   computed,
   onMounted,
@@ -858,7 +859,7 @@ function fmt(v: string | null) {
   return Number.isNaN(d.getTime())
     ? v
     : new Intl.DateTimeFormat('ja-JP', {
-        timeZone: 'Asia/Tokyo',
+        timeZone: getDefaultTimeZone(),
         dateStyle: 'medium',
         timeStyle: 'short',
       }).format(d)

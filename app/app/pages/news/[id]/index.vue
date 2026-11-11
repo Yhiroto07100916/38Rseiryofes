@@ -298,6 +298,7 @@
 </template>
 
 <script setup lang="ts">
+import { getDefaultTimeZone } from '~/utils/jst'
 import { onMounted, ref } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
 import {
@@ -335,7 +336,7 @@ const formatDateTime = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: getDefaultTimeZone(),
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -354,7 +355,7 @@ const formatEventDate = (
   }
 
   const date = new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: getDefaultTimeZone(),
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -365,7 +366,7 @@ const formatEventDate = (
   }
 
   const time = new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: getDefaultTimeZone(),
     hour: '2-digit',
     minute: '2-digit',
   }).format(start)
@@ -381,7 +382,7 @@ const formatEventDate = (
   }
 
   const endTime = new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: getDefaultTimeZone(),
     hour: '2-digit',
     minute: '2-digit',
   }).format(end)
@@ -506,7 +507,7 @@ const formatTaskDueDate = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: getDefaultTimeZone(),
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',

@@ -7,6 +7,7 @@ interface AuthUser {
   name: string
   nickname: string | null
   avatar_key: string | null
+  must_change_password?: boolean
 }
 
 interface AuthRole {

@@ -26,6 +26,243 @@ import { handleAvatarImage, handleAvatarMutation, processQueuedAvatarDeletions }
 import { handleSubmissions, processDueSubmissionNotifications } from "./routes/submissions"
 import { handleWishlist } from "./routes/wishlist"
 import { processDueCalendarNotifications } from "./routes/calendar-reminders"
+import { getSessionUser } from "./lib/session"
+import { getSecuritySettings, getSiteSetting } from "./lib/site-settings"
+
+async function readSiteAccessSettings(env: Env): Promise<{
+  visibility: "public" | "private"
+  maintenanceMode: boolean
+  maintenanceMessage: string
+  requireLogin: boolean
+  loginEnabled: boolean
+  siteName: string
+  siteDescription: string
+  eventName: string
+  eventYear: number
+  timezone: string
+  logoUrl: string
+  faviconUrl: string
+  socialLinks: Record<string, string>
+  calendarDefaultView: "month" | "list"
+  taskDefaultStatus: "todo" | "in_progress" | "review" | "done"
+  uploadMaxFileSizeMb: number
+  featureEnabled: Record<string, boolean>
+}> {
+  try {
+    const rows = await env.DB.prepare(`
+      SELECT key, value
+      FROM site_settings
+      WHERE key IN ('site_visibility', 'maintenance_mode', 'maintenance_message', 'require_login', 'login_enabled', 'site_name', 'site_description', 'event_name', 'event_year', 'timezone', 'logo_url', 'favicon_url', 'social_links', 'operation_settings', 'feature_settings')
+    `).all<{ key: string; value: string }>()
+
+    const settings = new Map(rows.results.map(row => {
+      try {
+        return [row.key, JSON.parse(row.value)] as const
+      } catch {
+        return [row.key, null] as const
+      }
+    }))
+
+    return {
+      visibility: settings.get("site_visibility") === "private" ? "private" : "public",
+      maintenanceMode: settings.get("maintenance_mode") === true,
+      maintenanceMessage: typeof settings.get("maintenance_message") === "string"
+        ? settings.get("maintenance_message") as string
+        : "現在メンテナンス中です。しばらくお待ちください。",
+      requireLogin: settings.get("require_login") !== false,
+      loginEnabled: settings.get("login_enabled") !== false,
+      siteName: typeof settings.get("site_name") === "string" ? settings.get("site_name") as string : "38R星陵祭準備サイト",
+      siteDescription: typeof settings.get("site_description") === "string" ? settings.get("site_description") as string : "38Rの星陵祭準備を管理するサイトです。",
+      eventName: typeof settings.get("event_name") === "string" ? settings.get("event_name") as string : "星陵祭",
+      eventYear: typeof settings.get("event_year") === "number" ? settings.get("event_year") as number : 2026,
+      timezone: typeof settings.get("timezone") === "string" ? settings.get("timezone") as string : "Asia/Tokyo",
+      logoUrl: typeof settings.get("logo_url") === "string" ? settings.get("logo_url") as string : "",
+      faviconUrl: typeof settings.get("favicon_url") === "string" ? settings.get("favicon_url") as string : "",
+      socialLinks: (() => {
+        const links = settings.get("social_links")
+        if (!links || typeof links !== "object" || Array.isArray(links)) return {}
+        return Object.fromEntries(
+          Object.entries(links as Record<string, unknown>)
+            .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].startsWith("https://")),
+        )
+      })(),
+      calendarDefaultView: (() => {
+        const operation = settings.get("operation_settings") as { calendar_default_view?: unknown } | null
+        return operation?.calendar_default_view === "list" ? "list" : "month"
+      })(),
+      taskDefaultStatus: (() => {
+        const operation = settings.get("operation_settings") as { task_default_status?: unknown } | null
+        const status = operation?.task_default_status
+        return status === "in_progress" || status === "review" || status === "done" ? status : "todo"
+      })(),
+      uploadMaxFileSizeMb: (() => {
+        const operation = settings.get("operation_settings") as { upload_max_file_size_mb?: unknown } | null
+        const value = Number(operation?.upload_max_file_size_mb)
+        return Number.isFinite(value) ? Math.max(1, Math.min(100, value)) : 25
+      })(),
+      featureEnabled: (() => {
+        const features = settings.get("feature_settings") as Record<string, { enabled?: boolean }> | null
+        return Object.fromEntries(Object.entries(features ?? {}).map(([key, value]) => [key, value?.enabled !== false]))
+      })(),
+    }
+  } catch {
+    // Keep the existing access behavior until the settings migration is applied.
+    return {
+      visibility: "public",
+      maintenanceMode: false,
+      maintenanceMessage: "現在メンテナンス中です。しばらくお待ちください。",
+      requireLogin: true,
+      loginEnabled: true,
+      siteName: "38R星陵祭準備サイト",
+      siteDescription: "38Rの星陵祭準備を管理するサイトです。",
+      eventName: "星陵祭",
+      eventYear: 2026,
+      timezone: "Asia/Tokyo",
+      logoUrl: "",
+      faviconUrl: "",
+      socialLinks: {},
+      calendarDefaultView: "month",
+      taskDefaultStatus: "todo",
+      uploadMaxFileSizeMb: 25,
+      featureEnabled: {},
+    }
+  }
+}
+
+async function enforceSiteAccess(
+  request: Request,
+  env: Env,
+  pathname: string,
+): Promise<Response | null> {
+  if (
+    request.method === "OPTIONS" ||
+    pathname === "/health" ||
+    pathname === "/health/db" ||
+    pathname === "/api/site-status" ||
+    pathname === "/api/auth/login" ||
+    pathname === "/api/auth/me" ||
+    pathname === "/api/auth/logout"
+  ) {
+    return null
+  }
+
+  const settings = await readSiteAccessSettings(env)
+  const user = await getSessionUser(request, env)
+
+  const featurePathMap: Array<[string, string]> = [
+    ["/api/tasks", "tasks"],
+    ["/api/calendar/categories", "calendar"],
+    ["/api/calendar", pathname.includes("/attendance") ? "attendance" : "calendar"],
+    ["/api/news", "news"],
+    ["/api/scripts", "scripts"],
+    ["/api/accounting", "accounting"],
+    ["/api/equipment", "equipment"],
+    ["/api/surveys", "surveys"],
+    ["/api/files", "files"],
+    ["/api/public/files", "files"],
+    ["/api/submissions", "submissions"],
+    ["/api/decisions", "decisions"],
+    ["/api/minutes", "minutes"],
+    ["/api/tool-rental", "tool_rental"],
+    ["/api/wishlist", "wishlist"],
+    ["/api/milk-collection", "milk_collection"],
+    ["/api/auth/avatar", "members"],
+    ["/api/avatars", "members"],
+    ["/api/presence", "members"],
+    ["/api/users", "members"],
+  ]
+  const matchedFeature = featurePathMap.find(([prefix]) =>
+    pathname === prefix || pathname.startsWith(prefix + "/"),
+  )
+  if (matchedFeature) {
+    const featureSettings = await getSiteSetting<Record<string, {
+      enabled?: boolean
+      view?: boolean
+      create?: boolean
+      edit?: boolean
+      delete?: boolean
+    }>>(
+      env,
+      "feature_settings",
+      {},
+    )
+    const feature = featureSettings[matchedFeature[1]]
+    if (feature?.enabled === false) {
+      return Response.json(
+        { error: "This feature is currently disabled", feature: matchedFeature[1] },
+        { status: 503 },
+      )
+    }
+    const action = request.method === "GET" || request.method === "HEAD"
+      ? "view"
+      : request.method === "PATCH" || request.method === "PUT"
+        ? "edit"
+        : request.method === "DELETE"
+          ? "delete"
+          : request.method === "POST" && pathname === matchedFeature[0]
+            ? "create"
+            : null
+    if (action && feature?.[action] === false) {
+      return Response.json(
+        { error: "This operation is disabled by site settings", feature: matchedFeature[1], action },
+        { status: 403 },
+      )
+    }
+  }
+
+  if (user) {
+    const securitySettings = await getSecuritySettings(env)
+    if (securitySettings.force_password_change) {
+      const passwordState = await env.DB.prepare(
+        "SELECT password_changed_at FROM users WHERE id = ?",
+      ).bind(user.id).first<{ password_changed_at: string | null }>()
+      const allowedDuringPasswordChange = [
+        "/api/auth/me",
+        "/api/auth/password",
+        "/api/auth/logout",
+      ].includes(pathname)
+      if (!passwordState?.password_changed_at && !allowedDuringPasswordChange) {
+        return Response.json(
+          { error: "Password change required", code: "PASSWORD_CHANGE_REQUIRED" },
+          { status: 403 },
+        )
+      }
+    }
+  }
+
+  if (settings.maintenanceMode) {
+    if (!user) {
+      return Response.json(
+        { error: "Maintenance mode", message: settings.maintenanceMessage },
+        { status: 503 },
+      )
+    }
+
+    const admin = await env.DB.prepare(`
+      SELECT 1
+      FROM user_account_roles uar
+      INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+      WHERE uar.user_id = ? AND ar.name = 'important_settings_admin'
+      LIMIT 1
+    `).bind(user.id).first()
+
+    if (!admin) {
+      return Response.json(
+        { error: "Maintenance mode", message: settings.maintenanceMessage },
+        { status: 503 },
+      )
+    }
+  }
+
+  if (settings.visibility === "private" && !user) {
+    return Response.json(
+      { error: "Authentication required", message: "このサイトは非公開です。ログインしてください。" },
+      { status: 401 },
+    )
+  }
+
+  return null
+}
 
 function getCorsHeaders(request: Request): Headers {
   const origin = request.headers.get("Origin")
@@ -104,6 +341,71 @@ export default {
           service: "38r-seiryofes",
         }),
       )
+    }
+
+    if (url.pathname === "/api/site-config" && request.method === "GET") {
+      const settings = await readSiteAccessSettings(env)
+      return withCors(request, Response.json({
+        site_name: settings.siteName,
+        site_description: settings.siteDescription,
+        event_name: settings.eventName,
+        event_year: settings.eventYear,
+        timezone: settings.timezone,
+        logo_url: settings.logoUrl,
+        favicon_url: settings.faviconUrl,
+        social_links: settings.socialLinks,
+        calendar_default_view: settings.calendarDefaultView,
+        task_default_status: settings.taskDefaultStatus,
+        upload_max_file_size_mb: settings.uploadMaxFileSizeMb,
+        feature_enabled: settings.featureEnabled,
+      }))
+    }
+
+    if (url.pathname === "/api/site-status" && request.method === "GET") {
+      const settings = await readSiteAccessSettings(env)
+      const user = await getSessionUser(request, env)
+      const [isAdmin, isImportantSettingsAdmin] = user
+        ? await Promise.all([
+            env.DB.prepare(`
+              SELECT 1 FROM user_account_roles uar
+              INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+              WHERE uar.user_id = ? AND ar.name = 'admin' LIMIT 1
+            `).bind(user.id).first(),
+            env.DB.prepare(`
+              SELECT 1 FROM user_account_roles uar
+              INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+              WHERE uar.user_id = ? AND ar.name = 'important_settings_admin' LIMIT 1
+            `).bind(user.id).first(),
+          ]).then(([admin, important]) => [Boolean(admin), Boolean(important)] as const)
+        : [false, false]
+
+      return withCors(request, Response.json({
+        site_visibility: settings.visibility,
+        maintenance_mode: settings.maintenanceMode,
+        maintenance_message: settings.maintenanceMessage,
+        require_login: settings.requireLogin,
+        login_enabled: settings.loginEnabled,
+        site_name: settings.siteName,
+        site_description: settings.siteDescription,
+        event_name: settings.eventName,
+        event_year: settings.eventYear,
+        timezone: settings.timezone,
+        logo_url: settings.logoUrl,
+        favicon_url: settings.faviconUrl,
+        social_links: settings.socialLinks,
+        calendar_default_view: settings.calendarDefaultView,
+        task_default_status: settings.taskDefaultStatus,
+        upload_max_file_size_mb: settings.uploadMaxFileSizeMb,
+        feature_enabled: settings.featureEnabled,
+        is_authenticated: Boolean(user),
+        is_admin: isAdmin,
+        is_important_settings_admin: isImportantSettingsAdmin,
+      }))
+    }
+
+    const siteAccessError = await enforceSiteAccess(request, env, url.pathname)
+    if (siteAccessError) {
+      return withCors(request, siteAccessError)
     }
 
     if (url.pathname === "/health/db") {
@@ -517,6 +819,24 @@ export default {
             { status: 500 },
           ),
         )
+      }
+    }
+
+    if (
+      url.pathname === "/api/admin/settings" ||
+      url.pathname.startsWith("/api/admin/settings/")
+    ) {
+      const suffix = url.pathname.slice("/api/admin/settings".length)
+      const pathParts = suffix.split("/").filter(Boolean)
+      if (pathParts[0] === "roles") pathParts[0] = "important-admins"
+      try {
+        return withCors(
+          request,
+          await handleAccountRoles(request, env, ["settings", ...pathParts]),
+        )
+      } catch (error) {
+        console.error("Admin settings API error:", error)
+        return withCors(request, Response.json({ error: "Internal Server Error" }, { status: 500 }))
       }
     }
 

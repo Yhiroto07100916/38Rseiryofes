@@ -53,6 +53,7 @@
 </template>
 
 <script setup lang="ts">
+import { getDefaultTimeZone, jstDateTimeLocalToIso } from '~/utils/jst'
 import type { CurrentLoanItem } from '~/types/tool-rental'
 
 definePageMeta({ middleware: 'auth' })
@@ -84,8 +85,8 @@ const formatDate = (value: string) => {
   const normalized = value.replace(' ', 'T')
   const date = /(?:Z|[+-]\d{2}:\d{2})$/.test(normalized)
     ? new Date(normalized)
-    : new Date(`${normalized}+09:00`)
-  return date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+    : new Date(jstDateTimeLocalToIso(normalized.replace(' ', 'T'), getDefaultTimeZone()))
+  return date.toLocaleString('ja-JP', { timeZone: getDefaultTimeZone() })
 }
 const showMessage = (message: string, color = 'success') => {
   snackbarText.value = message

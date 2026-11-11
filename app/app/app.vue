@@ -5,3 +5,32 @@
   <CommonAppConfirmDialog />
   <CommonAppSnackbar />
 </template>
+
+<script setup lang="ts">
+import { setDefaultTimeZone } from "~/utils/jst"
+
+const siteStatus = useSiteStatus()
+
+watch(
+  () => siteStatus.value?.timezone,
+  (timeZone) => setDefaultTimeZone(timeZone),
+  { immediate: true },
+)
+
+useHead(() => {
+  const siteName = siteStatus.value?.site_name || "38R 星陵祭準備サイト"
+  const siteDescription =
+    siteStatus.value?.site_description || "38Rの星陵祭準備を管理するサイトです。"
+
+  return {
+    title: siteName,
+    meta: [
+      { name: "description", content: siteDescription },
+      { name: "apple-mobile-web-app-title", content: siteName },
+    ],
+    link: siteStatus.value?.favicon_url
+      ? [{ rel: "icon", href: siteStatus.value.favicon_url }]
+      : [],
+  }
+})
+</script>
