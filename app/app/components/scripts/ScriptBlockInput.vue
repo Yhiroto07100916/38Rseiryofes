@@ -14,7 +14,7 @@
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 
 const props = withDefaults(defineProps<{
   modelValue: string
