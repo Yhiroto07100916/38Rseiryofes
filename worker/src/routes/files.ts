@@ -204,7 +204,7 @@ export async function handleFiles(
         const pending = await env.DB.prepare(`
           SELECT id, object_key, original_name, content_type, size, category, uploaded_by, ai_search_item_id
           FROM files
-          WHERE archived_at IS NULL AND ai_status IN ('pending', 'failed')
+          WHERE archived_at IS NULL AND ai_status = 'pending'
           ORDER BY created_at DESC
           LIMIT 10
         `).all<{
@@ -233,10 +233,20 @@ export async function handleFiles(
         const remaining = await env.DB.prepare(`
           SELECT COUNT(*) AS count
           FROM files
-          WHERE archived_at IS NULL AND ai_status IN ('pending', 'failed')
+          WHERE archived_at IS NULL AND ai_status = 'pending'
         `).first<{ count: number }>()
 
-        return json({ queued: filesToIndex.length, remaining: Number(remaining?.count ?? 0) }, 202)
+        const failed = await env.DB.prepare(`
+          SELECT COUNT(*) AS count
+          FROM files
+          WHERE archived_at IS NULL AND ai_status = 'failed'
+        `).first<{ count: number }>()
+
+        return json({
+          queued: filesToIndex.length,
+          remaining: Number(remaining?.count ?? 0),
+          failed: Number(failed?.count ?? 0),
+        }, 202)
       }
 
       let body: { query?: unknown; category?: unknown }
