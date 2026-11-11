@@ -3143,6 +3143,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   width: 100%;
   direction: ltr;
   text-align: start;
+  text-indent: 0;
   min-height: 430px;
   height: 100%;
   resize: none;
