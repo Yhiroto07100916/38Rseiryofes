@@ -87,7 +87,7 @@
           density="comfortable"
           hide-details
           :disabled="aiSearching"
-          @keydown.enter="runAiSearch"
+          @keydown.enter="handleAiSearchEnter"
         />
         <div class="d-flex flex-wrap align-center ga-2 mt-3">
           <v-btn
@@ -109,6 +109,17 @@
           >
             既存資料を検索対象に登録
           </v-btn>
+          <v-btn
+            v-if="canManageFiles"
+            color="warning"
+            variant="outlined"
+            prepend-icon="mdi-replay"
+            :loading="aiRetrying"
+            :disabled="aiIndexing || aiRetrying"
+            @click="retryFailedFiles"
+          >
+            失敗した資料を再試行
+          </v-btn>
         </div>
         <v-alert v-if="aiSearchError" type="error" variant="tonal" density="compact" class="mt-3">
           {{ aiSearchError }}
@@ -128,23 +139,11 @@
               :key="result.file.id"
               rounded="lg"
               class="mb-1"
+              :title="result.file.original_name"
+              :prepend-icon="fileIcon(result.file.content_type)"
+              append-icon="mdi-open-in-new"
               @click="previewFile(result.file)"
-            >
-              <template #prepend>
-                <v-icon :icon="fileIcon(result.file.content_type)" />
-              </template>
-              <v-list-item-title class="text-wrap">{{ result.file.original_name }}</v-list-item-title>
-              <v-list-item-subtitle class="text-wrap">
-                {{ categoryName(result.file.category) }} · {{ Math.round(result.score * 100) }}% 関連
-              </v-list-item-subtitle>
-              <div
-                v-for="(snippet, index) in result.snippets.slice(0, 2)"
-                :key="index"
-                class="text-caption text-medium-emphasis mt-2 text-wrap"
-              >
-                {{ snippet }}
-              </div>
-            </v-list-item>
+            />
           </v-list>
         </div>
         <div v-else-if="aiSearchCompleted" class="text-body-2 text-medium-emphasis mt-3">
@@ -373,13 +372,13 @@
                   >
                     AI検索未登録
                   </v-chip>
-
                   <div
-                    v-if="file.ai_summary"
-                    class="text-medium-emphasis text-body-2 file-summary"
+                    v-if="file.ai_status === 'failed' && file.ai_error"
+                    class="text-caption text-warning mt-1"
                   >
-                    {{ file.ai_summary }}
+                    {{ file.ai_error }}
                   </div>
+
                 </div>
               </div>
 
@@ -708,7 +707,7 @@ definePageMeta({
   middleware: ['auth'],
 })
 
-import { nextTick } from "vue"
+import { nextTick, onBeforeUnmount } from "vue"
 import { useConfirmDialog } from '~/composables/useConfirmDialog'
 
 interface FileCategory {
@@ -747,6 +746,7 @@ interface ManagedFile {
   archived_at: string | null
   ai_status?: string
   ai_summary?: string | null
+  ai_error?: string | null
 }
 
 const { apiFetch } = useApi()
@@ -757,6 +757,8 @@ const config = useRuntimeConfig()
 const auth = useAuthStore()
 const siteStatus = useSiteStatus()
 
+let aiSearchStatusPollTimer: ReturnType<typeof setTimeout> | null = null
+
 const loading = ref(false)
 const uploading = ref(false)
 const aiSearchQuery = ref("")
@@ -765,6 +767,7 @@ const aiSearchAnswer = ref("")
 const aiSearchError = ref("")
 const aiSearchCompleted = ref(false)
 const aiIndexing = ref(false)
+const aiRetrying = ref(false)
 const aiIndexMessage = ref("")
 const aiSearchResults = ref<Array<{
   file: ManagedFile
@@ -937,6 +940,14 @@ const fileIcon = (contentType: string) => {
   return 'mdi-file-outline'
 }
 
+const handleAiSearchEnter = (event: KeyboardEvent) => {
+  // 日本語IMEの変換確定 Enter では検索を開始しない
+  if (event.isComposing || event.keyCode === 229) return
+
+  event.preventDefault()
+  void runAiSearch()
+}
+
 const runAiSearch = async () => {
   const query = aiSearchQuery.value.trim()
   if (!query || aiSearching.value || showArchived.value) return
@@ -976,26 +987,60 @@ const registerExistingFiles = async () => {
   try {
     let remaining = 1
     let totalQueued = 0
+    let failedCount = 0
     let batches = 0
     while (remaining > 0 && batches < 100) {
-      const response = await apiFetch<{ queued: number; remaining: number }>(
+      const response = await apiFetch<{ queued: number; remaining: number; failed: number }>(
         "/api/files/ai-search/reindex",
         { method: "POST" },
       )
       totalQueued += response.queued
       remaining = response.remaining
+      failedCount = response.failed
       batches += 1
       if (response.queued === 0) break
     }
     aiIndexMessage.value = totalQueued
-      ? `${totalQueued}件の資料をAI検索に登録しました。解析完了まで少し時間がかかります。`
-      : "追加で登録する資料はありません。"
+      ? `${totalQueued}件の資料の登録処理を開始しました。解析完了まで少し時間がかかります。${failedCount > 0 ? `（別途、登録に失敗している資料が${failedCount}件あります。再試行は行っていません。）` : ""}`
+      : failedCount > 0
+        ? `新たに登録する資料はありません。登録に失敗している資料が${failedCount}件あります。`
+        : "追加で登録する資料はありません。"
     await loadFiles()
   } catch (error) {
     console.error(error)
     aiSearchError.value = "既存資料の登録に失敗しました。"
   } finally {
     aiIndexing.value = false
+  }
+}
+
+const retryFailedFiles = async () => {
+  if (aiRetrying.value || aiIndexing.value) return
+
+  aiRetrying.value = true
+  aiIndexMessage.value = ""
+  aiSearchError.value = ""
+
+  try {
+    const response = await apiFetch<{
+      queued: number
+      remainingFailed: number
+    }>("/api/files/ai-search/retry-failed", {
+      method: "POST",
+    })
+
+    aiIndexMessage.value = response.queued
+      ? response.remainingFailed > 0
+        ? response.queued + "件の資料の再登録を開始しました。未処理の失敗資料が" + response.remainingFailed + "件あります。残りは処理状況を確認してから再試行してください。"
+        : response.queued + "件の資料の再登録を開始しました。解析完了まで少し時間がかかります。"
+      : "再試行できる資料はありませんでした。"
+
+    await loadFiles()
+  } catch (error) {
+    console.error(error)
+    aiSearchError.value = "失敗した資料の再試行に失敗しました。AI Searchの接続設定を確認してください。"
+  } finally {
+    aiRetrying.value = false
   }
 }
 
@@ -1164,10 +1209,23 @@ const createFolder = async () => {
 }
 
 const loadFiles = async () => {
+  if (aiSearchStatusPollTimer) {
+    clearTimeout(aiSearchStatusPollTimer)
+    aiSearchStatusPollTimer = null
+  }
+
   loading.value = true
   errorMessage.value = ''
 
   try {
+    if (canManageFiles.value && !showArchived.value) {
+      try {
+        await apiFetch('/api/files/ai-search/sync-status', { method: 'POST' })
+      } catch (syncError) {
+        console.warn('AI Search status refresh failed:', syncError)
+      }
+    }
+
     const params = new URLSearchParams()
     params.set('limit', '200')
     if (search.value.trim()) params.set('search', search.value.trim())
@@ -1189,6 +1247,16 @@ const loadFiles = async () => {
       ...file,
       folder_path: file.folder_id ? folderPaths.get(file.folder_id) ?? '不明なフォルダ' : 'ルート',
     }))
+
+    if (
+      canManageFiles.value &&
+      !showArchived.value &&
+      files.value.some(file => file.ai_status === 'processing')
+    ) {
+      aiSearchStatusPollTimer = setTimeout(() => {
+        void loadFiles()
+      }, 5000)
+    }
   } catch (error) {
     console.error(error)
     errorMessage.value = 'ファイル一覧を取得できませんでした。'
@@ -1587,6 +1655,13 @@ watch([categoryFilter, showArchived], () => {
   void loadFiles()
 })
 
+onBeforeUnmount(() => {
+  if (aiSearchStatusPollTimer) {
+    clearTimeout(aiSearchStatusPollTimer)
+    aiSearchStatusPollTimer = null
+  }
+})
+
 onMounted(async () => {
   try {
     await loadCategories()
@@ -1654,8 +1729,7 @@ onMounted(async () => {
   line-height: 1.5;
 }
 
-.file-metadata,
-.file-summary {
+.file-metadata {
   overflow-wrap: anywhere;
   word-break: break-word;
   line-height: 1.5;
