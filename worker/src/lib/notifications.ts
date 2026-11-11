@@ -1,4 +1,4 @@
-import { enqueueNotificationPushDeliveries } from "../routes/push"
+import { enqueueNotificationPushDeliveries, processDueNotificationPushDeliveries } from "../routes/push"
 
 export interface CreateNotificationsInput {
   recipientUserIds: string[]
@@ -60,6 +60,15 @@ export async function createNotificationsForUsers(
       } catch (error) {
         console.error("Failed to enqueue notification Push delivery:", error)
       }
+    }
+  }
+
+  if (createdCount > 0) {
+    // 通知の作成直後にPush配信を開始する。失敗分はキューに残り、Cronで再試行する。
+    try {
+      await processDueNotificationPushDeliveries(env)
+    } catch (error) {
+      console.error("Failed to start notification Push delivery:", error)
     }
   }
 
