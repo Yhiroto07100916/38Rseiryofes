@@ -277,6 +277,8 @@ describe("Files access permissions", () => {
     })
     expect(uploadResponse.status).toBe(403)
 
+    await grantPermissions(fixture.userId, ["accounting.view"])
+
     await env.DB.prepare(`
       DELETE FROM user_permissions
       WHERE user_id = ?
