@@ -190,6 +190,77 @@ export async function handleFiles(
 
 
     if (pathParts[0] === "ai-search" && request.method === "POST") {
+      if (pathParts[1] === "retry-failed") {
+        const canManage = await env.DB.prepare(`
+          SELECT 1
+          FROM user_account_roles uar
+          INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+          WHERE uar.user_id = ? AND ar.name IN ('admin', 'class_representative')
+          LIMIT 1
+        `).bind(auth.user.id).first()
+
+        if (!canManage) return json({ error: "Forbidden" }, 403)
+        if (!env.AI_SEARCH) {
+          return json({
+            error: "AI Search is not configured for this Worker environment.",
+            code: "AI_SEARCH_NOT_CONFIGURED",
+          }, 503)
+        }
+
+        try {
+          await getFileSearchInstance(env)
+        } catch (error) {
+          console.error("AI Search availability check failed:", error)
+          return json({
+            error: "AI Searchに接続できません。WorkerのAI Search設定を確認してください。",
+            code: "AI_SEARCH_UNAVAILABLE",
+          }, 503)
+        }
+
+        const failed = await env.DB.prepare(`
+          SELECT id, object_key, original_name, content_type, size, category, uploaded_by, ai_search_item_id
+          FROM files
+          WHERE archived_at IS NULL AND ai_status = 'failed'
+          ORDER BY created_at DESC
+          LIMIT 10
+        `).all<{
+          id: string
+          object_key: string
+          original_name: string
+          content_type: string
+          size: number
+          category: string
+          uploaded_by: string
+          ai_search_item_id: string | null
+        }>()
+
+        const filesToRetry = failed.results ?? []
+        const claimedFiles = []
+        for (const file of filesToRetry) {
+          const claimed = await env.DB.prepare(`
+            UPDATE files
+            SET ai_status = 'processing', ai_error = NULL
+            WHERE id = ? AND ai_status = 'failed' AND archived_at IS NULL
+          `).bind(file.id).run()
+          if (claimed.meta.changes > 0) claimedFiles.push(file)
+        }
+
+        const indexing = Promise.all(claimedFiles.map(file => indexFileForAiSearch(env, file)))
+        if (ctx) ctx.waitUntil(indexing)
+        else await indexing
+
+        const remainingFailed = await env.DB.prepare(`
+          SELECT COUNT(*) AS count
+          FROM files
+          WHERE archived_at IS NULL AND ai_status = 'failed'
+        `).first<{ count: number }>()
+
+        return json({
+          queued: claimedFiles.length,
+          remainingFailed: Number(remainingFailed?.count ?? 0),
+        }, 202)
+      }
+
       if (pathParts[1] === "reindex") {
         const canManage = await env.DB.prepare(`
           SELECT 1
