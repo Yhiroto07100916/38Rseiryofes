@@ -1,4 +1,5 @@
 import { getSessionUser } from "../lib/session"
+import { getSiteSetting } from "../lib/site-settings"
 
 type AvatarEnv = Env & {
   FILES_BUCKET: R2Bucket
@@ -124,13 +125,23 @@ export async function handleAvatarMutation(
   }
 
   if (request.method === "POST") {
+    const operationSettings = await getSiteSetting<{ upload_max_file_size_mb?: number }>(
+      env,
+      "operation_settings",
+      { upload_max_file_size_mb: 25 },
+    )
+    const maxAvatarSize = Math.min(
+      MAX_AVATAR_SIZE,
+      Math.max(1, Math.min(100, Number(operationSettings.upload_max_file_size_mb) || 25)) * 1024 * 1024,
+    )
+    const maxAvatarSizeLabel = Math.floor(maxAvatarSize / (1024 * 1024))
     const contentLength = Number(request.headers.get("Content-Length"))
 
     if (
       Number.isFinite(contentLength) &&
-      contentLength > MAX_AVATAR_SIZE + MAX_MULTIPART_OVERHEAD
+      contentLength > maxAvatarSize + MAX_MULTIPART_OVERHEAD
     ) {
-      return json({ error: "画像は4MB以下にしてください" }, 413)
+      return json({ error: `画像は${maxAvatarSizeLabel}MB以下にしてください` }, 413)
     }
 
     let form: FormData
@@ -147,8 +158,8 @@ export async function handleAvatarMutation(
       return json({ error: "Avatar image is required" }, 400)
     }
 
-    if (file.size === 0 || file.size > MAX_AVATAR_SIZE) {
-      return json({ error: "画像は4MB以下にしてください" }, 413)
+    if (file.size === 0 || file.size > maxAvatarSize) {
+      return json({ error: `画像は${maxAvatarSizeLabel}MB以下にしてください` }, 413)
     }
 
     const buffer = await file.arrayBuffer()

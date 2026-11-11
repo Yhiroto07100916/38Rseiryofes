@@ -570,7 +570,7 @@
 </template>
 
 <script setup lang="ts">
-import { formatJstDateTimeLocal, jstDateKey, jstDateTimeLocalToIso } from '~/utils/jst'
+import { formatJstDateTimeLocal, jstDateKey, jstDateTimeLocalToIso , getDefaultTimeZone} from '~/utils/jst'
 import {
   computed,
   onMounted,
@@ -1289,7 +1289,7 @@ const formatDueDate = (value: string) => {
   return new Intl.DateTimeFormat(
     'ja-JP',
     {
-      timeZone: 'Asia/Tokyo',
+      timeZone: getDefaultTimeZone(),
       year: 'numeric',
       month: 'numeric',
       day: 'numeric',
@@ -1309,7 +1309,7 @@ const formatCommentDate = (value: string) => {
   return new Intl.DateTimeFormat(
     'ja-JP',
     {
-      timeZone: 'Asia/Tokyo',
+      timeZone: getDefaultTimeZone(),
       month: 'numeric',
       day: 'numeric',
       hour: '2-digit',

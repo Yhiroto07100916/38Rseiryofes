@@ -7,6 +7,23 @@
     class="app-navigation-drawer"
   >
     <div class="drawer-content">
+      <header class="site-branding">
+        <v-img
+          v-if="siteStatus?.logo_url"
+          :src="siteStatus.logo_url"
+          alt="サイトロゴ"
+          width="56"
+          height="56"
+          max-width="56"
+          class="site-branding-logo mb-2"
+          cover
+        />
+        <div class="site-branding-name">{{ siteStatus?.site_name || "38R 星陵祭準備サイト" }}</div>
+        <div class="site-branding-event">
+          {{ siteStatus ? `${siteStatus.event_year}年度 ${siteStatus.event_name}` : "38R 準備サイト" }}
+        </div>
+      </header>
+
       <section class="account-section">
         <template v-if="auth.isLoggedIn">
           <div class="account-header">
@@ -110,7 +127,7 @@
       <nav class="drawer-navigation">
         <template v-for="item in items" :key="item.title">
           <NuxtLink
-            v-if="(item.to !== '/notifications' || auth.isLoggedIn) && (!item.permission || auth.hasPermission(item.permission)) && (!item.permissions || item.permissions.some(permission => auth.hasPermission(permission)))"
+            v-if="(item.to !== '/notifications' || auth.isLoggedIn) && (!item.permission || auth.hasPermission(item.permission)) && (!item.permissions || item.permissions.some(permission => auth.hasPermission(permission))) && (!item.feature || siteStatus?.feature_enabled?.[item.feature] !== false)"
             :to="item.to"
             class="drawer-item"
             :class="{ 'is-active': route.path === item.to }"
@@ -125,6 +142,21 @@
           </NuxtLink>
         </template>
       </nav>
+
+      <footer v-if="socialLinks.length" class="drawer-social-links" aria-label="SNSリンク">
+        <a
+          v-for="item in socialLinks"
+          :key="item.key"
+          :href="item.url"
+          :aria-label="item.label"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="drawer-social-link"
+        >
+          <v-icon v-if="item.icon" :icon="item.icon" size="24" />
+          <span v-else class="drawer-social-x">𝕏</span>
+        </a>
+      </footer>
     </div>
   </v-navigation-drawer>
 </template>
@@ -136,6 +168,7 @@ interface NavigationItem {
   to: string
   permission?: string
   permissions?: string[]
+  feature?: string
 }
 
 const isOpen = defineModel<boolean>({
@@ -144,6 +177,23 @@ const isOpen = defineModel<boolean>({
 
 const route = useRoute()
 const auth = useAuthStore()
+const siteStatus = useSiteStatus()
+
+const socialLinkOptions = [
+  { key: 'instagram', label: 'Instagram', icon: 'mdi-instagram' },
+  { key: 'x', label: 'X', icon: '' },
+  { key: 'tiktok', label: 'TikTok', icon: 'mdi-music-note' },
+  { key: 'youtube', label: 'YouTube', icon: 'mdi-youtube' },
+  { key: 'github', label: 'GitHub', icon: 'mdi-github' },
+  { key: 'discord', label: 'Discord', icon: 'mdi-discord' },
+] as const
+
+const socialLinks = computed(() =>
+  socialLinkOptions.flatMap((item) => {
+    const url = siteStatus.value?.social_links?.[item.key]?.trim()
+    return url ? [{ ...item, url }] : []
+  }),
+)
 
 const isAdmin = computed(() =>
   auth.accountRoles.some((role) => role.name === 'admin'),
@@ -158,15 +208,15 @@ const isclassrepresentative = computed(() =>
 )
 
 const items: NavigationItem[] = [
-{ icon: "mdi-bullhorn", title: "NEWS", to: "/news" },
-{ icon: "mdi-clipboard-check-outline", title: "提出物管理", to: "/submissions", permission: "submissions.view" },
-{ icon: "mdi-cart-outline", title: "ほしい物リスト", to: "/wishlist" },
-{ icon: "mdi-toolbox-outline", title: "工具・機材の貸出記録", to: "/tool-rental", permissions: ["tool_rental.view", "tool_rental.checkout", "tool_rental.return", "tool_rental.history", "tool_rental.manage"] },
-{ title: "投票", icon: "mdi-vote-outline", to: "/surveys" },
-{ title: "議事録", icon: "mdi-clipboard-text-multiple", to: "/minutes" },
-{ title: "決定事項", icon: "mdi-notebook-check-outline", to: "/decisions" },
-{ icon: "mdi-file-document", title: "書類", to: "/files" },
-{ title: "牛乳パック外部受け取り", icon: "mdi-recycle", to: "/milk-collection" },
+{ icon: "mdi-bullhorn", title: "NEWS", to: "/news", feature: "news" },
+{ icon: "mdi-clipboard-check-outline", title: "提出物管理", to: "/submissions", permission: "submissions.view", feature: "submissions" },
+{ icon: "mdi-cart-outline", title: "ほしい物リスト", to: "/wishlist", feature: "wishlist" },
+{ icon: "mdi-toolbox-outline", title: "工具・機材の貸出記録", to: "/tool-rental", permissions: ["tool_rental.view", "tool_rental.checkout", "tool_rental.return", "tool_rental.history", "tool_rental.manage"], feature: "tool_rental" },
+{ title: "投票", icon: "mdi-vote-outline", to: "/surveys", feature: "surveys" },
+{ title: "議事録", icon: "mdi-clipboard-text-multiple", to: "/minutes", feature: "minutes" },
+{ title: "決定事項", icon: "mdi-notebook-check-outline", to: "/decisions", feature: "decisions" },
+{ icon: "mdi-file-document", title: "書類", to: "/files", feature: "files" },
+{ title: "牛乳パック外部受け取り", icon: "mdi-recycle", to: "/milk-collection", feature: "milk_collection" },
 ]
 
 const handleLogout = async () => {
@@ -182,12 +232,34 @@ const handleLogout = async () => {
 }
 
 .drawer-content {
+  display: flex;
+  flex-direction: column;
   min-height: 100%;
   background: white;
 }
 
+.site-branding {
+  padding: 58px 18px 14px;
+  border-bottom: 1px solid rgb(18 58 92 / 10%);
+}
+
+.site-branding-name {
+  overflow-wrap: anywhere;
+  color: var(--color-primary);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.site-branding-event {
+  margin-top: 4px;
+  color: #78909c;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
 .account-section {
-  padding: 56px 16px 16px;
+  padding: 16px;
 }
 
 .account-header {
@@ -265,5 +337,38 @@ const handleLogout = async () => {
 
 .drawer-item-icon {
   flex: 0 0 24px;
+}
+
+.drawer-social-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  margin-top: auto;
+  padding: 18px 16px max(18px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgb(18 58 92 / 8%);
+}
+
+.drawer-social-link {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #78909c;
+  text-decoration: none;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.drawer-social-link:hover {
+  color: var(--color-primary);
+  background: rgb(18 58 92 / 7%);
+}
+
+.drawer-social-x {
+  font-size: 23px;
+  font-weight: 700;
+  line-height: 1;
 }
 </style>

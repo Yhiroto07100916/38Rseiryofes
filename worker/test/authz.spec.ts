@@ -213,4 +213,53 @@ describe("hasPermission", () => {
       await hasPermission(env, userId, "permission.not.registered"),
     ).toBe(true);
   });
+
+  it("blocks a disabled feature even for administrators", async () => {
+    const userId = await createUser();
+    await env.DB.prepare(`
+      INSERT INTO user_account_roles (user_id, account_role_id)
+      SELECT ?, id FROM account_roles WHERE name = 'admin'
+    `).bind(userId).run();
+
+    const previous = await env.DB.prepare(
+      "SELECT value FROM site_settings WHERE key = 'feature_settings'",
+    ).first<{ value: string }>();
+    await env.DB.prepare(
+      "UPDATE site_settings SET value = ? WHERE key = 'feature_settings'",
+    ).bind(JSON.stringify({ tasks: { enabled: false } })).run();
+
+    try {
+      expect(await hasPermission(env, userId, "tasks.view")).toBe(false);
+    } finally {
+      if (previous) {
+        await env.DB.prepare(
+          "UPDATE site_settings SET value = ? WHERE key = 'feature_settings'",
+        ).bind(previous.value).run();
+      }
+    }
+  });
+
+  it("applies operation switches without granting existing permissions", async () => {
+    const userId = await createUser();
+    await assignPermission("user_permissions", "user_id", userId, "tasks.view", "allow");
+    await assignPermission("user_permissions", "user_id", userId, "tasks.create", "allow");
+
+    const previous = await env.DB.prepare(
+      "SELECT value FROM site_settings WHERE key = 'feature_settings'",
+    ).first<{ value: string }>();
+    await env.DB.prepare(
+      "UPDATE site_settings SET value = ? WHERE key = 'feature_settings'",
+    ).bind(JSON.stringify({ tasks: { enabled: true, view: true, create: false } })).run();
+
+    try {
+      expect(await hasPermission(env, userId, "tasks.view")).toBe(true);
+      expect(await hasPermission(env, userId, "tasks.create")).toBe(false);
+    } finally {
+      if (previous) {
+        await env.DB.prepare(
+          "UPDATE site_settings SET value = ? WHERE key = 'feature_settings'",
+        ).bind(previous.value).run();
+      }
+    }
+  });
 });

@@ -152,6 +152,7 @@
 </template>
 
 <script setup lang="ts">
+import { getDefaultTimeZone } from '~/utils/jst'
 import { onMounted, ref } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
 import { useSnackbar } from '~/composables/useSnackbar'
@@ -264,7 +265,7 @@ const formatDueDate = (value: string) => {
   return new Intl.DateTimeFormat(
     'ja-JP',
     {
-      timeZone: 'Asia/Tokyo',
+      timeZone: getDefaultTimeZone(),
       month: 'numeric',
       day: 'numeric',
       hour: '2-digit',

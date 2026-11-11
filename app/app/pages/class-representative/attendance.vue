@@ -101,6 +101,7 @@
 </template>
 
 <script setup lang="ts">
+import { getDefaultTimeZone } from '~/utils/jst'
 import { onMounted, ref } from 'vue'
 import { useApi } from '~/composables/useApi'
 
@@ -130,7 +131,7 @@ type AttendanceCounts = {
 }
 
 const { apiFetch } = useApi()
-const selectedDate = ref(new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }))
+const selectedDate = ref(new Date().toLocaleDateString('sv-SE', { timeZone: getDefaultTimeZone() }))
 const records = ref<AttendanceRecord[]>([])
 const counts = ref<AttendanceCounts>({
   present: 0, absent: 0, late: 0, early_leave: 0, excused: 0, unconfirmed: 0, total: 0,
@@ -194,7 +195,7 @@ async function updateStatus(record: AttendanceRecord, status: AttendanceStatus) 
 
 function formatTime(value: string) {
   return new Date(value).toLocaleTimeString('ja-JP', {
-    timeZone: 'Asia/Tokyo',
+    timeZone: getDefaultTimeZone(),
     hour: '2-digit',
     minute: '2-digit',
   })

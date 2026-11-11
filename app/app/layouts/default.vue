@@ -11,14 +11,13 @@
       <div class="app-page">
         <slot />
       </div>
+      <LegalLinks />
     </v-main>
 
     <AppBottomNavigation />
 
     <ToolRentalTimers />
     <PresenceTracker />
-
-
   </v-app>
 </template>
 
@@ -27,9 +26,9 @@ import { ref } from 'vue'
 import AppMenuButton from '~/components/layout/AppMenuButton.vue'
 import AppNavigationDrawer from '~/components/layout/AppNavigationDrawer.vue'
 import AppBottomNavigation from '~/components/layout/AppBottomNavigation.vue'
+import LegalLinks from '~/components/layout/LegalLinks.vue'
 import ToolRentalTimers from '~/components/tool-rental/ToolRentalTimers.vue'
 import PresenceTracker from '~/components/presence/PresenceTracker.vue'
-
 
 const drawerOpen = ref(false)
 </script>

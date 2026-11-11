@@ -1,4 +1,5 @@
 import { getSessionId, getSessionUser, type SessionUser } from "./session"
+import { filterEnabledFeaturePermissions, isFeaturePermissionEnabled } from "./site-settings"
 
 type AuthEnv = Pick<Env, "DB">
 
@@ -104,7 +105,8 @@ export async function getUserPermissions(
       `)
       .all<{ key: string }>()
 
-    return result.results.map((row) => row.key)
+    const keys = result.results.map((row) => row.key)
+    return filterEnabledFeaturePermissions(env, keys)
   }
 
   const result = await env.DB
@@ -201,23 +203,15 @@ export async function getUserPermissions(
       account_role_effect: PermissionEffect | null
     }>()
 
-  return result.results
+  const granted = result.results
     .filter((row) => {
-      if (row.user_effect) {
-        return row.user_effect === "allow"
-      }
-
-      if (row.role_effect) {
-        return row.role_effect === "allow"
-      }
-
-      if (row.account_role_effect) {
-        return row.account_role_effect === "allow"
-      }
-
+      if (row.user_effect) return row.user_effect === "allow"
+      if (row.role_effect) return row.role_effect === "allow"
+      if (row.account_role_effect) return row.account_role_effect === "allow"
       return false
     })
     .map((row) => row.key)
+  return filterEnabledFeaturePermissions(env, granted)
 }
 
 export async function hasPermission(
@@ -225,6 +219,8 @@ export async function hasPermission(
   userId: string,
   permissionKey: string,
 ): Promise<boolean> {
+  if (!(await isFeaturePermissionEnabled(env, permissionKey))) return false
+
   const result = await env.DB
     .prepare(`
       WITH admin_check AS (

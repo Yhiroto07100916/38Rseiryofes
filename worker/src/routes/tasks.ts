@@ -1,5 +1,6 @@
 import { isFileLinkConflict } from "../lib/file-link-errors"
 import { hasPermission, requireAuth } from "../lib/authz"
+import { getSiteSetting } from "../lib/site-settings"
 import { createNotificationsForUsers } from "../lib/notifications"
 import { notifyFileLinked } from "../lib/file-notifications"
 
@@ -704,10 +705,18 @@ export async function handleTasks(
         ? body.description.trim() || null
         : null
     const scope = body.scope
+    const operationSettings = await getSiteSetting<{ task_default_status?: string }>(
+      env,
+      "operation_settings",
+      { task_default_status: "todo" },
+    )
+    const configuredDefaultStatus = ["todo", "in_progress", "review", "done"].includes(
+      String(operationSettings.task_default_status),
+    ) ? operationSettings.task_default_status! : "todo"
     const status =
       typeof body.status === "string"
         ? body.status
-        : "todo"
+        : configuredDefaultStatus
     const priority =
       typeof body.priority === "string"
         ? body.priority

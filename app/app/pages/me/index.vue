@@ -832,6 +832,7 @@ interface RelevantNews extends News {
 }
 
 const auth = useAuthStore()
+const siteStatus = useSiteStatus()
 const snackbar = useSnackbar()
 const unreadCount = ref(0)
 
@@ -956,6 +957,9 @@ const changingNickname = ref(false)
 const nickname = ref('')
 
 const passwordDialog = ref(false)
+watch(() => auth.user?.must_change_password, (required) => {
+  if (required) passwordDialog.value = true
+}, { immediate: true })
 const changingPassword = ref(false)
 
 const passwordForm = ref({
@@ -972,7 +976,7 @@ const formatDate = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: siteStatus.value?.timezone || 'Asia/Tokyo',
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -987,7 +991,7 @@ const formatMonthDay = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: siteStatus.value?.timezone || 'Asia/Tokyo',
     month: 'numeric',
     day: 'numeric',
   }).format(date)
@@ -1001,7 +1005,7 @@ const formatTime = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: siteStatus.value?.timezone || 'Asia/Tokyo',
     hour: '2-digit',
     minute: '2-digit',
   }).format(date)
@@ -1055,12 +1059,13 @@ const loadEvents = async () => {
 
   try {
     const now = new Date()
-    const [year = now.getFullYear(), month = now.getMonth() + 1, day = now.getDate()] = jstDateKey(now).split('-').map(Number)
+    const [year = now.getFullYear(), month = now.getMonth() + 1, day = now.getDate()] = jstDateKey(now, siteStatus.value?.timezone || 'Asia/Tokyo').split('-').map(Number)
     const toDate = new Date(Date.UTC(year, month - 1, day + 14))
 
     const from = now.toISOString()
     const to = jstDateTimeLocalToIso(
-      `${jstDateKey(toDate)}T23:59:59.999`,
+      `${jstDateKey(toDate, siteStatus.value?.timezone || 'Asia/Tokyo')}T23:59:59.999`,
+      siteStatus.value?.timezone || 'Asia/Tokyo',
     )
 
     const response = await getCalendarEvents(from, to)
@@ -1122,12 +1127,13 @@ const loadAttendance = async () => {
 
   try {
     const now = new Date()
-    const [year = now.getFullYear(), month = now.getMonth() + 1, day = now.getDate()] = jstDateKey(now).split('-').map(Number)
+    const [year = now.getFullYear(), month = now.getMonth() + 1, day = now.getDate()] = jstDateKey(now, siteStatus.value?.timezone || 'Asia/Tokyo').split('-').map(Number)
     const toDate = new Date(Date.UTC(year, month - 1, day + 14))
 
     const from = now.toISOString()
     const to = jstDateTimeLocalToIso(
-      `${jstDateKey(toDate)}T23:59:59.999`,
+      `${jstDateKey(toDate, siteStatus.value?.timezone || 'Asia/Tokyo')}T23:59:59.999`,
+      siteStatus.value?.timezone || 'Asia/Tokyo',
     )
 
     const response = await getCalendarEvents(from, to)
@@ -1287,6 +1293,7 @@ const changePassword = async () => {
       body: passwordForm.value,
     })
 
+    await auth.fetchMe()
     snackbar.success('パスワードを変更しました。')
 
     passwordForm.value = {

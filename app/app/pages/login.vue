@@ -63,11 +63,13 @@
         </v-card>
       </v-col>
     </v-row>
+
   </v-container>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
+
 
 definePageMeta({
   layout: false,
@@ -114,6 +116,11 @@ const handleLogin = async () => {
 .login-page {
   min-height: 100vh;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.login-page :deep(.legal-links) {
+  margin-top: auto;
 }
 </style>

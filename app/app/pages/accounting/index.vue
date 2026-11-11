@@ -1028,7 +1028,9 @@
 
 <script setup lang="ts">
 import { useConfirmDialog } from '~/composables/useConfirmDialog'
-import { jstDateKey } from '~/utils/jst'
+import { jstDateKey , getDefaultTimeZone} from '~/utils/jst'
+
+const siteStatus = useSiteStatus()
 
 definePageMeta({
   permissions: ['accounting.view'],
@@ -1444,7 +1446,7 @@ const printAccountingReport = () => {
     )
     .join('')
 
-  const printedAt = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+  const printedAt = new Date().toLocaleString('ja-JP', { timeZone: getDefaultTimeZone() })
 
   const printWindow = window.open('', '_blank', 'width=900,height=1200')
 
@@ -1775,7 +1777,7 @@ const formatDate = (value: string | null | undefined) => {
     return value
   }
 
-  return date.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })
+  return date.toLocaleDateString('ja-JP', { timeZone: getDefaultTimeZone() })
 }
 
 const calculateItemAmount = (item: ReceiptItem) => {
@@ -2091,8 +2093,9 @@ const recognizeReceipt = async () => {
     return
   }
 
-  if (file.size > 10 * 1024 * 1024) {
-    errorMessage.value = '画像は10MB以下にしてください。'
+  const maxOcrFileSizeMb = Math.min(10, siteStatus.value?.upload_max_file_size_mb ?? 25)
+  if (file.size > maxOcrFileSizeMb * 1024 * 1024) {
+    errorMessage.value = `画像は${maxOcrFileSizeMb}MB以下にしてください。`
     return
   }
 

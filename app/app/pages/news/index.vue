@@ -158,6 +158,7 @@
 </template>
 
 <script setup lang="ts">
+import { getDefaultTimeZone } from '~/utils/jst'
 definePageMeta({
   permissions: ['news.view'],
   middleware: 'auth',
@@ -184,7 +185,7 @@ const formatDate = (value: string) => {
   }
 
   return new Intl.DateTimeFormat('ja-JP', {
-      timeZone: 'Asia/Tokyo',
+      timeZone: getDefaultTimeZone(),
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
