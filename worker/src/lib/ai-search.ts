@@ -91,7 +91,12 @@ export async function getFileSearchInstance(env: FileSearchEnv): Promise<AiSearc
   try {
     await instance.info()
     return instance
-  } catch {
+  } catch (lookupError) {
+    const lookupMessage = lookupError instanceof Error ? lookupError.message : String(lookupError)
+    if (!lookupMessage.includes("ai_search_not_found")) {
+      throw new Error(`AI_SEARCH_INSTANCE_LOOKUP_FAILED: ${lookupMessage}`)
+    }
+
     try {
       return await env.AI_SEARCH.create({
         id: INSTANCE_ID,
@@ -111,9 +116,9 @@ export async function getFileSearchInstance(env: FileSearchEnv): Promise<AiSearc
         reranking: true,
         ai_search_model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
       })
-    } catch {
-      await instance.info()
-      return instance
+    } catch (createError) {
+      const createMessage = createError instanceof Error ? createError.message : String(createError)
+      throw new Error(`AI_SEARCH_INSTANCE_CREATE_FAILED: ${createMessage}`)
     }
   }
 }
