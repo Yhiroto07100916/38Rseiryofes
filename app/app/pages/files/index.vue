@@ -50,7 +50,7 @@
             </v-btn>
           </template>
           <v-spacer />
-          <v-btn color="primary" size="small" prepend-icon="mdi-folder-plus-outline" @click="openFolderDialog">
+          <v-btn v-if="canCreateFolders" color="primary" size="small" prepend-icon="mdi-folder-plus-outline" @click="openFolderDialog">
             フォルダ作成
           </v-btn>
         </div>
@@ -274,6 +274,7 @@
           </v-col>
         </v-row>
         <v-switch
+          v-if="canUploadFiles"
           v-model="notifyUpload"
           color="primary"
           density="compact"
@@ -282,7 +283,7 @@
           label="関連機能に添付した際に通知する"
           class="mt-2"
         />
-        <div class="text-caption text-medium-emphasis">
+        <div v-if="canUploadFiles" class="text-caption text-medium-emphasis">
           ONにすると、タスク・提出物・意思決定・会計などの関連機能に添付した際、その機能を閲覧できるユーザーへ通知します。関連付けがない間は通知されません。初期設定はOFFです。
         </div>
       </v-card-text>
@@ -838,6 +839,7 @@ const deleting = ref(false)
 const canUploadFiles = computed(() => auth.hasPermission('files.upload'))
 const canDownloadFiles = computed(() => auth.hasPermission('files.download'))
 const canMoveFiles = computed(() => auth.hasPermission('files.move'))
+const canCreateFolders = computed(() => auth.hasPermission('files.folders.create'))
 const canArchiveFiles = computed(() => auth.hasPermission('files.archive'))
 const canRestoreFiles = computed(() => auth.hasPermission('files.restore'))
 const canDeleteFiles = computed(() => auth.hasPermission('files.delete'))
