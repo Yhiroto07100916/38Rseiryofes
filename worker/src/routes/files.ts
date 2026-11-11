@@ -1,6 +1,12 @@
 import { hasPermission, requireAuth } from "../lib/authz"
 import { getSiteSetting } from "../lib/site-settings"
-import { deleteFileFromAiSearch, getAiSearchAnswer, getFileSearchInstance, indexFileForAiSearch, type AiSearchChunk } from "../lib/ai-search"
+import {
+  deleteFileFromAiSearch,
+  getAiSearchAnswer,
+  getFileSearchInstance,
+  indexFileForAiSearch,
+  type AiSearchChunk,
+} from "../lib/ai-search"
 
 type Env = {
   DB: D1Database
@@ -196,7 +202,7 @@ export async function handleFiles(
         if (!canManage) return json({ error: "Forbidden" }, 403)
 
         const pending = await env.DB.prepare(`
-          SELECT id, object_key, original_name, content_type, size, category, uploaded_by
+          SELECT id, object_key, original_name, content_type, size, category, uploaded_by, ai_search_item_id
           FROM files
           WHERE archived_at IS NULL AND ai_status IN ('pending', 'failed')
           ORDER BY created_at DESC
@@ -209,6 +215,7 @@ export async function handleFiles(
           size: number
           category: string
           uploaded_by: string
+          ai_search_item_id: string | null
         }>()
 
         const filesToIndex = pending.results ?? []

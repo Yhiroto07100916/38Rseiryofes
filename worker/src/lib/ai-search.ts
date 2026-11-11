@@ -121,6 +121,7 @@ export async function indexFileForAiSearch(
     size: number
     category: string
     uploaded_by: string
+    ai_search_item_id?: string | null
   },
 ): Promise<void> {
   try {
@@ -135,6 +136,14 @@ export async function indexFileForAiSearch(
     if (!object) throw new Error("FILE_OBJECT_NOT_FOUND")
 
     const instance = await getFileSearchInstance(env)
+    if (file.ai_search_item_id) {
+      try {
+        await instance.items.delete(file.ai_search_item_id)
+      } catch {
+        // A failed prior item may already have expired or been removed.
+      }
+    }
+
     const extension = getExtension(file.original_name)
     const item = await instance.items.uploadAndPoll(
       `${file.id}${extension}`,
@@ -147,7 +156,7 @@ export async function indexFileForAiSearch(
           original_name: file.original_name.slice(0, 200),
         },
         pollIntervalMs: 1000,
-        timeoutMs: 120000,
+        timeoutMs: 25000,
       },
     )
 
