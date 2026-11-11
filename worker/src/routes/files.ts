@@ -191,16 +191,9 @@ export async function handleFiles(
 
 
     if (pathParts[0] === "ai-search" && request.method === "POST") {
+      if (!(await hasPermission(env, auth.user.id, "files.view"))) return json({ error: "Forbidden", permission: "files.view" }, 403)
       if (pathParts[1] === "sync-status") {
-        const canManage = await env.DB.prepare(`
-          SELECT 1
-          FROM user_account_roles uar
-          INNER JOIN account_roles ar ON ar.id = uar.account_role_id
-          WHERE uar.user_id = ? AND ar.name IN ('admin', 'class_representative')
-          LIMIT 1
-        `).bind(auth.user.id).first()
-
-        if (!canManage) return json({ error: "Forbidden" }, 403)
+        if (!(await hasPermission(env, auth.user.id, "files.ai_search.manage"))) return json({ error: "Forbidden", permission: "files.ai_search.manage" }, 403)
         if (!env.AI_SEARCH) {
           return json({
             error: "AI Search is not configured for this Worker environment.",
@@ -244,15 +237,7 @@ export async function handleFiles(
       }
 
       if (pathParts[1] === "retry-failed") {
-        const canManage = await env.DB.prepare(`
-          SELECT 1
-          FROM user_account_roles uar
-          INNER JOIN account_roles ar ON ar.id = uar.account_role_id
-          WHERE uar.user_id = ? AND ar.name IN ('admin', 'class_representative')
-          LIMIT 1
-        `).bind(auth.user.id).first()
-
-        if (!canManage) return json({ error: "Forbidden" }, 403)
+        if (!(await hasPermission(env, auth.user.id, "files.ai_search.manage"))) return json({ error: "Forbidden", permission: "files.ai_search.manage" }, 403)
         if (!env.AI_SEARCH) {
           return json({
             error: "AI Search is not configured for this Worker environment.",
@@ -315,15 +300,7 @@ export async function handleFiles(
       }
 
       if (pathParts[1] === "reindex") {
-        const canManage = await env.DB.prepare(`
-          SELECT 1
-          FROM user_account_roles uar
-          INNER JOIN account_roles ar ON ar.id = uar.account_role_id
-          WHERE uar.user_id = ? AND ar.name IN ('admin', 'class_representative')
-          LIMIT 1
-        `).bind(auth.user.id).first()
-
-        if (!canManage) return json({ error: "Forbidden" }, 403)
+        if (!(await hasPermission(env, auth.user.id, "files.ai_search.manage"))) return json({ error: "Forbidden", permission: "files.ai_search.manage" }, 403)
         if (!env.AI_SEARCH) {
           return json({
             error: "AI Search is not configured for this Worker environment. Start local development with the AI Search config.",
@@ -522,24 +499,8 @@ export async function handleFiles(
       if (request.method === "GET" && pathParts.length === 1) {
         const includeInactive = url.searchParams.get("include_inactive") === "true"
 
-        if (includeInactive) {
-          const canManage = await env.DB
-            .prepare(`
-              SELECT 1
-              FROM user_account_roles uar
-              INNER JOIN account_roles ar
-                ON ar.id = uar.account_role_id
-              WHERE uar.user_id = ?
-                AND ar.name IN ('admin', 'class_representative')
-              LIMIT 1
-            `)
-            .bind(auth.user.id)
-            .first()
-
-          if (!canManage) {
-            return json({ error: "Forbidden" }, 403)
-          }
-        }
+        if (!(await hasPermission(env, auth.user.id, "files.view"))) return json({ error: "Forbidden", permission: "files.view" }, 403)
+        if (includeInactive && !(await hasPermission(env, auth.user.id, "files.categories.manage"))) return json({ error: "Forbidden", permission: "files.categories.manage" }, 403)
 
         const result = await env.DB
           .prepare(`
@@ -554,25 +515,7 @@ export async function handleFiles(
         return json({ categories: result.results ?? [] })
       }
 
-      const canManage = await env.DB
-        .prepare(`
-          SELECT 1
-          FROM user_account_roles uar
-          INNER JOIN account_roles ar
-            ON ar.id = uar.account_role_id
-          WHERE uar.user_id = ?
-            AND ar.name IN ('admin', 'class_representative')
-          LIMIT 1
-        `)
-        .bind(auth.user.id)
-        .first()
-
-      if (!canManage) {
-        return json(
-          { error: "Only class representatives and administrators can manage categories" },
-          403,
-        )
-      }
+      if (!(await hasPermission(env, auth.user.id, "files.categories.manage"))) return json({ error: "Forbidden", permission: "files.categories.manage" }, 403)
 
       if (request.method === "POST" && pathParts.length === 1) {
         let body: { slug?: unknown; name?: unknown; description?: unknown; sort_order?: unknown }
@@ -808,9 +751,13 @@ export async function handleFiles(
     }
 
     if (request.method === "GET" && pathParts.length === 0) {
+      if (!(await hasPermission(env, auth.user.id, "files.view"))) return json({ error: "Forbidden", permission: "files.view" }, 403)
       const search = (url.searchParams.get("search") ?? "").trim()
       const category = (url.searchParams.get("category") ?? "").trim()
       const archived = url.searchParams.get("archived") === "true"
+      if (archived && !(await hasPermission(env, auth.user.id, "files.archive")) && !(await hasPermission(env, auth.user.id, "files.restore"))) {
+        return json({ error: "Forbidden", permission: "files.restore" }, 403)
+      }
       const limit = Math.min(
         Math.max(Number(url.searchParams.get("limit") ?? 100) || 100, 1),
         200,
@@ -937,10 +884,8 @@ export async function handleFiles(
         "SELECT id, uploaded_by, archived_at FROM files WHERE id = ? LIMIT 1",
       ).bind(fileId).first<{ id: string; uploaded_by: string; archived_at: string | null }>()
       if (!file) return json({ error: "File not found" }, 404)
-      const manager = await env.DB.prepare(
-        "SELECT 1 FROM user_account_roles uar INNER JOIN account_roles ar ON ar.id = uar.account_role_id WHERE uar.user_id = ? AND ar.name IN ('admin', 'class_representative') LIMIT 1",
-      ).bind(auth.user.id).first()
-      if (!manager && file.uploaded_by !== auth.user.id) return json({ error: "Forbidden" }, 403)
+      const canMove = await hasPermission(env, auth.user.id, "files.move")
+      if (!canMove && file.uploaded_by !== auth.user.id) return json({ error: "Forbidden", permission: "files.move" }, 403)
       if (file.archived_at) return json({ error: "Archived files cannot be moved" }, 409)
       let body: { folder_id?: unknown }
       try { body = await request.json() } catch { return json({ error: "Invalid JSON" }, 400) }
@@ -982,25 +927,8 @@ export async function handleFiles(
         return json({ error: "File not found" }, 404)
       }
 
-      const canManageFiles = await env.DB
-        .prepare(`
-          SELECT 1
-          FROM user_account_roles uar
-          INNER JOIN account_roles ar
-            ON ar.id = uar.account_role_id
-          WHERE uar.user_id = ?
-            AND ar.name IN ('admin', 'class_representative')
-          LIMIT 1
-        `)
-        .bind(auth.user.id)
-        .first()
-
-      if (!canManageFiles) {
-        return json(
-          { error: "Only class representatives and administrators can archive or restore files" },
-          403,
-        )
-      }
+      const permission = action === "archive" ? "files.archive" : "files.restore"
+      if (!(await hasPermission(env, auth.user.id, permission))) return json({ error: "Forbidden", permission }, 403)
 
       if (action === "archive") {
         if (file.archived_at) {
@@ -1042,6 +970,7 @@ export async function handleFiles(
     }
 
     if (request.method === "POST" && pathParts.length === 0) {
+      if (!(await hasPermission(env, auth.user.id, "files.upload"))) return json({ error: "Forbidden", permission: "files.upload" }, 403)
       const contentLength = Number(
         request.headers.get("Content-Length") ?? 0,
       )
@@ -1214,6 +1143,8 @@ export async function handleFiles(
       }
 
       if (request.method === "GET") {
+        if (!(await hasPermission(env, auth.user.id, "files.view"))) return json({ error: "Forbidden", permission: "files.view" }, 403)
+        if (url.searchParams.get("download") === "true" && !(await hasPermission(env, auth.user.id, "files.download"))) return json({ error: "Forbidden", permission: "files.download" }, 403)
         if (file.archived_at) {
           return json({ error: "File not found" }, 404)
         }
@@ -1251,25 +1182,7 @@ export async function handleFiles(
         })
       }
 
-      const admin = await env.DB
-        .prepare(`
-          SELECT 1
-          FROM user_account_roles uar
-          INNER JOIN account_roles ar
-            ON ar.id = uar.account_role_id
-          WHERE uar.user_id = ?
-            AND ar.name = 'admin'
-          LIMIT 1
-        `)
-        .bind(auth.user.id)
-        .first()
-
-      if (!admin) {
-        return json(
-          { error: "Only administrators can permanently delete files" },
-          403,
-        )
-      }
+      if (!(await hasPermission(env, auth.user.id, "files.delete"))) return json({ error: "Forbidden", permission: "files.delete" }, 403)
 
       if (!file.archived_at) {
         return json(
