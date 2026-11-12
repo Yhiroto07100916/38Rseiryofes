@@ -14,7 +14,7 @@
         <v-text-field v-model="search" label="工具・管理番号・クラス・氏名で検索" prepend-inner-icon="mdi-magnify" clearable hide-details />
       </v-card-text>
       <v-divider />
-      <div class="tool-rental-table-scroll d-none d-md-block">
+      <div class="tool-rental-table-scroll d-none d-lg-block">
       <v-table>
         <thead><tr><th>工具</th><th>個体ID</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th></tr></thead>
         <tbody>
@@ -33,7 +33,7 @@
         </tbody>
       </v-table>
       </div>
-      <div class="d-md-none pa-3 d-flex flex-column ga-3">
+      <div class="d-lg-none pa-3 d-flex flex-column ga-3">
         <v-card
           v-for="loan in filteredLoans"
           :key="loan.loan_item_id"
@@ -116,7 +116,7 @@ onMounted(async () => {
   const loan = loans.value.find(item => String(item.loan_id) === highlightedLoanId.value || String(item.loan_item_id) === highlightedLoanId.value)
   if (!loan) return
   await nextTick()
-  const target = window.matchMedia('(max-width: 959px)').matches
+  const target = window.matchMedia('(max-width: 1279px)').matches
     ? document.querySelector<HTMLElement>(`[data-loan-item-id="${loan.loan_item_id}"]`)
     : document.getElementById(`loan-item-${loan.loan_item_id}`)
   target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
