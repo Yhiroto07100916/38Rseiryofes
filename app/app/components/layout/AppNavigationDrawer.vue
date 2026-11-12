@@ -233,8 +233,10 @@ const handleLogout = async () => {
 
 .drawer-content {
   display: flex;
-  flex-direction: column;
+  width: 100%;
+  height: 100%;
   min-height: 100%;
+  flex-direction: column;
   background: white;
 }
 
@@ -343,9 +345,11 @@ const handleLogout = async () => {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  align-self: stretch;
   gap: 22px;
   width: 100%;
   margin-top: auto;
+  margin-left: auto;
   padding: 18px 16px max(18px, env(safe-area-inset-bottom));
   border-top: 1px solid rgb(18 58 92 / 8%);
 }
