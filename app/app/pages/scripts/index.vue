@@ -156,6 +156,7 @@
 
 <script setup lang="ts">
 import { getDefaultTimeZone } from '~/utils/jst'
+import { useAuthStore } from '~/stores/auth'
 const { apiFetch } = useApi()
 const auth = useAuthStore()
 
