@@ -465,7 +465,6 @@ onMounted(loadScript)
 }
 
 .print-script-column {
-  direction: ltr;
   position: relative;
   flex: 0 0 12mm;
   width: 12mm;
@@ -508,6 +507,8 @@ onMounted(loadScript)
   word-break: break-all;
   writing-mode: vertical-rl;
   text-orientation: mixed;
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 
 .print-direction-column {
