@@ -6,7 +6,7 @@
         <h1 class="text-h6 font-weight-bold text-truncate">{{ script.title || '台本' }}</h1>
         <div class="text-caption text-medium-emphasis">閲覧専用</div>
       </div>
-      <v-btn variant="outlined" prepend-icon="mdi-printer" @click="printScript">印刷・PDF</v-btn>
+      <!-- <v-btn variant="outlined" prepend-icon="mdi-printer" @click="printScript">印刷・PDF</v-btn> -->
     </header>
 
     <v-alert v-if="errorMessage" type="error" variant="tonal" class="viewer-alert">

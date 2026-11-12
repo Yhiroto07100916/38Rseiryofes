@@ -70,7 +70,7 @@
               prepend-icon="mdi-pencil-outline"
               @click="openEditor(script.id)"
             >
-              編集ページ
+              編集
             </v-btn>
             <v-btn
               v-if="auth.hasPermission('script.view')"
@@ -79,7 +79,7 @@
               color="primary"
               prepend-icon="mdi-book-open-page-variant"
             >
-              閲覧専用
+              閲覧
             </v-btn>
           </v-card-actions>
         </v-card>
