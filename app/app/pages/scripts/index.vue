@@ -64,13 +64,13 @@
 
           <v-card-actions class="flex-wrap">
             <v-btn
-              v-if="auth.hasPermission('script.edit')"
+              v-if="auth.hasPermission('script.view') && auth.hasPermission('script.edit')"
               variant="tonal"
               color="primary"
               prepend-icon="mdi-pencil-outline"
               @click="openEditor(script.id)"
             >
-              編集
+              編集ページ
             </v-btn>
             <v-btn
               v-if="auth.hasPermission('script.view')"
@@ -79,7 +79,7 @@
               prepend-icon="mdi-file-pdf-box"
               @click="openViewer(script.id)"
             >
-              閲覧・PDF
+              閲覧専用・PDF
             </v-btn>
           </v-card-actions>
         </v-card>
