@@ -363,8 +363,8 @@ onMounted(loadScript)
 }
 
 .print-character-spacer {
-  flex: 0 0 24mm;
-  width: 24mm;
+  flex: 0 0 18mm;
+  width: 18mm;
   height: 23mm;
 }
 
