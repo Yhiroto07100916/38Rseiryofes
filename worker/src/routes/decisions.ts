@@ -270,7 +270,7 @@ export async function handleDecisions(
       return responseError("Invalid task_ids or file_ids")
     }
 
-    if (minuteId && !(await hasPermission(env, userId, "minutes.view"))) {
+    if (body.minute_id !== undefined && !(await hasPermission(env, userId, "minutes.view"))) {
       return responseError("Forbidden", 403)
     }
     const validationError = await validateLinks(
