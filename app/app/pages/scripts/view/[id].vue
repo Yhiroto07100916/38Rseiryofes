@@ -323,8 +323,10 @@ onMounted(loadScript)
 }
 
 .viewer-pages {
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .print-page {
