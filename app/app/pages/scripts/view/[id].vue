@@ -6,9 +6,7 @@
         <h1 class="text-h6 font-weight-bold text-truncate">{{ script.title || '台本' }}</h1>
         <div class="text-caption text-medium-emphasis">閲覧専用</div>
       </div>
-      <v-btn class="viewer-print-button" size="small" variant="outlined" prepend-icon="mdi-printer" @click="printScript">
-        <span class="print-button-label">印刷・PDF</span>
-      </v-btn>
+      <v-btn variant="outlined" prepend-icon="mdi-printer" @click="printScript">印刷・PDF</v-btn>
     </header>
 
     <v-alert v-if="errorMessage" type="error" variant="tonal" class="viewer-alert">
@@ -23,39 +21,7 @@
       台本の内容はまだありません。
     </div>
 
-    <div v-else class="viewer-content">
-      <div class="mobile-script-view">
-        <section v-for="act in mobileActs" :key="act.id" class="mobile-act">
-          <div class="mobile-act-heading">{{ act.title }}</div>
-
-          <article v-for="scene in act.scenes" :key="scene.id" class="mobile-scene">
-            <header class="mobile-scene-heading">
-              <h2>{{ scene.title }}</h2>
-              <p v-if="scene.description">{{ scene.description }}</p>
-            </header>
-
-            <div v-if="scene.blocks?.length" class="mobile-scene-blocks">
-              <div
-                v-for="block in scene.blocks"
-                :key="block.id"
-                class="mobile-script-block"
-                :class="'mobile-block-' + block.type"
-              >
-                <div class="mobile-block-meta">
-                  <span class="mobile-block-type">{{ blockTypeLabel(block.type) }}</span>
-                  <span v-if="block.type === 'dialogue' && block.character_name" class="mobile-character-name">
-                    {{ block.character_name }}
-                  </span>
-                </div>
-                <p class="mobile-block-content">{{ block.content }}</p>
-              </div>
-            </div>
-            <p v-else class="mobile-empty-scene">この場面の内容はまだありません。</p>
-          </article>
-        </section>
-      </div>
-
-      <div class="viewer-pages desktop-script-view">
+    <div v-else class="viewer-pages">
       <article v-for="page in viewerPages" :key="page.id" class="print-page">
         <div class="print-top-rule" />
 
@@ -104,7 +70,6 @@
           <span class="print-page-number">{{ page.pageNumber }} / {{ viewerPages.length }}</span>
         </div>
       </article>
-      </div>
     </div>
   </main>
 </template>
@@ -176,6 +141,15 @@ const acts = ref<Act[]>([])
 const loading = ref(true)
 const errorMessage = ref('')
 
+useHead({
+  meta: [
+    {
+      name: 'viewport',
+      content: 'width=device-width, initial-scale=1, minimum-scale=0.25, maximum-scale=5, user-scalable=yes, viewport-fit=cover',
+    },
+  ],
+})
+
 const splitVerticalText = (value: string, maxCharacters: number): string[] => {
   const normalized = String(value ?? '')
     .replaceAll(String.fromCharCode(13, 10), String.fromCharCode(10))
@@ -215,29 +189,6 @@ const getPrintLayout = () => {
       Math.floor((contentWidthMm - sceneLabelWidthMm) / (columnWidthMm + columnGapMm)),
     ),
   }
-}
-
-const mobileActs = computed(() =>
-  acts.value
-    .slice()
-    .sort((a, b) => a.sort_order - b.sort_order)
-    .map(act => ({
-      ...act,
-      scenes: (act.scenes || [])
-        .slice()
-        .sort((a, b) => a.sort_order - b.sort_order)
-        .map(scene => ({
-          ...scene,
-          blocks: (scene.blocks || []).slice().sort((a, b) => a.sort_order - b.sort_order),
-        })),
-    })),
-)
-
-const blockTypeLabel = (type: BlockType) => {
-  if (type === 'direction') return 'ト書き'
-  if (type === 'sound') return '音響'
-  if (type === 'lighting') return '照明'
-  return 'セリフ'
 }
 
 const viewerPages = computed<ViewerPage[]>(() => {
@@ -369,14 +320,6 @@ onMounted(loadScript)
 .viewer-alert {
   max-width: 1100px;
   margin: 0 auto 16px;
-}
-
-.viewer-content {
-  width: 100%;
-}
-
-.mobile-script-view {
-  display: none;
 }
 
 .viewer-pages {
@@ -615,178 +558,16 @@ onMounted(loadScript)
 
 @media (max-width: 900px) {
   .script-viewer {
-    overflow-x: hidden;
+    overflow-x: visible;
     padding: 8px;
   }
 
   .viewer-toolbar {
     position: sticky;
-    width: 100%;
-    min-width: 0;
-    margin-bottom: 12px;
-    padding: 8px 10px;
-    gap: 8px;
-  }
-
-  .viewer-toolbar h1 {
-    font-size: 1rem !important;
-    line-height: 1.35;
-  }
-
-  .viewer-print-button {
-    flex: 0 0 auto;
-    padding-inline: 9px !important;
-  }
-
-  .mobile-script-view {
-    display: block;
-    width: 100%;
-    max-width: 760px;
-    margin: 0 auto;
-    padding-bottom: 24px;
-    color: #17202a;
-    font-family: "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
-  }
-
-  .desktop-script-view {
-    display: none;
-  }
-
-  .mobile-act {
-    margin-bottom: 18px;
-  }
-
-  .mobile-act-heading {
-    padding: 10px 14px;
-    border-radius: 10px;
-    background: #173b5b;
-    color: #fff;
-    font-family: sans-serif;
-    font-size: 0.9rem;
-    font-weight: 700;
-  }
-
-  .mobile-scene {
-    margin-top: 12px;
-    padding: 14px;
-    border: 1px solid #dce3e9;
-    border-radius: 12px;
-    background: #fff;
-    box-shadow: 0 2px 8px rgb(20 40 60 / 5%);
-  }
-
-  .mobile-scene-heading {
-    margin-bottom: 10px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #e5eaf0;
-  }
-
-  .mobile-scene-heading h2 {
-    font-size: 1.05rem;
-    font-weight: 700;
-    line-height: 1.5;
-    overflow-wrap: anywhere;
-  }
-
-  .mobile-scene-heading p {
-    margin-top: 4px;
-    color: #66717c;
-    font-size: 0.82rem;
-    line-height: 1.6;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-
-  .mobile-scene-blocks {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .mobile-script-block {
-    min-width: 0;
-  }
-
-  .mobile-block-meta {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 7px;
-    margin-bottom: 4px;
-    font-family: sans-serif;
-  }
-
-  .mobile-block-type {
-    padding: 2px 7px;
-    border-radius: 5px;
-    background: #edf2f6;
-    color: #536575;
-    font-size: 0.68rem;
-    font-weight: 700;
-  }
-
-  .mobile-character-name {
-    color: #173b5b;
-    font-size: 0.82rem;
-    font-weight: 700;
-  }
-
-  .mobile-block-content {
-    margin: 0;
-    color: #202a33;
-    font-size: 0.96rem;
-    line-height: 1.9;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    word-break: normal;
-  }
-
-  .mobile-block-dialogue .mobile-block-content {
-    padding-left: 0.15em;
-  }
-
-  .mobile-block-direction .mobile-block-content {
-    color: #68727c;
-    font-size: 0.88rem;
-  }
-
-  .mobile-block-sound .mobile-block-content,
-  .mobile-block-lighting .mobile-block-content {
-    font-family: sans-serif;
-    font-size: 0.88rem;
-    font-weight: 600;
-  }
-
-  .mobile-block-sound .mobile-block-content {
-    color: #087eae;
-  }
-
-  .mobile-block-lighting .mobile-block-content {
-    color: #a56b00;
-  }
-
-  .mobile-empty-scene {
-    color: #8a949e;
-    font-size: 0.85rem;
-  }
-}
-
-@media (max-width: 420px) {
-  .script-viewer {
-    padding: 6px;
-  }
-
-  .viewer-toolbar {
-    gap: 5px;
-    padding: 7px;
-  }
-
-  .print-button-label {
-    display: none;
-  }
-
-  .mobile-scene {
-    padding: 12px;
+    width: max-content;
+    min-width: 100%;
+    padding: 8px;
+    gap: 6px;
   }
 }
 
@@ -803,13 +584,8 @@ onMounted(loadScript)
   }
 
   .viewer-toolbar,
-  .viewer-alert,
-  .mobile-script-view {
+  .viewer-alert {
     display: none !important;
-  }
-
-  .desktop-script-view {
-    display: block !important;
   }
 
   .print-page {
