@@ -376,9 +376,10 @@ onMounted(loadScript)
   padding: 0;
   margin: 0;
   overflow: hidden;
-  font-size: 10pt;
-  font-weight: 600;
+  font-size: 10.5pt;
+  font-weight: 500;
   line-height: 1.25;
+  letter-spacing: 0.02em;
   white-space: nowrap;
   writing-mode: vertical-rl;
   text-orientation: mixed;
@@ -389,8 +390,12 @@ onMounted(loadScript)
   top: 0;
   right: 0;
   display: block;
+  width: 100%;
+  height: auto;
   margin: 0;
   padding: 0;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
   white-space: nowrap;
   writing-mode: vertical-rl;
   text-orientation: mixed;
