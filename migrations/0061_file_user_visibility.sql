@@ -1,3 +1,5 @@
+PRAGMA foreign_keys = ON;
+
 ALTER TABLE files
   ADD COLUMN access_scope TEXT NOT NULL DEFAULT 'all'
   CHECK (access_scope IN ('all', 'selected'));

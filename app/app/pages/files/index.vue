@@ -311,6 +311,9 @@
         <div v-if="canUploadFiles && uploadAccessScope === 'all'" class="text-caption text-medium-emphasis mb-2">
           初期設定は全員公開です。
         </div>
+        <div v-if="canUploadFiles && uploadAccessScope === 'selected'" class="text-caption text-medium-emphasis mb-2">
+          選択したユーザーと、アップロードした本人が閲覧できます。
+        </div>
         <v-switch
           v-if="canUploadFiles"
           v-model="notifyUpload"
