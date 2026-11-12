@@ -102,6 +102,9 @@ export async function handleFileFolders(
           SELECT COUNT(*) FROM files file
           WHERE file.folder_id = folder.id
             AND file.archived_at IS NULL
+            AND (file.access_scope = 'all' OR file.uploaded_by = ? OR EXISTS (
+              SELECT 1 FROM file_user_access fua WHERE fua.file_id = file.id AND fua.user_id = ?
+            ))
             AND NOT EXISTS (SELECT 1 FROM submission_record_files srf WHERE srf.file_id = file.id)
             AND (NOT EXISTS (SELECT 1 FROM receipt_files rf WHERE rf.file_id = file.id) OR ?)
             AND (NOT EXISTS (SELECT 1 FROM task_files tf WHERE tf.file_id = file.id) OR ?)
@@ -112,6 +115,8 @@ export async function handleFileFolders(
       WHERE folder.parent_id IS ?
       ORDER BY folder.name COLLATE NOCASE
     `).bind(
+      auth.user.id,
+      auth.user.id,
       canViewReceipts ? 1 : 0,
       canViewTasks ? 1 : 0,
       canViewDecisions ? 1 : 0,
