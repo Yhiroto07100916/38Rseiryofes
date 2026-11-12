@@ -1476,12 +1476,11 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 
               background: #fff;
 
-              page-break-after: always;
+              break-inside: avoid;
               break-after: page;
             }
 
             .print-page:last-child {
-              page-break-after: auto;
               break-after: auto;
             }
 
