@@ -1456,7 +1456,7 @@ definePageMeta({
               position: relative;
 
               width: ${pageWidth};
-              height: ${pageHeight};
+              height: calc(${pageHeight} - 1mm);
 
               padding:
                 ${verticalTopPadding}
@@ -1468,9 +1468,8 @@ definePageMeta({
 
               background: #fff;
 
-              width: ${pageWidth};
-              height: ${pageHeight};
               break-inside: avoid;
+              page-break-after: always;
               break-after: page;
             }
 
@@ -1849,6 +1848,7 @@ definePageMeta({
             }
 
             .print-page:last-child {
+              page-break-after: auto;
               break-after: auto;
             }
 
@@ -1866,7 +1866,7 @@ definePageMeta({
 
               .print-page {
                 width: ${pageWidth};
-                height: ${pageHeight};
+                height: calc(${pageHeight} - 1mm);
               }
             }
           </style>
