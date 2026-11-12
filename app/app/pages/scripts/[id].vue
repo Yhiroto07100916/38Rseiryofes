@@ -1142,7 +1142,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
     const pageWidthMm = orientation === 'portrait' ? 210 : 297
     const pageHeightMm = orientation === 'portrait' ? 297 : 210
     const horizontalPaddingMm = orientation === 'portrait' ? 15 : 13
-    const bodyHeightMm = pageHeightMm - 76
+    const bodyHeightMm = pageHeightMm - 61
     const contentWidthMm = pageWidthMm - horizontalPaddingMm * 2
     const columnWidthMm = 12
     const columnGapMm = 3
@@ -1599,7 +1599,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               width: 100%;
 
               height: calc(
-                ${pageHeight} - 76mm
+                ${pageHeight} - 61mm
               );
 
               display: flex;
@@ -1886,6 +1886,13 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
     `)
 
     printWindow.document.close()
+
+    const pageNumberElements = printWindow.document.querySelectorAll<HTMLElement>(
+      '.print-page-number',
+    )
+    pageNumberElements.forEach((element, index) => {
+      element.textContent = `${index + 1} / ${pageNumberElements.length}`
+    })
 
     printDialog.value = false
 
