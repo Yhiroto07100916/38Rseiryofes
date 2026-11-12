@@ -11,18 +11,6 @@ function json(data: unknown, status = 200): Response {
   })
 }
 
-async function canManageFolders(env: Env, userId: string): Promise<boolean> {
-  const result = await env.DB.prepare(`
-    SELECT 1
-    FROM user_account_roles uar
-    INNER JOIN account_roles ar ON ar.id = uar.account_role_id
-    WHERE uar.user_id = ?
-      AND ar.name IN ('admin', 'class_representative')
-    LIMIT 1
-  `).bind(userId).first()
-  return Boolean(result)
-}
-
 async function validCategory(env: Env, category: unknown): Promise<string | null | false> {
   if (category === null || category === undefined || category === "") return null
   if (typeof category !== "string") return false
@@ -55,6 +43,7 @@ export async function handleFileFolders(
   const url = new URL(request.url)
 
   if (request.method === "GET" && pathParts.length === 0 && url.searchParams.get("all") === "true") {
+    if (!(await hasPermission(env, auth.user.id, "files.view"))) return json({ error: "Forbidden", permission: "files.view" }, 403)
     const result = await env.DB.prepare(`
       WITH RECURSIVE folder_tree(id, name, parent_id, category, category_name, depth, path) AS (
         SELECT
@@ -79,6 +68,7 @@ export async function handleFileFolders(
   }
 
   if (request.method === "GET" && pathParts.length === 0) {
+    if (!(await hasPermission(env, auth.user.id, "files.view"))) return json({ error: "Forbidden", permission: "files.view" }, 403)
     const rawParentId = url.searchParams.get("parent_id")
     const parentId = rawParentId || null
 
@@ -112,6 +102,9 @@ export async function handleFileFolders(
           SELECT COUNT(*) FROM files file
           WHERE file.folder_id = folder.id
             AND file.archived_at IS NULL
+            AND (file.access_scope = 'all' OR file.uploaded_by = ? OR EXISTS (
+              SELECT 1 FROM file_user_access fua WHERE fua.file_id = file.id AND fua.user_id = ?
+            ))
             AND NOT EXISTS (SELECT 1 FROM submission_record_files srf WHERE srf.file_id = file.id)
             AND (NOT EXISTS (SELECT 1 FROM receipt_files rf WHERE rf.file_id = file.id) OR ?)
             AND (NOT EXISTS (SELECT 1 FROM task_files tf WHERE tf.file_id = file.id) OR ?)
@@ -122,6 +115,8 @@ export async function handleFileFolders(
       WHERE folder.parent_id IS ?
       ORDER BY folder.name COLLATE NOCASE
     `).bind(
+      auth.user.id,
+      auth.user.id,
       canViewReceipts ? 1 : 0,
       canViewTasks ? 1 : 0,
       canViewDecisions ? 1 : 0,
@@ -132,6 +127,7 @@ export async function handleFileFolders(
   }
 
   if (request.method === "POST" && pathParts.length === 0) {
+    if (!(await hasPermission(env, auth.user.id, "files.folders.create"))) return json({ error: "Forbidden", permission: "files.folders.create" }, 403)
     let body: { name?: unknown; parent_id?: unknown; category?: unknown; description?: unknown }
     try {
       body = await request.json()
@@ -187,10 +183,8 @@ export async function handleFileFolders(
   if (!folder) return json({ error: "Folder not found" }, 404)
 
   if (request.method === "PATCH") {
-    const manager = await canManageFolders(env, auth.user.id)
-    if (!manager && folder.created_by !== auth.user.id) {
-      return json({ error: "Forbidden" }, 403)
-    }
+    const manager = await hasPermission(env, auth.user.id, "files.folders.manage")
+    if (!manager && folder.created_by !== auth.user.id) return json({ error: "Forbidden", permission: "files.folders.manage" }, 403)
 
     let body: { name?: unknown; parent_id?: unknown; category?: unknown; description?: unknown }
     try {
@@ -246,10 +240,8 @@ export async function handleFileFolders(
   }
 
   if (request.method === "DELETE") {
-    const manager = await canManageFolders(env, auth.user.id)
-    if (!manager && folder.created_by !== auth.user.id) {
-      return json({ error: "Forbidden" }, 403)
-    }
+    const manager = await hasPermission(env, auth.user.id, "files.folders.manage")
+    if (!manager && folder.created_by !== auth.user.id) return json({ error: "Forbidden", permission: "files.folders.manage" }, 403)
 
     const [children, files] = await Promise.all([
       env.DB.prepare("SELECT 1 FROM file_folders WHERE parent_id = ? LIMIT 1").bind(folderId).first(),

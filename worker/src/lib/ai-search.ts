@@ -162,13 +162,10 @@ async function saveFileAiSearchSummary(
       .slice(0, 50000)
 
     await env.DB.prepare(
-      "UPDATE files SET ai_summary = ?, extracted_text = ?, ai_status = 'completed', ai_error = NULL WHERE id = ?",
+      "UPDATE files SET ai_summary = ?, extracted_text = ? WHERE id = ?",
     ).bind(summary, extractedText || null, file.id).run()
   } catch (error) {
     console.error("AI file summary failed:", file.id, error)
-    await env.DB.prepare(
-      "UPDATE files SET ai_status = 'completed', ai_error = NULL WHERE id = ?",
-    ).bind(file.id).run()
   }
 }
 
@@ -177,12 +174,20 @@ async function updateFileAiSearchItemStatus(
   instance: AiSearchInstance,
   file: { id: string; original_name: string },
   itemId: string,
+  ctx?: ExecutionContext,
 ): Promise<string> {
   const item = await instance.items.get(itemId).info()
   const status = item.status
 
   if (status === "completed") {
-    await saveFileAiSearchSummary(env, instance, file)
+    // 検索インデックス完成を先に確定し、要約は別のバックグラウンド処理にする。
+    await env.DB.prepare(
+      "UPDATE files SET ai_status = 'completed', ai_error = NULL WHERE id = ?",
+    ).bind(file.id).run()
+
+    const summaryTask = saveFileAiSearchSummary(env, instance, file)
+    if (ctx) ctx.waitUntil(summaryTask)
+    else await summaryTask
   } else if (["error", "skipped", "outdated"].includes(status)) {
     await env.DB.prepare(
       "UPDATE files SET ai_status = 'failed', ai_error = ? WHERE id = ?",
@@ -204,6 +209,7 @@ export async function refreshFileAiSearchStatus(
     original_name: string
     ai_search_item_id?: string | null
   },
+  ctx?: ExecutionContext,
 ): Promise<string> {
   const instance = await getFileSearchInstance(env)
   let itemId = file.ai_search_item_id ?? null
@@ -220,7 +226,7 @@ export async function refreshFileAiSearchStatus(
     ).bind(itemId, file.id).run()
   }
 
-  return updateFileAiSearchItemStatus(env, instance, file, itemId)
+  return updateFileAiSearchItemStatus(env, instance, file, itemId, ctx)
 }
 
 export async function indexFileForAiSearch(
@@ -235,6 +241,7 @@ export async function indexFileForAiSearch(
     uploaded_by: string
     ai_search_item_id?: string | null
   },
+  ctx?: ExecutionContext,
 ): Promise<void> {
   try {
     if (!isSupportedFile(file.original_name, file.content_type, file.size)) {
@@ -297,7 +304,7 @@ export async function indexFileForAiSearch(
       "UPDATE files SET ai_search_item_id = ?, ai_status = 'processing', ai_error = NULL WHERE id = ?",
     ).bind(itemId, file.id).run()
 
-    await updateFileAiSearchItemStatus(env, instance, file, itemId)
+    await updateFileAiSearchItemStatus(env, instance, file, itemId, ctx)
   } catch (error) {
     console.error("AI file indexing failed:", file.id, error)
     await env.DB.prepare(

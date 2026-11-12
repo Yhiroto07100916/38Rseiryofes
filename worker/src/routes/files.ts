@@ -78,6 +78,7 @@ async function getFile(
   created_at: string
   archived_at: string | null
   ai_search_item_id: string | null
+  access_scope: 'all' | 'selected'
 } | null> {
   return env.DB
     .prepare(`
@@ -91,13 +92,26 @@ async function getFile(
         uploaded_by,
         created_at,
         archived_at,
-        ai_search_item_id
+        ai_search_item_id,
+        access_scope
       FROM files
       WHERE object_key = ?
       LIMIT 1
     `)
     .bind(objectKey)
     .first()
+}
+
+async function canViewFileAccess(
+  env: Env,
+  userId: string,
+  file: { id: string; uploaded_by: string; access_scope: 'all' | 'selected' },
+): Promise<boolean> {
+  if (file.access_scope !== 'selected' || file.uploaded_by === userId) return true
+  const access = await env.DB.prepare(
+    "SELECT 1 FROM file_user_access WHERE file_id = ? AND user_id = ? LIMIT 1",
+  ).bind(file.id, userId).first()
+  return Boolean(access)
 }
 
 async function canViewLinkedFile(
@@ -190,17 +204,19 @@ export async function handleFiles(
     const url = new URL(request.url)
 
 
-    if (pathParts[0] === "ai-search" && request.method === "POST") {
-      if (pathParts[1] === "sync-status") {
-        const canManage = await env.DB.prepare(`
-          SELECT 1
-          FROM user_account_roles uar
-          INNER JOIN account_roles ar ON ar.id = uar.account_role_id
-          WHERE uar.user_id = ? AND ar.name IN ('admin', 'class_representative')
-          LIMIT 1
-        `).bind(auth.user.id).first()
+    if (pathParts[0] === "visibility-users" && request.method === "GET" && pathParts.length === 1) {
+      if (!(await hasPermission(env, auth.user.id, "files.upload"))) {
+        return json({ error: "Forbidden", permission: "files.upload" }, 403)
+      }
+      const result = await env.DB.prepare("SELECT id, name, nickname, student_number FROM users ORDER BY student_number, name")
+        .all<{ id: string; name: string; nickname: string | null; student_number: string }>()
+      return json({ users: result.results ?? [] })
+    }
 
-        if (!canManage) return json({ error: "Forbidden" }, 403)
+    if (pathParts[0] === "ai-search" && request.method === "POST") {
+      if (!(await hasPermission(env, auth.user.id, "files.view"))) return json({ error: "Forbidden", permission: "files.view" }, 403)
+      if (pathParts[1] === "sync-status") {
+        if (!(await hasPermission(env, auth.user.id, "files.ai_search.manage"))) return json({ error: "Forbidden", permission: "files.ai_search.manage" }, 403)
         if (!env.AI_SEARCH) {
           return json({
             error: "AI Search is not configured for this Worker environment.",
@@ -227,7 +243,7 @@ export async function handleFiles(
 
         const results = await Promise.all((processing.results ?? []).map(async file => {
           try {
-            return await refreshFileAiSearchStatus(env, file)
+            return await refreshFileAiSearchStatus(env, file, ctx)
           } catch (error) {
             console.error("AI Search item status refresh failed:", file.id, error)
             return "check_failed"
@@ -244,15 +260,7 @@ export async function handleFiles(
       }
 
       if (pathParts[1] === "retry-failed") {
-        const canManage = await env.DB.prepare(`
-          SELECT 1
-          FROM user_account_roles uar
-          INNER JOIN account_roles ar ON ar.id = uar.account_role_id
-          WHERE uar.user_id = ? AND ar.name IN ('admin', 'class_representative')
-          LIMIT 1
-        `).bind(auth.user.id).first()
-
-        if (!canManage) return json({ error: "Forbidden" }, 403)
+        if (!(await hasPermission(env, auth.user.id, "files.ai_search.manage"))) return json({ error: "Forbidden", permission: "files.ai_search.manage" }, 403)
         if (!env.AI_SEARCH) {
           return json({
             error: "AI Search is not configured for this Worker environment.",
@@ -298,7 +306,7 @@ export async function handleFiles(
           if (claimed.meta.changes > 0) claimedFiles.push(file)
         }
 
-        const indexing = Promise.all(claimedFiles.map(file => indexFileForAiSearch(env, file)))
+        const indexing = Promise.all(claimedFiles.map(file => indexFileForAiSearch(env, file, ctx)))
         if (ctx) ctx.waitUntil(indexing)
         else await indexing
 
@@ -315,15 +323,7 @@ export async function handleFiles(
       }
 
       if (pathParts[1] === "reindex") {
-        const canManage = await env.DB.prepare(`
-          SELECT 1
-          FROM user_account_roles uar
-          INNER JOIN account_roles ar ON ar.id = uar.account_role_id
-          WHERE uar.user_id = ? AND ar.name IN ('admin', 'class_representative')
-          LIMIT 1
-        `).bind(auth.user.id).first()
-
-        if (!canManage) return json({ error: "Forbidden" }, 403)
+        if (!(await hasPermission(env, auth.user.id, "files.ai_search.manage"))) return json({ error: "Forbidden", permission: "files.ai_search.manage" }, 403)
         if (!env.AI_SEARCH) {
           return json({
             error: "AI Search is not configured for this Worker environment. Start local development with the AI Search config.",
@@ -355,7 +355,7 @@ export async function handleFiles(
             `UPDATE files SET ai_status = 'processing' WHERE id IN (${placeholders})`,
           ).bind(...filesToIndex.map(file => file.id)).run()
 
-          const indexing = Promise.all(filesToIndex.map(file => indexFileForAiSearch(env, file)))
+          const indexing = Promise.all(filesToIndex.map(file => indexFileForAiSearch(env, file, ctx)))
           if (ctx) ctx.waitUntil(indexing)
           else await indexing
         }
@@ -403,6 +403,9 @@ export async function handleFiles(
                f.category, f.uploaded_by, f.created_at, f.ai_summary, f.ai_status
         FROM files f
         WHERE f.archived_at IS NULL
+          AND (f.access_scope = 'all' OR f.uploaded_by = ? OR EXISTS (
+            SELECT 1 FROM file_user_access fua WHERE fua.file_id = f.id AND fua.user_id = ?
+          ))
           AND NOT EXISTS (
             SELECT 1 FROM submission_record_files srf WHERE srf.file_id = f.id
           )
@@ -417,6 +420,8 @@ export async function handleFiles(
           ) OR ?)
       `
       const visibleBindings: (string | number)[] = [
+        auth.user.id,
+        auth.user.id,
         canViewReceipts ? 1 : 0,
         canViewTasks ? 1 : 0,
         canViewDecisions ? 1 : 0,
@@ -522,24 +527,8 @@ export async function handleFiles(
       if (request.method === "GET" && pathParts.length === 1) {
         const includeInactive = url.searchParams.get("include_inactive") === "true"
 
-        if (includeInactive) {
-          const canManage = await env.DB
-            .prepare(`
-              SELECT 1
-              FROM user_account_roles uar
-              INNER JOIN account_roles ar
-                ON ar.id = uar.account_role_id
-              WHERE uar.user_id = ?
-                AND ar.name IN ('admin', 'class_representative')
-              LIMIT 1
-            `)
-            .bind(auth.user.id)
-            .first()
-
-          if (!canManage) {
-            return json({ error: "Forbidden" }, 403)
-          }
-        }
+        if (!(await hasPermission(env, auth.user.id, "files.view"))) return json({ error: "Forbidden", permission: "files.view" }, 403)
+        if (includeInactive && !(await hasPermission(env, auth.user.id, "files.categories.manage"))) return json({ error: "Forbidden", permission: "files.categories.manage" }, 403)
 
         const result = await env.DB
           .prepare(`
@@ -554,25 +543,7 @@ export async function handleFiles(
         return json({ categories: result.results ?? [] })
       }
 
-      const canManage = await env.DB
-        .prepare(`
-          SELECT 1
-          FROM user_account_roles uar
-          INNER JOIN account_roles ar
-            ON ar.id = uar.account_role_id
-          WHERE uar.user_id = ?
-            AND ar.name IN ('admin', 'class_representative')
-          LIMIT 1
-        `)
-        .bind(auth.user.id)
-        .first()
-
-      if (!canManage) {
-        return json(
-          { error: "Only class representatives and administrators can manage categories" },
-          403,
-        )
-      }
+      if (!(await hasPermission(env, auth.user.id, "files.categories.manage"))) return json({ error: "Forbidden", permission: "files.categories.manage" }, 403)
 
       if (request.method === "POST" && pathParts.length === 1) {
         let body: { slug?: unknown; name?: unknown; description?: unknown; sort_order?: unknown }
@@ -737,10 +708,19 @@ export async function handleFiles(
 
       const fileId = decodeURIComponent(pathParts[0])
       const file = await env.DB.prepare(`
-        SELECT id, archived_at FROM files WHERE id = ? LIMIT 1
-      `).bind(fileId).first<{ id: string; archived_at: string | null }>()
+        SELECT id, archived_at, uploaded_by, access_scope
+        FROM files WHERE id = ? LIMIT 1
+      `).bind(fileId).first<{
+        id: string
+        archived_at: string | null
+        uploaded_by: string
+        access_scope: 'all' | 'selected'
+      }>()
 
       if (!file) return json({ error: "File not found" }, 404)
+      if (!(await canViewFileAccess(env, auth.user.id, file))) {
+        return json({ error: "Forbidden" }, 403)
+      }
 
       if (request.method === "GET" && pathParts.length === 2) {
         const result = await env.DB.prepare(`
@@ -808,9 +788,13 @@ export async function handleFiles(
     }
 
     if (request.method === "GET" && pathParts.length === 0) {
+      if (!(await hasPermission(env, auth.user.id, "files.view"))) return json({ error: "Forbidden", permission: "files.view" }, 403)
       const search = (url.searchParams.get("search") ?? "").trim()
       const category = (url.searchParams.get("category") ?? "").trim()
       const archived = url.searchParams.get("archived") === "true"
+      if (archived && !(await hasPermission(env, auth.user.id, "files.archive")) && !(await hasPermission(env, auth.user.id, "files.restore"))) {
+        return json({ error: "Forbidden", permission: "files.restore" }, 403)
+      }
       const limit = Math.min(
         Math.max(Number(url.searchParams.get("limit") ?? 100) || 100, 1),
         200,
@@ -830,11 +814,15 @@ export async function handleFiles(
           f.archived_at,
           f.ai_status,
           f.ai_summary,
-          f.ai_error
+          f.ai_error,
+          f.access_scope
         FROM files f
         WHERE ${archived ? "f.archived_at IS NOT NULL" : "f.archived_at IS NULL"}
+          AND (f.access_scope = 'all' OR f.uploaded_by = ? OR EXISTS (
+            SELECT 1 FROM file_user_access fua WHERE fua.file_id = f.id AND fua.user_id = ?
+          ))
       `
-      const bindings: (string | number)[] = []
+      const bindings: (string | number)[] = [auth.user.id, auth.user.id]
       const requestedFolderId = url.searchParams.get("folder_id")
       if (!archived && requestedFolderId !== null) {
         if (requestedFolderId === "root") {
@@ -921,6 +909,7 @@ export async function handleFiles(
           ai_status: string
           ai_summary: string | null
           ai_error: string | null
+          access_scope: 'all' | 'selected'
         }>()
 
       const visibleFiles = result.results ?? []
@@ -937,10 +926,8 @@ export async function handleFiles(
         "SELECT id, uploaded_by, archived_at FROM files WHERE id = ? LIMIT 1",
       ).bind(fileId).first<{ id: string; uploaded_by: string; archived_at: string | null }>()
       if (!file) return json({ error: "File not found" }, 404)
-      const manager = await env.DB.prepare(
-        "SELECT 1 FROM user_account_roles uar INNER JOIN account_roles ar ON ar.id = uar.account_role_id WHERE uar.user_id = ? AND ar.name IN ('admin', 'class_representative') LIMIT 1",
-      ).bind(auth.user.id).first()
-      if (!manager && file.uploaded_by !== auth.user.id) return json({ error: "Forbidden" }, 403)
+      const canMove = await hasPermission(env, auth.user.id, "files.move")
+      if (!canMove && file.uploaded_by !== auth.user.id) return json({ error: "Forbidden", permission: "files.move" }, 403)
       if (file.archived_at) return json({ error: "Archived files cannot be moved" }, 409)
       let body: { folder_id?: unknown }
       try { body = await request.json() } catch { return json({ error: "Invalid JSON" }, 400) }
@@ -982,25 +969,8 @@ export async function handleFiles(
         return json({ error: "File not found" }, 404)
       }
 
-      const canManageFiles = await env.DB
-        .prepare(`
-          SELECT 1
-          FROM user_account_roles uar
-          INNER JOIN account_roles ar
-            ON ar.id = uar.account_role_id
-          WHERE uar.user_id = ?
-            AND ar.name IN ('admin', 'class_representative')
-          LIMIT 1
-        `)
-        .bind(auth.user.id)
-        .first()
-
-      if (!canManageFiles) {
-        return json(
-          { error: "Only class representatives and administrators can archive or restore files" },
-          403,
-        )
-      }
+      const permission = action === "archive" ? "files.archive" : "files.restore"
+      if (!(await hasPermission(env, auth.user.id, permission))) return json({ error: "Forbidden", permission }, 403)
 
       if (action === "archive") {
         if (file.archived_at) {
@@ -1042,6 +1012,7 @@ export async function handleFiles(
     }
 
     if (request.method === "POST" && pathParts.length === 0) {
+      if (!(await hasPermission(env, auth.user.id, "files.upload"))) return json({ error: "Forbidden", permission: "files.upload" }, 403)
       const contentLength = Number(
         request.headers.get("Content-Length") ?? 0,
       )
@@ -1065,6 +1036,23 @@ export async function handleFiles(
       const rawFolderId = formData.get("folder_id")
       if (rawFolderId !== null && typeof rawFolderId !== "string") return json({ error: "Invalid folder_id" }, 400)
       const folderId = typeof rawFolderId === "string" ? rawFolderId.trim() || null : null
+      const rawAccessScope = formData.get("access_scope")
+      const accessScope = rawAccessScope === null ? "all" : rawAccessScope
+      if (accessScope !== "all" && accessScope !== "selected") return json({ error: "Invalid access_scope" }, 400)
+      const rawVisibleUserIds = formData.getAll("visible_user_ids")
+      if (!rawVisibleUserIds.every(value => typeof value === "string" && value.trim())) {
+        return json({ error: "Invalid visible_user_ids" }, 400)
+      }
+      const visibleUserIds = [...new Set(rawVisibleUserIds.map(value => String(value).trim()))]
+      if (visibleUserIds.length > 500 || (accessScope === "selected" && visibleUserIds.length === 0) || (accessScope === "all" && visibleUserIds.length > 0)) {
+        return json({ error: "Invalid visibility selection" }, 400)
+      }
+      if (visibleUserIds.length) {
+        const placeholders = visibleUserIds.map(() => "?").join(", ")
+        const users = await env.DB.prepare("SELECT id FROM users WHERE id IN (" + placeholders + ")")
+          .bind(...visibleUserIds).all<{ id: string }>()
+        if (users.results.length !== visibleUserIds.length) return json({ error: "One or more users were not found" }, 400)
+      }
 
       if (!(file instanceof File)) {
         return json(
@@ -1136,33 +1124,13 @@ export async function handleFiles(
       )
 
       try {
-        await env.DB
-          .prepare(`
-            INSERT INTO files (
-              id,
-              object_key,
-              original_name,
-              content_type,
-              size,
-              category,
-              folder_id,
-              uploaded_by,
-              notify_on_upload
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `)
-          .bind(
-            id,
-            objectKey,
-            originalName,
-            contentType,
-            file.size,
-            category,
-            folderId,
-            auth.user.id,
-            notifyUpload ? 1 : 0,
-          )
-          .run()
+        await env.DB.batch([
+          env.DB.prepare("INSERT INTO files (id, object_key, original_name, content_type, size, category, folder_id, uploaded_by, notify_on_upload, access_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            .bind(id, objectKey, originalName, contentType, file.size, category, folderId, auth.user.id, notifyUpload ? 1 : 0, accessScope),
+          ...visibleUserIds.map(userId => env.DB.prepare(
+            "INSERT INTO file_user_access (file_id, user_id) VALUES (?, ?)",
+          ).bind(id, userId)),
+        ])
       } catch (error) {
         await env.FILES_BUCKET.delete(objectKey)
         throw error
@@ -1178,7 +1146,7 @@ export async function handleFiles(
           size: file.size,
           category,
           uploaded_by: auth.user.id,
-        }))
+        }, ctx))
       }
 
       return json(
@@ -1191,6 +1159,7 @@ export async function handleFiles(
           category,
           folder_id: folderId,
           uploaded_by: auth.user.id,
+          access_scope: accessScope,
         },
         201,
       )
@@ -1214,17 +1183,18 @@ export async function handleFiles(
       }
 
       if (request.method === "GET") {
+        if (!(await hasPermission(env, auth.user.id, "files.view"))) return json({ error: "Forbidden", permission: "files.view" }, 403)
+        if (url.searchParams.get("download") === "true" && !(await hasPermission(env, auth.user.id, "files.download"))) return json({ error: "Forbidden", permission: "files.download" }, 403)
         if (file.archived_at) {
           return json({ error: "File not found" }, 404)
         }
 
-        const canView = await canViewLinkedFile(
-          env,
-          auth.user.id,
-          file.id,
-        )
+        const [canViewLinked, canViewScope] = await Promise.all([
+          canViewLinkedFile(env, auth.user.id, file.id),
+          canViewFileAccess(env, auth.user.id, file),
+        ])
 
-        if (!canView) {
+        if (!canViewLinked || !canViewScope) {
           return json({ error: "Forbidden" }, 403)
         }
 
@@ -1251,25 +1221,7 @@ export async function handleFiles(
         })
       }
 
-      const admin = await env.DB
-        .prepare(`
-          SELECT 1
-          FROM user_account_roles uar
-          INNER JOIN account_roles ar
-            ON ar.id = uar.account_role_id
-          WHERE uar.user_id = ?
-            AND ar.name = 'admin'
-          LIMIT 1
-        `)
-        .bind(auth.user.id)
-        .first()
-
-      if (!admin) {
-        return json(
-          { error: "Only administrators can permanently delete files" },
-          403,
-        )
-      }
+      if (!(await hasPermission(env, auth.user.id, "files.delete"))) return json({ error: "Forbidden", permission: "files.delete" }, 403)
 
       if (!file.archived_at) {
         return json(

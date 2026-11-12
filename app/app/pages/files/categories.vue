@@ -185,7 +185,8 @@
 
 <script setup lang="ts">
 definePageMeta({
-  middleware: ['auth', 'class-representative'],
+  middleware: ['auth'],
+  permissions: ['files.categories.manage'],
 })
 
 interface FileCategory {

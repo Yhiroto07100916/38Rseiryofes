@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="d-flex align-center ga-3 mb-6">
+    <div class="d-flex flex-wrap align-center ga-3 mb-6">
       <LayoutBackButton />
       <v-avatar color="primary" variant="tonal" rounded="lg" size="48">
         <v-icon icon="mdi-toolbox-outline" size="28" />
@@ -59,6 +59,7 @@
     <v-card rounded="lg" variant="outlined" class="mt-4">
       <v-card-title class="text-subtitle-1">現在貸出中の個体</v-card-title>
       <v-divider />
+      <div class="tool-rental-table-scroll d-none d-lg-block">
       <v-table>
         <thead>
           <tr><th>工具</th><th>個体ID</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th></tr>
@@ -75,6 +76,29 @@
           </tr>
         </tbody>
       </v-table>
+      </div>
+      <div class="d-lg-none pa-3 d-flex flex-column ga-3">
+        <v-card
+          v-for="loan in currentLoans.slice(0, 8)"
+          :key="loan.loan_item_id"
+          rounded="lg"
+          variant="outlined"
+        >
+          <v-card-text>
+            <div class="d-flex align-start justify-space-between ga-2 mb-2">
+              <div class="text-subtitle-2 font-weight-bold">{{ loan.tool_name }}</div>
+              <v-chip size="small" variant="tonal">{{ loan.management_number }}</v-chip>
+            </div>
+            <div class="text-body-2">{{ loan.class_name }} {{ loan.borrower_name }}</div>
+            <div class="text-caption text-medium-emphasis mt-1">
+              個体ID：{{ loan.tool_item_id }} · {{ formatDate(loan.borrowed_at) }}
+            </div>
+          </v-card-text>
+        </v-card>
+        <div v-if="!loading && currentLoans.length === 0" class="text-center text-medium-emphasis py-5">
+          現在貸出中の工具はありません。
+        </div>
+      </div>
       <v-card-actions v-if="currentLoans.length > 8">
         <v-spacer />
         <v-btn to="/tool-rental/loans/current" variant="text">すべて表示</v-btn>
@@ -150,3 +174,14 @@ const loadSummary = async () => {
 
 onMounted(loadSummary)
 </script>
+
+<style scoped>
+.tool-rental-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.tool-rental-table-scroll :deep(table) {
+  min-width: 680px;
+}
+</style>

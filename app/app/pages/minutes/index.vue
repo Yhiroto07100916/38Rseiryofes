@@ -223,6 +223,7 @@ interface MinuteDetail {
 
 const auth = useAuthStore()
 const { apiFetch } = useApi()
+const route = useRoute()
 
 const minutes = ref<Minute[]>([])
 const searchQuery = ref('')
@@ -565,8 +566,10 @@ async function deleteMinute(item: Minute) {
   }
 }
 
-onMounted(() => {
-  void loadMinutes()
+onMounted(async () => {
+  await loadMinutes()
+  const openId = typeof route.query.open === 'string' ? route.query.open : ''
+  if (openId) await selectMinute(openId)
 })
 
 onBeforeUnmount(() => {

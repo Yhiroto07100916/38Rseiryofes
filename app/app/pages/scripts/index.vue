@@ -9,6 +9,7 @@
       </div>
       <v-spacer />
       <v-btn
+        v-if="auth.hasPermission('script.edit')"
         color="primary"
         prepend-icon="mdi-plus"
         rounded="lg"
@@ -43,7 +44,6 @@
           class="script-card h-100"
           rounded="xl"
           border
-          @click="openScript(script.id)"
         >
           <v-card-item>
             <template #prepend>
@@ -62,14 +62,24 @@
             {{ script.description || '説明はありません' }}
           </v-card-text>
 
-          <v-card-actions>
+          <v-card-actions class="flex-wrap">
             <v-btn
-              variant="text"
+              v-if="auth.hasPermission('script.view') && auth.hasPermission('script.edit')"
+              variant="tonal"
               color="primary"
-              append-icon="mdi-chevron-right"
-              @click.stop="openScript(script.id)"
+              prepend-icon="mdi-pencil-outline"
+              @click="openEditor(script.id)"
             >
-              開く
+              編集
+            </v-btn>
+            <v-btn
+              v-if="auth.hasPermission('script.view')"
+              :to="'/scripts/view/' + script.id"
+              variant="outlined"
+              color="primary"
+              prepend-icon="mdi-book-open-page-variant"
+            >
+              閲覧
             </v-btn>
           </v-card-actions>
         </v-card>
@@ -93,6 +103,7 @@
         最初の台本を作成しましょう。
       </div>
       <v-btn
+        v-if="auth.hasPermission('script.edit')"
         color="primary"
         prepend-icon="mdi-plus"
         rounded="lg"
@@ -145,7 +156,9 @@
 
 <script setup lang="ts">
 import { getDefaultTimeZone } from '~/utils/jst'
+import { useAuthStore } from '~/stores/auth'
 const { apiFetch } = useApi()
+const auth = useAuthStore()
 
 definePageMeta({
   permissions: ['script.view'],
@@ -214,9 +227,10 @@ const createScript = async () => {
   }
 }
 
-const openScript = (id: string) => {
+const openEditor = (id: string) => {
   navigateTo(`/scripts/${id}`)
 }
+
 
 const formatDate = (value: string) => {
   if (!value) return ''

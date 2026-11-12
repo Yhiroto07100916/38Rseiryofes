@@ -270,11 +270,15 @@
                     </button>
                   </template>
   
-                  <textarea
-                    :ref="(element) => setBlockRef(block.id, element)"
-                    :value="block.content"
-                    class="block-textarea"
-                    :placeholder="blockPlaceholder(block.type)"
+                  <div
+                    :ref="(element) => setBlockRef(block.id, element, block.content)"
+                    class="block-editor"
+                    contenteditable="true"
+                    role="textbox"
+                    aria-multiline="true"
+                    spellcheck="false"
+                    :data-placeholder="blockPlaceholder(block.type)"
+                    :aria-label="`${blockLabel(block.type)}の本文`"
                     @input="onBlockInput(block, $event)"
                     @keydown.enter="handleBlockEnter(block, $event)"
                   />
@@ -746,20 +750,21 @@
         </v-card-title>
 
         <v-card-text>
-          <div class="text-subtitle-2 mb-3">
-            用紙の向きを選択してください
+          <v-select
+            v-model="printOrientation"
+            :items="[
+              { title: 'A4 縦', value: 'portrait' },
+              { title: 'A4 横', value: 'landscape' },
+            ]"
+            label="用紙の向き"
+            variant="outlined"
+            density="comfortable"
+            hide-details
+            class="mb-3"
+          />
+          <div class="text-body-2 text-medium-emphasis">
+            A4用紙1枚につき1ページで出力します。ページは右から左へ進む順番です。
           </div>
-
-          <v-radio-group v-model="printOrientation">
-            <v-radio
-              label="A4 縦"
-              value="portrait"
-            />
-            <v-radio
-              label="A4 横"
-              value="landscape"
-            />
-          </v-radio-group>
         </v-card-text>
 
         <v-card-actions>
@@ -790,7 +795,7 @@
   const snackbar = useSnackbar()
 
 definePageMeta({
-  permissions: ['script.view'],
+  permissions: ['script.view', 'script.edit'],
   middleware: ['auth'],
   layout: false,
 })
@@ -909,21 +914,51 @@ definePageMeta({
     description: '',
   })
   const printDialog = ref(false)
-const printOrientation = ref<'portrait' | 'landscape'>('portrait')
+  const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   const selectedBlockId = ref<string | null>(null)
   const pendingBlockType = ref<BlockType | null>(null)
   const pendingAfterBlock = ref<Block | null>(null)
   
   const canvasRef = ref<HTMLElement | null>(null)
-  const blockRefs = new Map<string, HTMLTextAreaElement>()
+  const blockRefs = new Map<string, HTMLElement>()
   const draggingBlockId = ref<string | null>(null)
-  
+
+  const syncBlockWidth = (element: HTMLElement) => {
+    const blockElement = element.closest<HTMLElement>('.script-block')
+    if (!blockElement) return
+
+    const range = document.createRange()
+    range.selectNodeContents(element)
+    const contentWidth = range.getBoundingClientRect().width
+    const blockStyle = window.getComputedStyle(blockElement)
+    const horizontalPadding =
+      Number.parseFloat(blockStyle.paddingLeft) +
+      Number.parseFloat(blockStyle.paddingRight)
+
+    if (contentWidth > 0) {
+      blockElement.style.setProperty(
+        '--block-content-width',
+        `${Math.ceil(contentWidth + horizontalPadding)}px`,
+      )
+    } else {
+      blockElement.style.removeProperty('--block-content-width')
+    }
+  }
+
   const setBlockRef = (
     id: string,
     element: Element | ComponentPublicInstance | null,
+    initialContent = '',
   ) => {
-    if (element instanceof HTMLTextAreaElement) {
+    if (element instanceof HTMLElement) {
+      if (element.dataset.editorInitialized !== 'true') {
+        element.textContent = initialContent
+        element.dataset.editorInitialized = 'true'
+      }
       blockRefs.set(id, element)
+      void nextTick(() => syncBlockWidth(element))
+    } else {
+      blockRefs.delete(id)
     }
   }
   
@@ -1091,13 +1126,47 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   }
 
   /*
-   * PDF用の縦書き文字分割
-   *
-   * A4縦:
-   *   1列あたり約46文字
-   *
-   * A4横:
-   *   縦方向が短くなるため約31文字
+   * PDFの用紙寸法から、1ページに配置できる文字数と列数を算出する。
+   * 縦書きの1文字の送り量を基準に、端の欠けを避ける余裕を確保する。
+   */
+  type PrintColumn = {
+    block: Block
+    chunk: string
+    isFirst: boolean
+    isLast: boolean
+    showCharacter: boolean
+  }
+
+  const getPrintLayout = (orientation: 'portrait' | 'landscape') => {
+    const isLandscape = orientation === 'landscape'
+    const pageWidthMm = isLandscape ? 297 : 210
+    const pageHeightMm = isLandscape ? 210 : 297
+    const horizontalPaddingMm = 15
+    const bodyHeightMm = pageHeightMm - 61
+    const contentWidthMm = pageWidthMm - horizontalPaddingMm * 2
+    const columnWidthMm = 12
+    const columnGapMm = 3
+    const sceneLabelWidthMm = 18
+    const characterAdvanceMm = 10.5 * 0.352778 * 1.25
+
+    return {
+      maxCharacters: Math.max(
+        1,
+        Math.floor(bodyHeightMm / characterAdvanceMm) - 2,
+      ),
+      columnsPerPage: Math.max(
+        1,
+        Math.floor(
+          (contentWidthMm - sceneLabelWidthMm) /
+            (columnWidthMm + columnGapMm),
+        ),
+      ),
+    }
+  }
+
+  /*
+   * 明示的な改行は縦書きの次列として維持する。
+   * Array.from を使い、サロゲートペアを途中で分割しない。
    */
   const splitVerticalText = (
     value: string,
@@ -1112,58 +1181,27 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
     const result: string[] = []
 
     for (const line of normalized.split(String.fromCharCode(10))) {
-      if (!line) {
+      const characters = Array.from(line)
+
+      if (!characters.length) {
         result.push('')
         continue
       }
 
-      for (let i = 0; i < line.length; i += maxCharacters) {
-        result.push(line.slice(i, i + maxCharacters))
+      for (let i = 0; i < characters.length; i += maxCharacters) {
+        result.push(characters.slice(i, i + maxCharacters).join(''))
       }
     }
 
     return result
   }
 
-  const getPrintMaxCharacters = () => {
-    return printOrientation.value === 'portrait' ? 46 : 31
-  }
-
-  const getPrintColumnsPerPage = () => {
-    /*
-     * 右端に「第一幕・第一場」の場面欄を1列確保。
-     *
-     * A4縦:
-     *   場面欄 + 本文10列程度
-     *
-     * A4横:
-     *   場面欄 + 本文15列程度
-     */
-    return printOrientation.value === 'portrait' ? 10 : 15
-  }
-
   const renderPrintScene = (
     act: Act,
     scene: Scene,
     pageNumber: number,
-    blocks: Block[],
+    printColumns: PrintColumn[],
   ) => {
-    const maxCharacters = getPrintMaxCharacters()
-
-    const printColumns = blocks.flatMap((block) => {
-      const chunks = splitVerticalText(
-        block.content,
-        maxCharacters,
-      )
-
-      return chunks.map((chunk, index) => ({
-        block,
-        chunk,
-        isFirst: index === 0,
-        isLast: index === chunks.length - 1,
-      }))
-    })
-
     /*
      * ヘッダーと本文で完全に同じ列構成を使う。
      *
@@ -1176,11 +1214,11 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
      */
     const headerColumns = printColumns
       .map(
-        ({ block, isFirst }) => `
+        ({ block, isFirst, showCharacter }) => `
           <div class="print-header-character">
             <span class="print-header-character-text">
               ${
-                block.type === 'dialogue' && isFirst
+                block.type === 'dialogue' && (showCharacter ?? isFirst)
                   ? escapeHtml(
                       block.character_name?.trim() || '',
                     )
@@ -1289,9 +1327,9 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
       return
     }
 
-    const orientation = printOrientation.value
-    const maxCharacters = getPrintMaxCharacters()
-    const columnsPerPage = getPrintColumnsPerPage()
+    const { maxCharacters, columnsPerPage } = getPrintLayout(
+      printOrientation.value,
+    )
 
     const pages: string[] = []
     let pageNumber = 1
@@ -1301,74 +1339,44 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
         .slice()
         .sort((a, b) => a.sort_order - b.sort_order)
 
+      const printColumns: PrintColumn[] = blocks.flatMap((block) => {
+        const chunks = splitVerticalText(block.content, maxCharacters)
+
+        return chunks.map((chunk, index) => ({
+          block,
+          chunk,
+          isFirst: index === 0,
+          isLast: index === chunks.length - 1,
+          showCharacter: index === 0,
+        }))
+      })
+
       /*
-       * 1ブロックが何本の縦列になるかを計算。
+       * 1つの台詞・ト書きがページ幅を超える場合も、
+       * 列単位で分割して必ず次ページへ送る。
+       * 場面が変わる場合は、従来どおり新しいページから開始する。
        */
-      const getBlockColumnCount = (block: Block) => {
-        const chunks = splitVerticalText(
-          block.content,
-          maxCharacters,
-        )
-
-        return Math.max(chunks.length, 1)
-      }
-
-      /*
-       * 空の場でも1ページ作る。
-       */
-      if (!blocks.length) {
-        pages.push(
-          renderPrintScene(
-            act,
-            scene,
-            pageNumber++,
-            [],
-          ),
-        )
-
+      if (!printColumns.length) {
+        pages.push(renderPrintScene(act, scene, pageNumber++, []))
         continue
       }
 
-      let currentBlocks: Block[] = []
-      let currentColumnCount = 0
+      for (
+        let columnOffset = 0;
+        columnOffset < printColumns.length;
+        columnOffset += columnsPerPage
+      ) {
+        const pageColumns = printColumns
+          .slice(columnOffset, columnOffset + columnsPerPage)
+          .map((column, index) => ({
+            ...column,
+            showCharacter:
+              column.showCharacter ||
+              (index === 0 && column.block.type === 'dialogue'),
+          }))
 
-      for (const block of blocks) {
-        const blockColumnCount =
-          getBlockColumnCount(block)
-
-        /*
-         * 1ページに収まらなくなったらページを確定。
-         */
-        if (
-          currentBlocks.length > 0 &&
-          currentColumnCount + blockColumnCount >
-            columnsPerPage
-        ) {
-          pages.push(
-            renderPrintScene(
-              act,
-              scene,
-              pageNumber++,
-              currentBlocks,
-            ),
-          )
-
-          currentBlocks = []
-          currentColumnCount = 0
-        }
-
-        currentBlocks.push(block)
-        currentColumnCount += blockColumnCount
-      }
-
-      if (currentBlocks.length) {
         pages.push(
-          renderPrintScene(
-            act,
-            scene,
-            pageNumber++,
-            currentBlocks,
-          ),
+          renderPrintScene(act, scene, pageNumber++, pageColumns),
         )
       }
     }
@@ -1388,20 +1396,10 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
       return
     }
 
-    const pageWidth =
-      orientation === 'portrait'
-        ? '210mm'
-        : '297mm'
-
-    const pageHeight =
-      orientation === 'portrait'
-        ? '297mm'
-        : '210mm'
-
-    const horizontalPadding =
-      orientation === 'portrait'
-        ? '15mm'
-        : '13mm'
+    const isLandscape = printOrientation.value === 'landscape'
+    const pageWidth = isLandscape ? '297mm' : '210mm'
+    const pageHeight = isLandscape ? '210mm' : '297mm'
+    const horizontalPadding = '15mm'
 
     const verticalTopPadding = '9mm'
     const verticalBottomPadding = '11mm'
@@ -1420,7 +1418,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 
           <style>
             @page {
-              size: A4 ${orientation};
+              size: A4 ${printOrientation.value};
               margin: 0;
             }
 
@@ -1451,13 +1449,14 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
             }
 
             /*
-             * A4そのものを1枚の紙として扱う。
+             * A4用紙1枚につき、台本1ページを配置する。
+             * 各ページの改ページはここだけで制御する。
              */
             .print-page {
               position: relative;
 
               width: ${pageWidth};
-              height: ${pageHeight};
+              height: calc(${pageHeight} - 1mm);
 
               padding:
                 ${verticalTopPadding}
@@ -1469,13 +1468,9 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 
               background: #fff;
 
+              break-inside: avoid;
               page-break-after: always;
               break-after: page;
-            }
-
-            .print-page:last-child {
-              page-break-after: auto;
-              break-after: auto;
             }
 
             /*
@@ -1507,7 +1502,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               align-items: flex-start;
               justify-content: flex-start;
 
-              gap: 4mm;
+              gap: 3mm;
 
               overflow: hidden;
 
@@ -1532,9 +1527,9 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
             }
 
             .print-header-character {
-              flex: 0 0 13mm;
+              flex: 0 0 12mm;
 
-              width: 13mm;
+              width: 12mm;
               height: 23mm;
 
               position: relative;
@@ -1592,7 +1587,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               width: 100%;
 
               height: calc(
-                ${pageHeight} - 76mm
+                ${pageHeight} - 61mm
               );
 
               display: flex;
@@ -1601,7 +1596,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               align-items: flex-start;
               justify-content: flex-start;
 
-              gap: 4mm;
+              gap: 3mm;
 
               overflow: hidden;
 
@@ -1684,9 +1679,9 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
              * 縦方向に折り返される。
              */
             .print-script-column {
-              flex: 0 0 13mm;
+              flex: 0 0 12mm;
 
-              width: 13mm;
+              width: 12mm;
               height: 100%;
 
               position: relative;
@@ -1852,13 +1847,18 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               margin-left: 5mm;
             }
 
+            .print-page:last-child {
+              page-break-after: auto;
+              break-after: auto;
+            }
+
             /*
-             * 印刷時もA4サイズを維持。
+             * 印刷時も選択したA4の向き・寸法を維持する。
              */
             @media print {
               html,
               body {
-                width: auto;
+                width: ${pageWidth};
                 height: auto;
                 margin: 0;
                 padding: 0;
@@ -1866,7 +1866,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 
               .print-page {
                 width: ${pageWidth};
-                height: ${pageHeight};
+                height: calc(${pageHeight} - 1mm);
               }
             }
           </style>
@@ -1880,22 +1880,31 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 
     printWindow.document.close()
 
+    const pageNumberElements = printWindow.document.querySelectorAll<HTMLElement>(
+      '.print-page-number',
+    )
+    pageNumberElements.forEach((element, index) => {
+      element.textContent = `${index + 1} / ${pageNumberElements.length}`
+    })
+
     printDialog.value = false
 
     /*
-     * フォント・レイアウトが確定してから印刷。
+     * 印刷用フォントの読み込み完了後に印刷する。
      */
-    setTimeout(() => {
-      try {
-        printWindow.focus()
-        printWindow.print()
-      } catch (error) {
-        console.error(
-          '印刷ダイアログの起動に失敗しました',
-          error,
-        )
-      }
-    }, 700)
+    void printWindow.document.fonts.ready.then(() => {
+      printWindow.requestAnimationFrame(() => {
+        try {
+          printWindow.focus()
+          printWindow.print()
+        } catch (error) {
+          console.error(
+            '印刷ダイアログの起動に失敗しました',
+            error,
+          )
+        }
+      })
+    })
   }
 
   const scriptMetaDirty = ref(false)
@@ -2716,8 +2725,9 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   }
 
   const onBlockInput = (block: Block, event: Event) => {
-    const target = event.target as HTMLTextAreaElement
-    block.content = target.value
+    const target = event.target as HTMLElement
+    block.content = (target.innerText || '').replace(/\r\n?/g, '\n')
+    syncBlockWidth(target)
 
     const nextDirtyBlockIds = new Set(dirtyBlockIds.value)
     nextDirtyBlockIds.add(block.id)
@@ -2868,14 +2878,11 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   }
 
   const handleBlockEnter = (block: Block, event: KeyboardEvent) => {
-  if (!event.shiftKey) {
-    return
+    if (!event.shiftKey) return
+    event.preventDefault()
+    addBlockAfter(block)
   }
 
-  event.preventDefault()
-  addBlockAfter(block)
-}
-  
   onMounted(loadScript)
   </script>
   
@@ -3050,10 +3057,11 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 }
 
 .script-block {
+  --block-base-width: 118px;
   position: relative;
   display: inline-flex;
   vertical-align: top;
-  width: 118px;
+  width: max(var(--block-base-width), var(--block-content-width, 0px));
   min-height: 560px;
   margin-left: 38px;
   padding: 48px 12px 24px;
@@ -3089,7 +3097,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 }
 
 .block-dialogue {
-  width: 118px;
+  --block-base-width: 118px;
 }
 
 .block-dialogue .block-label {
@@ -3097,20 +3105,20 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 }
 
 .block-direction {
-  width: 108px;
+  --block-base-width: 108px;
   min-height: 500px;
   color: #5f6368;
   background: rgba(0, 0, 0, 0.018);
 }
 
 .block-sound {
-  width: 108px;
+  --block-base-width: 108px;
   min-height: 420px;
   background: rgba(18, 58, 92, 0.045);
 }
 
 .block-lighting {
-  width: 108px;
+  --block-base-width: 108px;
   min-height: 420px;
   background: rgba(18, 58, 92, 0.065);
 }
@@ -3139,11 +3147,16 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   background: rgba(18, 58, 92, 0.08);
 }
 
-.block-textarea {
+.block-editor {
   width: 100%;
+  direction: ltr;
+  text-align: start;
+  cursor: vertical-text;
   min-height: 430px;
   height: 100%;
-  resize: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: visible;
   border: 0;
   outline: 0;
   background: transparent;
@@ -3158,22 +3171,33 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   padding: 0;
 }
 
-.block-dialogue .block-textarea {
+.block-editor:empty::before {
+  content: attr(data-placeholder);
+  color: #9aa0a6;
+  pointer-events: none;
+}
+
+.block-editor > div {
+  margin: 0;
+  padding: 0;
+}
+
+.block-dialogue .block-editor {
   min-height: 480px;
   font-size: 20px;
-  line-height: 2;
+  line-height: 1.35;
   font-weight: 500;
 }
 
-.block-direction .block-textarea {
+.block-direction .block-editor {
   color: #666;
   font-size: 16px;
   line-height: 1.85;
   font-weight: 400;
 }
 
-.block-sound .block-textarea,
-.block-lighting .block-textarea {
+.block-sound .block-editor,
+.block-lighting .block-editor {
   font-size: 15px;
   line-height: 1.8;
   font-weight: 600;
@@ -3405,32 +3429,32 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   }
 
   .script-block {
-    width: 102px;
+    --block-base-width: 102px;
     min-height: 480px;
     margin-left: 22px;
     padding: 44px 10px 20px;
   }
 
   .block-dialogue {
-    width: 104px;
+    --block-base-width: 104px;
   }
 
   .block-direction {
-    width: 96px;
+    --block-base-width: 96px;
     min-height: 430px;
   }
 
   .block-sound,
   .block-lighting {
-    width: 96px;
+    --block-base-width: 96px;
     min-height: 380px;
   }
 
-  .block-textarea {
+  .block-editor {
     font-size: 17px;
   }
 
-  .block-dialogue .block-textarea {
+  .block-dialogue .block-editor {
     font-size: 18px;
     min-height: 410px;
   }

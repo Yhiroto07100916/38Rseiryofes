@@ -250,6 +250,7 @@ async function budgetItemExists(
 async function getReceipt(
   env: Env,
   id: string,
+  userId: string,
 ): Promise<unknown | null> {
   const receipt = await env.DB.prepare(
     `
@@ -350,10 +351,14 @@ async function getReceipt(
       FROM receipt_files rf
       INNER JOIN files f ON f.id = rf.file_id
       WHERE rf.receipt_id = ?
+        AND (f.access_scope = 'all' OR f.uploaded_by = ? OR EXISTS (
+          SELECT 1 FROM file_user_access fua
+          WHERE fua.file_id = f.id AND fua.user_id = ?
+        ))
       ORDER BY rf.created_at ASC, f.id ASC
     `,
   )
-    .bind(id)
+    .bind(id, userId, userId)
     .all()
 
   return {
@@ -597,9 +602,9 @@ export async function handleAccounting(
 
         for (const fileId of fileIds) {
           const file = await env.DB.prepare(
-            "SELECT id FROM files WHERE id = ? AND category = 'receipts' LIMIT 1",
+            "SELECT id FROM files WHERE id = ? AND category = 'receipts' AND (access_scope = 'all' OR uploaded_by = ? OR EXISTS (SELECT 1 FROM file_user_access fua WHERE fua.file_id = files.id AND fua.user_id = ?)) LIMIT 1",
           )
-            .bind(fileId)
+            .bind(fileId, auth.user.id, auth.user.id)
             .first<{ id: string }>()
 
           if (!file) {
@@ -638,10 +643,14 @@ export async function handleAccounting(
                 FROM receipt_files rf
                 INNER JOIN files f ON f.id = rf.file_id
                 WHERE rf.receipt_id = ?
+                  AND (f.access_scope = 'all' OR f.uploaded_by = ? OR EXISTS (
+                    SELECT 1 FROM file_user_access fua
+                    WHERE fua.file_id = f.id AND fua.user_id = ?
+                  ))
                 ORDER BY rf.created_at ASC, f.id ASC
               `,
             )
-              .bind(receiptId)
+              .bind(receiptId, auth.user.id, auth.user.id)
               .all()
           ).results,
         })
@@ -814,10 +823,14 @@ export async function handleAccounting(
                 FROM receipt_files rf
                 INNER JOIN files f ON f.id = rf.file_id
                 WHERE rf.receipt_id IN (${placeholders})
+                  AND (f.access_scope = 'all' OR f.uploaded_by = ? OR EXISTS (
+                    SELECT 1 FROM file_user_access fua
+                    WHERE fua.file_id = f.id AND fua.user_id = ?
+                  ))
                 ORDER BY rf.created_at ASC, f.id ASC
               `,
             )
-              .bind(...receiptIds)
+              .bind(...receiptIds, auth.user.id, auth.user.id)
               .all()
 
             for (const file of receiptFiles.results) {
@@ -1054,7 +1067,7 @@ export async function handleAccounting(
 
           return json(
             {
-              receipt: await getReceipt(env, receiptId),
+              receipt: await getReceipt(env, receiptId, auth.user.id),
             },
             201,
           )
@@ -1071,7 +1084,7 @@ export async function handleAccounting(
             return json({ message: "会計閲覧権限がありません" }, 403)
           }
 
-          const receipt = await getReceipt(env, receiptId)
+          const receipt = await getReceipt(env, receiptId, auth.user.id)
 
           if (!receipt) {
             return json({ message: "レシートが見つかりません" }, 404)
@@ -1085,7 +1098,7 @@ export async function handleAccounting(
             return json({ message: "会計編集権限がありません" }, 403)
           }
 
-          const existing = await getReceipt(env, receiptId)
+          const existing = await getReceipt(env, receiptId, auth.user.id)
 
           if (!existing) {
             return json({ message: "レシートが見つかりません" }, 404)
@@ -1262,7 +1275,7 @@ export async function handleAccounting(
           await env.DB.batch(statements)
 
           return json({
-            receipt: await getReceipt(env, receiptId),
+            receipt: await getReceipt(env, receiptId, auth.user.id),
           })
         }
 
