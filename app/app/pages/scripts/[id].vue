@@ -1764,7 +1764,7 @@ definePageMeta({
               line-height: 1.25;
 
               vertical-align: top;
-                          direction: ltr;
+              direction: ltr;
               unicode-bidi: isolate;
 }
 
