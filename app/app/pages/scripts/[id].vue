@@ -3149,6 +3149,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 
 .block-editor {
   width: 100%;
+  direction: ltr;
   text-align: start;
   cursor: text;
   min-height: 430px;
