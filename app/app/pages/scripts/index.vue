@@ -103,6 +103,7 @@
         最初の台本を作成しましょう。
       </div>
       <v-btn
+        v-if="auth.hasPermission('script.edit')"
         color="primary"
         prepend-icon="mdi-plus"
         rounded="lg"
