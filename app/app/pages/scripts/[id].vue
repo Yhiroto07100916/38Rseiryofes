@@ -1517,9 +1517,9 @@ definePageMeta({
              * 同じ横位置に揃える。
              */
             .print-character-spacer {
-              flex: 0 0 18mm;
+              flex: 0 0 30mm;
 
-              width: 18mm;
+              width: 30mm;
               height: 23mm;
 
               padding: 0;
