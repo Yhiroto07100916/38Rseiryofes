@@ -21,7 +21,7 @@
         </v-row>
       </v-card-text>
       <v-divider />
-      <div class="tool-rental-table-scroll d-none d-md-block">
+      <div class="tool-rental-table-scroll d-none d-lg-block">
       <v-table>
         <thead><tr><th>工具</th><th>個体ID</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th><th>時間制限</th><th>タイマー終了予定</th><th>返却を記録した人</th><th>返却日時</th><th>状態</th></tr></thead>
         <tbody>
@@ -45,7 +45,7 @@
         </tbody>
       </v-table>
       </div>
-      <div class="d-md-none pa-3 d-flex flex-column ga-3">
+      <div class="d-lg-none pa-3 d-flex flex-column ga-3">
         <v-card
           v-for="record in filteredRecords"
           :key="record.loan_item_id"
@@ -157,7 +157,7 @@ onMounted(async () => {
   await loadHistory()
   if (!highlightedLoanItemId.value) return
   await nextTick()
-  const target = window.matchMedia('(max-width: 959px)').matches
+  const target = window.matchMedia('(max-width: 1279px)').matches
     ? document.querySelector<HTMLElement>(`[data-loan-item-id="${highlightedLoanItemId.value}"]`)
     : document.getElementById(`loan-item-${highlightedLoanItemId.value}`)
   target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
