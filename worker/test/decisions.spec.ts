@@ -58,6 +58,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await env.DB.prepare(
+    "DELETE FROM notifications WHERE actor_user_id = ? OR recipient_user_id = ?",
+  ).bind(userId, viewerId).run();
+
   await env.DB.prepare(`
     DELETE FROM decision_history
     WHERE actor_id = ?
@@ -183,6 +187,52 @@ describe("Decision history", () => {
     expect(rows.results.every(
       (row) => row.decision_id === null,
     )).toBe(true);
+  });
+
+  it("links a decision to its related meeting minutes", async () => {
+    await grantPermissions([
+      "decisions.view",
+      "decisions.create",
+      "minutes.view",
+      "minutes.create",
+    ]);
+
+    const minuteResponse = await request("/api/minutes", "POST", {
+      title: "決定事項リンクテスト会議",
+      meeting_at: "2026-11-12T10:00:00+09:00",
+    });
+    expect(minuteResponse.status).toBe(201);
+    const minuteBody = await minuteResponse.json() as {
+      minute: { id: string; title: string };
+    };
+
+    const decisionResponse = await request("/api/decisions", "POST", {
+      title: "議事録と紐づく決定事項",
+      content: "議事録から決定内容を確認できる",
+      decided_at: "2026-11-12T10:00:00+09:00",
+      meeting_name: minuteBody.minute.title,
+      minute_id: minuteBody.minute.id,
+    });
+    expect(decisionResponse.status).toBe(201);
+    const decisionBody = await decisionResponse.json() as {
+      decision: { id: string; meeting_name: string | null; minute_id: string | null };
+    };
+    expect(decisionBody.decision).toMatchObject({
+      meeting_name: minuteBody.minute.title,
+      minute_id: minuteBody.minute.id,
+    });
+
+    const detailResponse = await request(`/api/decisions/${decisionBody.decision.id}`);
+    expect(detailResponse.status).toBe(200);
+    const detail = await detailResponse.json() as {
+      decision: { minute_id: string | null };
+    };
+    expect(detail.decision.minute_id).toBe(minuteBody.minute.id);
+
+    await env.DB.prepare("DELETE FROM decisions WHERE id = ?")
+      .bind(decisionBody.decision.id).run();
+    await env.DB.prepare("DELETE FROM minutes WHERE id = ?")
+      .bind(minuteBody.minute.id).run();
   });
 
   it("forbids history access without decisions.view", async () => {
