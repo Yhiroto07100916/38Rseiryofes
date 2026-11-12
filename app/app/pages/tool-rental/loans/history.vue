@@ -21,6 +21,7 @@
         </v-row>
       </v-card-text>
       <v-divider />
+      <div class="tool-rental-table-scroll">
       <v-table>
         <thead><tr><th>工具</th><th>個体ID</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th><th>時間制限</th><th>タイマー終了予定</th><th>返却を記録した人</th><th>返却日時</th><th>状態</th></tr></thead>
         <tbody>
@@ -43,6 +44,7 @@
           <tr v-if="!loading && filteredRecords.length === 0"><td colspan="10" class="text-center text-medium-emphasis py-6">履歴はありません。</td></tr>
         </tbody>
       </v-table>
+      </div>
       <v-card-actions class="text-caption text-medium-emphasis">直近500件を表示します。</v-card-actions>
     </v-card>
   </div>
@@ -109,5 +111,13 @@ onMounted(async () => {
 .loan-item-highlight {
   outline: 2px solid rgb(var(--v-theme-primary));
   outline-offset: -2px;
+}
+.tool-rental-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.tool-rental-table-scroll :deep(table) {
+  min-width: 1200px;
 }
 </style>

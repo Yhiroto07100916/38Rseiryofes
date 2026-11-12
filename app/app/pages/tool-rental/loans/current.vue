@@ -14,6 +14,7 @@
         <v-text-field v-model="search" label="工具・管理番号・クラス・氏名で検索" prepend-inner-icon="mdi-magnify" clearable hide-details />
       </v-card-text>
       <v-divider />
+      <div class="tool-rental-table-scroll">
       <v-table>
         <thead><tr><th>工具</th><th>個体ID</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th></tr></thead>
         <tbody>
@@ -31,6 +32,7 @@
           <tr v-if="!loading && filteredLoans.length === 0"><td colspan="5" class="text-center text-medium-emphasis py-6">貸出中の個体はありません。</td></tr>
         </tbody>
       </v-table>
+      </div>
     </v-card>
   </div>
 </template>
@@ -89,5 +91,13 @@ onMounted(async () => {
 .loan-item-highlight {
   outline: 2px solid rgb(var(--v-theme-primary));
   outline-offset: -2px;
+}
+.tool-rental-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.tool-rental-table-scroll :deep(table) {
+  min-width: 680px;
 }
 </style>

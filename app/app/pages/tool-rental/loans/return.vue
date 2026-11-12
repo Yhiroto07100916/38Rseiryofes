@@ -10,6 +10,7 @@
         <v-text-field v-model="search" label="管理番号・工具名・借りた人で検索" prepend-inner-icon="mdi-magnify" clearable hide-details />
       </v-card-text>
       <v-divider />
+      <div class="tool-rental-table-scroll">
       <v-table>
         <thead><tr><th>工具</th><th>個体ID</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th><th class="text-right">操作</th></tr></thead>
         <tbody>
@@ -23,6 +24,7 @@
           <tr v-if="!loading && filteredLoans.length === 0"><td colspan="6" class="text-center text-medium-emphasis py-6">該当する貸出中の個体はありません。</td></tr>
         </tbody>
       </v-table>
+      </div>
       <v-card-actions><v-spacer /><v-btn variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="loadLoans">更新</v-btn></v-card-actions>
     </v-card>
 
@@ -139,3 +141,14 @@ const confirmReturn = async () => {
 
 onMounted(loadLoans)
 </script>
+
+<style scoped>
+.tool-rental-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.tool-rental-table-scroll :deep(table) {
+  min-width: 760px;
+}
+</style>

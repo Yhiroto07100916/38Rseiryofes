@@ -59,6 +59,7 @@
     <v-card rounded="lg" variant="outlined" class="mt-4">
       <v-card-title class="text-subtitle-1">現在貸出中の個体</v-card-title>
       <v-divider />
+      <div class="tool-rental-table-scroll">
       <v-table>
         <thead>
           <tr><th>工具</th><th>個体ID</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th></tr>
@@ -75,6 +76,7 @@
           </tr>
         </tbody>
       </v-table>
+      </div>
       <v-card-actions v-if="currentLoans.length > 8">
         <v-spacer />
         <v-btn to="/tool-rental/loans/current" variant="text">すべて表示</v-btn>
@@ -150,3 +152,14 @@ const loadSummary = async () => {
 
 onMounted(loadSummary)
 </script>
+
+<style scoped>
+.tool-rental-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.tool-rental-table-scroll :deep(table) {
+  min-width: 680px;
+}
+</style>

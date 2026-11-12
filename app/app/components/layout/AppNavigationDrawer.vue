@@ -339,11 +339,12 @@ const handleLogout = async () => {
   flex: 0 0 24px;
 }
 
-.drawer-social-links {
+ .drawer-social-links {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   gap: 22px;
+  width: 100%;
   margin-top: auto;
   padding: 18px 16px max(18px, env(safe-area-inset-bottom));
   border-top: 1px solid rgb(18 58 92 / 8%);
