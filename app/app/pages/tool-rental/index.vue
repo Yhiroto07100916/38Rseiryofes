@@ -59,7 +59,7 @@
     <v-card rounded="lg" variant="outlined" class="mt-4">
       <v-card-title class="text-subtitle-1">現在貸出中の個体</v-card-title>
       <v-divider />
-      <div class="tool-rental-table-scroll d-none d-md-block">
+      <div class="tool-rental-table-scroll d-none d-lg-block">
       <v-table>
         <thead>
           <tr><th>工具</th><th>個体ID</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th></tr>
@@ -77,7 +77,7 @@
         </tbody>
       </v-table>
       </div>
-      <div class="d-md-none pa-3 d-flex flex-column ga-3">
+      <div class="d-lg-none pa-3 d-flex flex-column ga-3">
         <v-card
           v-for="loan in currentLoans.slice(0, 8)"
           :key="loan.loan_item_id"
