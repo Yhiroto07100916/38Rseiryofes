@@ -1242,9 +1242,7 @@ definePageMeta({
         if (block.type === 'dialogue') {
           return `
             <div class="print-script-column print-dialogue-column">
-              <span class="print-column-text">
-                ${isFirst ? '「' : ''}${escapedChunk}${isLast ? '」' : ''}
-              </span>
+              <span class="print-column-text">${isFirst ? '「' : ''}${escapedChunk}${isLast ? '」' : ''}</span>
             </div>
           `
         }
@@ -1258,9 +1256,7 @@ definePageMeta({
 
         return `
           <div class="print-script-column ${className}">
-            <span class="print-column-text">
-              ${escapedChunk}
-            </span>
+            <span class="print-column-text">${escapedChunk}</span>
           </div>
         `
       })
@@ -1517,9 +1513,9 @@ definePageMeta({
              * 同じ横位置に揃える。
              */
             .print-character-spacer {
-              flex: 0 0 23mm;
+              flex: 0 0 18mm;
 
-              width: 23mm;
+              width: 18mm;
               height: 23mm;
 
               padding: 0;
@@ -1764,7 +1760,9 @@ definePageMeta({
               line-height: 1.25;
 
               vertical-align: top;
-            }
+              direction: ltr;
+
+}
 
 
             /*

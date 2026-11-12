@@ -507,6 +507,8 @@ onMounted(loadScript)
   word-break: break-all;
   writing-mode: vertical-rl;
   text-orientation: mixed;
+  direction: ltr;
+
 }
 
 .print-direction-column {
