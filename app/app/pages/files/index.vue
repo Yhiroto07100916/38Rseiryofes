@@ -273,6 +273,44 @@
             />
           </v-col>
         </v-row>
+        <v-row v-if="canUploadFiles" class="mt-1">
+          <v-col cols="12" sm="4">
+            <v-select
+              v-model="uploadAccessScope"
+              :items="[
+                { title: '全員に公開', value: 'all' },
+                { title: '選択したユーザーのみ', value: 'selected' },
+              ]"
+              label="公開範囲"
+              variant="outlined"
+              density="comfortable"
+              hide-details
+              :disabled="uploading"
+            />
+          </v-col>
+          <v-col v-if="uploadAccessScope === 'selected'" cols="12" sm="8">
+            <v-autocomplete
+              v-model="uploadVisibleUserIds"
+              :items="visibilityUserOptions"
+              item-title="title"
+              item-value="id"
+              label="公開するユーザー"
+              placeholder="公開するユーザーを選択"
+              variant="outlined"
+              density="comfortable"
+              multiple
+              chips
+              closable-chips
+              clearable
+              hide-details
+              :loading="visibilityUsersLoading"
+              :disabled="uploading || visibilityUsersLoading"
+            />
+          </v-col>
+        </v-row>
+        <div v-if="canUploadFiles && uploadAccessScope === 'all'" class="text-caption text-medium-emphasis mb-2">
+          初期設定は全員公開です。
+        </div>
         <v-switch
           v-if="canUploadFiles"
           v-model="notifyUpload"
@@ -763,6 +801,7 @@ interface ManagedFile {
   ai_status?: string
   ai_summary?: string | null
   ai_error?: string | null
+  access_scope?: 'all' | 'selected'
 }
 
 const { apiFetch } = useApi()
@@ -794,6 +833,10 @@ const search = ref('')
 const categoryFilter = ref<string | null>(null)
 const uploadCategory = ref('uploads')
 const uploadFolderId = ref('__current__')
+const uploadAccessScope = ref<'all' | 'selected'>('all')
+const uploadVisibleUserIds = ref<string[]>([])
+const visibilityUsers = ref<Array<{ id: string; name: string; nickname: string | null; student_number: string }>>([])
+const visibilityUsersLoading = ref(false)
 const notifyUpload = ref(false)
 const showArchived = ref(false)
 const selectedFile = ref<File | File[] | null>(null)
@@ -848,6 +891,10 @@ const deleteError = ref('')
 const deleting = ref(false)
 
 const canUploadFiles = computed(() => auth.hasPermission('files.upload'))
+const visibilityUserOptions = computed(() => visibilityUsers.value.map(user => ({
+  id: user.id,
+  title: `${user.student_number} · ${user.nickname || user.name}`,
+})))
 const canDownloadFiles = computed(() => auth.hasPermission('files.download'))
 const canMoveFiles = computed(() => auth.hasPermission('files.move'))
 const canCreateFolders = computed(() => auth.hasPermission('files.folders.create'))
@@ -1225,6 +1272,24 @@ const createFolder = async () => {
   }
 }
 
+const loadVisibilityUsers = async () => {
+  if (visibilityUsers.value.length || visibilityUsersLoading.value) return
+  visibilityUsersLoading.value = true
+  try {
+    const response = await apiFetch<{ users: typeof visibilityUsers.value }>('/api/files/visibility-users')
+    visibilityUsers.value = response.users
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = '公開先ユーザー一覧を取得できませんでした。'
+  } finally {
+    visibilityUsersLoading.value = false
+  }
+}
+
+watch(uploadAccessScope, scope => {
+  if (scope === 'selected') void loadVisibilityUsers()
+})
+
 const loadFiles = async () => {
   if (aiSearchStatusPollTimer) {
     clearTimeout(aiSearchStatusPollTimer)
@@ -1299,6 +1364,10 @@ const uploadFile = async () => {
     errorMessage.value = '保存先カテゴリを選択してください。'
     return
   }
+  if (uploadAccessScope.value === 'selected' && uploadVisibleUserIds.value.length === 0) {
+    errorMessage.value = '公開するユーザーを1人以上選択してください。'
+    return
+  }
 
   uploading.value = true
   errorMessage.value = ''
@@ -1308,6 +1377,10 @@ const uploadFile = async () => {
     formData.append('file', file)
     formData.append('category', uploadCategory.value)
     formData.append('notify', notifyUpload.value ? 'true' : 'false')
+    formData.append('access_scope', uploadAccessScope.value)
+    if (uploadAccessScope.value === 'selected') {
+      for (const userId of uploadVisibleUserIds.value) formData.append('visible_user_ids', userId)
+    }
     const destinationFolderId = uploadFolderId.value === '__current__'
       ? currentFolderId.value
       : uploadFolderId.value === '__root__'
@@ -1322,6 +1395,8 @@ const uploadFile = async () => {
 
     selectedFile.value = null
     notifyUpload.value = false
+    uploadAccessScope.value = 'all'
+    uploadVisibleUserIds.value = []
     snackbarMessage.value = 'アップロードしました。'
     snackbar.value = true
     await Promise.all([loadFiles(), loadFolders()])
