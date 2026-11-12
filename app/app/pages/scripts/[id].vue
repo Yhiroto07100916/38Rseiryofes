@@ -1719,7 +1719,6 @@ definePageMeta({
              * flex / writing-mode の影響で下へ移動するのを防ぐ。
              */
             .print-dialogue-column {
-              direction: ltr;
               color: #111;
 
               font-size: 10.5pt;
@@ -1765,6 +1764,7 @@ definePageMeta({
               line-height: 1.25;
 
               vertical-align: top;
+              direction: ltr;
 
 }
 
