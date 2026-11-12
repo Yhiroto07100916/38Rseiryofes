@@ -1133,6 +1133,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
     chunk: string
     isFirst: boolean
     isLast: boolean
+    showCharacter: boolean
   }
 
   const getPrintLayout = (
@@ -1175,7 +1176,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
       .replaceAll(String.fromCharCode(13, 10), String.fromCharCode(10))
       .replaceAll(String.fromCharCode(13), String.fromCharCode(10))
 
-    if (!normalized) return ['']
+    if (!normalized) return []
 
     const result: string[] = []
 
@@ -1213,11 +1214,11 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
      */
     const headerColumns = printColumns
       .map(
-        ({ block, isFirst }) => `
+        ({ block, isFirst, showCharacter }) => `
           <div class="print-header-character">
             <span class="print-header-character-text">
               ${
-                block.type === 'dialogue' && isFirst
+                block.type === 'dialogue' && (showCharacter ?? isFirst)
                   ? escapeHtml(
                       block.character_name?.trim() || '',
                     )
@@ -1345,6 +1346,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
           chunk,
           isFirst: index === 0,
           isLast: index === chunks.length - 1,
+          showCharacter: index === 0,
         }))
       })
 
@@ -1363,10 +1365,14 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
         columnOffset < printColumns.length;
         columnOffset += columnsPerPage
       ) {
-        const pageColumns = printColumns.slice(
-          columnOffset,
-          columnOffset + columnsPerPage,
-        )
+        const pageColumns = printColumns
+          .slice(columnOffset, columnOffset + columnsPerPage)
+          .map((column, index) => ({
+            ...column,
+            showCharacter:
+              column.showCharacter ||
+              (index === 0 && column.block.type === 'dialogue'),
+          }))
 
         pages.push(
           renderPrintScene(act, scene, pageNumber++, pageColumns),
