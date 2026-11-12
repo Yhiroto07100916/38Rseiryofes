@@ -1703,8 +1703,6 @@ definePageMeta({
               line-height: 1.25;
 
               align-self: flex-start;
-
-              vertical-align: top;
             }
 
             /*
@@ -1727,8 +1725,6 @@ definePageMeta({
               text-align: start;
 
               align-self: flex-start;
-
-              vertical-align: top;
 
               overflow: hidden;
             }
@@ -1758,8 +1754,6 @@ definePageMeta({
               word-break: break-all;
 
               line-height: 1.25;
-
-              vertical-align: top;
               direction: ltr;
 
 }
