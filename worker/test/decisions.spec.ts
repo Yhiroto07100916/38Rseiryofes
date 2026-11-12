@@ -10,7 +10,7 @@ const viewerId = crypto.randomUUID();
 async function grantPermissions(keys: string[]) {
   for (const key of keys) {
     await env.DB.prepare(`
-      INSERT INTO user_permissions (user_id, permission_id, effect)
+      INSERT OR IGNORE INTO user_permissions (user_id, permission_id, effect)
       SELECT ?, id, 'allow'
       FROM permissions
       WHERE key = ?
