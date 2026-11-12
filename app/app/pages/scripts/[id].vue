@@ -1125,13 +1125,47 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   }
 
   /*
-   * PDF用の縦書き文字分割
-   *
-   * A4縦:
-   *   1列あたり約46文字
-   *
-   * A4横:
-   *   縦方向が短くなるため約31文字
+   * PDFの用紙寸法から、1ページに配置できる文字数と列数を算出する。
+   * 縦書きの1文字の送り量を基準に、端の欠けを避ける余裕を確保する。
+   */
+  type PrintColumn = {
+    block: Block
+    chunk: string
+    isFirst: boolean
+    isLast: boolean
+  }
+
+  const getPrintLayout = (
+    orientation: 'portrait' | 'landscape' = printOrientation.value,
+  ) => {
+    const pageWidthMm = orientation === 'portrait' ? 210 : 297
+    const pageHeightMm = orientation === 'portrait' ? 297 : 210
+    const horizontalPaddingMm = orientation === 'portrait' ? 15 : 13
+    const bodyHeightMm = pageHeightMm - 76
+    const contentWidthMm = pageWidthMm - horizontalPaddingMm * 2
+    const columnWidthMm = 12
+    const columnGapMm = 3
+    const sceneLabelWidthMm = 18
+    const characterAdvanceMm = 10.5 * 0.352778 * 1.25
+
+    return {
+      maxCharacters: Math.max(
+        1,
+        Math.floor(bodyHeightMm / characterAdvanceMm) - 2,
+      ),
+      columnsPerPage: Math.max(
+        1,
+        Math.floor(
+          (contentWidthMm - sceneLabelWidthMm) /
+            (columnWidthMm + columnGapMm),
+        ),
+      ),
+    }
+  }
+
+  /*
+   * 明示的な改行は縦書きの次列として維持する。
+   * Array.from を使い、サロゲートペアを途中で分割しない。
    */
   const splitVerticalText = (
     value: string,
@@ -1141,63 +1175,32 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
       .replaceAll(String.fromCharCode(13, 10), String.fromCharCode(10))
       .replaceAll(String.fromCharCode(13), String.fromCharCode(10))
 
-    if (!normalized) return []
+    if (!normalized) return ['']
 
     const result: string[] = []
 
     for (const line of normalized.split(String.fromCharCode(10))) {
-      if (!line) {
+      const characters = Array.from(line)
+
+      if (!characters.length) {
         result.push('')
         continue
       }
 
-      for (let i = 0; i < line.length; i += maxCharacters) {
-        result.push(line.slice(i, i + maxCharacters))
+      for (let i = 0; i < characters.length; i += maxCharacters) {
+        result.push(characters.slice(i, i + maxCharacters).join(''))
       }
     }
 
     return result
   }
 
-  const getPrintMaxCharacters = () => {
-    return printOrientation.value === 'portrait' ? 46 : 31
-  }
-
-  const getPrintColumnsPerPage = () => {
-    /*
-     * 右端に「第一幕・第一場」の場面欄を1列確保。
-     *
-     * A4縦:
-     *   場面欄 + 本文10列程度
-     *
-     * A4横:
-     *   場面欄 + 本文15列程度
-     */
-    return printOrientation.value === 'portrait' ? 10 : 15
-  }
-
   const renderPrintScene = (
     act: Act,
     scene: Scene,
     pageNumber: number,
-    blocks: Block[],
+    printColumns: PrintColumn[],
   ) => {
-    const maxCharacters = getPrintMaxCharacters()
-
-    const printColumns = blocks.flatMap((block) => {
-      const chunks = splitVerticalText(
-        block.content,
-        maxCharacters,
-      )
-
-      return chunks.map((chunk, index) => ({
-        block,
-        chunk,
-        isFirst: index === 0,
-        isLast: index === chunks.length - 1,
-      }))
-    })
-
     /*
      * ヘッダーと本文で完全に同じ列構成を使う。
      *
@@ -1324,8 +1327,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
     }
 
     const orientation = printOrientation.value
-    const maxCharacters = getPrintMaxCharacters()
-    const columnsPerPage = getPrintColumnsPerPage()
+    const { maxCharacters, columnsPerPage } = getPrintLayout(orientation)
 
     const pages: string[] = []
     let pageNumber = 1
@@ -1335,74 +1337,39 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
         .slice()
         .sort((a, b) => a.sort_order - b.sort_order)
 
+      const printColumns: PrintColumn[] = blocks.flatMap((block) => {
+        const chunks = splitVerticalText(block.content, maxCharacters)
+
+        return chunks.map((chunk, index) => ({
+          block,
+          chunk,
+          isFirst: index === 0,
+          isLast: index === chunks.length - 1,
+        }))
+      })
+
       /*
-       * 1ブロックが何本の縦列になるかを計算。
+       * 1つの台詞・ト書きがページ幅を超える場合も、
+       * 列単位で分割して必ず次ページへ送る。
+       * 場面が変わる場合は、従来どおり新しいページから開始する。
        */
-      const getBlockColumnCount = (block: Block) => {
-        const chunks = splitVerticalText(
-          block.content,
-          maxCharacters,
-        )
-
-        return Math.max(chunks.length, 1)
-      }
-
-      /*
-       * 空の場でも1ページ作る。
-       */
-      if (!blocks.length) {
-        pages.push(
-          renderPrintScene(
-            act,
-            scene,
-            pageNumber++,
-            [],
-          ),
-        )
-
+      if (!printColumns.length) {
+        pages.push(renderPrintScene(act, scene, pageNumber++, []))
         continue
       }
 
-      let currentBlocks: Block[] = []
-      let currentColumnCount = 0
+      for (
+        let columnOffset = 0;
+        columnOffset < printColumns.length;
+        columnOffset += columnsPerPage
+      ) {
+        const pageColumns = printColumns.slice(
+          columnOffset,
+          columnOffset + columnsPerPage,
+        )
 
-      for (const block of blocks) {
-        const blockColumnCount =
-          getBlockColumnCount(block)
-
-        /*
-         * 1ページに収まらなくなったらページを確定。
-         */
-        if (
-          currentBlocks.length > 0 &&
-          currentColumnCount + blockColumnCount >
-            columnsPerPage
-        ) {
-          pages.push(
-            renderPrintScene(
-              act,
-              scene,
-              pageNumber++,
-              currentBlocks,
-            ),
-          )
-
-          currentBlocks = []
-          currentColumnCount = 0
-        }
-
-        currentBlocks.push(block)
-        currentColumnCount += blockColumnCount
-      }
-
-      if (currentBlocks.length) {
         pages.push(
-          renderPrintScene(
-            act,
-            scene,
-            pageNumber++,
-            currentBlocks,
-          ),
+          renderPrintScene(act, scene, pageNumber++, pageColumns),
         )
       }
     }
@@ -1541,7 +1508,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               align-items: flex-start;
               justify-content: flex-start;
 
-              gap: 4mm;
+              gap: 3mm;
 
               overflow: hidden;
 
@@ -1566,9 +1533,9 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
             }
 
             .print-header-character {
-              flex: 0 0 13mm;
+              flex: 0 0 12mm;
 
-              width: 13mm;
+              width: 12mm;
               height: 23mm;
 
               position: relative;
@@ -1635,7 +1602,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
               align-items: flex-start;
               justify-content: flex-start;
 
-              gap: 4mm;
+              gap: 3mm;
 
               overflow: hidden;
 
@@ -1718,9 +1685,9 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
              * 縦方向に折り返される。
              */
             .print-script-column {
-              flex: 0 0 13mm;
+              flex: 0 0 12mm;
 
-              width: 13mm;
+              width: 12mm;
               height: 100%;
 
               position: relative;
@@ -1917,19 +1884,21 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
     printDialog.value = false
 
     /*
-     * フォント・レイアウトが確定してから印刷。
+     * 印刷用フォントの読み込み完了後に印刷する。
      */
-    setTimeout(() => {
-      try {
-        printWindow.focus()
-        printWindow.print()
-      } catch (error) {
-        console.error(
-          '印刷ダイアログの起動に失敗しました',
-          error,
-        )
-      }
-    }, 700)
+    void printWindow.document.fonts.ready.then(() => {
+      printWindow.requestAnimationFrame(() => {
+        try {
+          printWindow.focus()
+          printWindow.print()
+        } catch (error) {
+          console.error(
+            '印刷ダイアログの起動に失敗しました',
+            error,
+          )
+        }
+      })
+    })
   }
 
   const scriptMetaDirty = ref(false)
