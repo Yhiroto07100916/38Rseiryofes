@@ -270,11 +270,14 @@
                     </button>
                   </template>
   
-                  <textarea
-                    :ref="(element) => setBlockRef(block.id, element)"
-                    :value="block.content"
-                    class="block-textarea"
-                    :placeholder="blockPlaceholder(block.type)"
+                  <div
+                    :ref="(element) => setBlockRef(block.id, element, block.content)"
+                    class="block-editor"
+                    contenteditable="true"
+                    role="textbox"
+                    aria-multiline="true"
+                    spellcheck="false"
+                    :data-placeholder="blockPlaceholder(block.type)"
                     :aria-label="`${blockLabel(block.type)}の本文`"
                     @input="onBlockInput(block, $event)"
                     @keydown.enter="handleBlockEnter(block, $event)"
@@ -916,14 +919,19 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   const pendingAfterBlock = ref<Block | null>(null)
   
   const canvasRef = ref<HTMLElement | null>(null)
-  const blockRefs = new Map<string, HTMLTextAreaElement>()
+  const blockRefs = new Map<string, HTMLElement>()
   const draggingBlockId = ref<string | null>(null)
   
   const setBlockRef = (
     id: string,
     element: Element | ComponentPublicInstance | null,
+    initialContent = '',
   ) => {
-    if (element instanceof HTMLTextAreaElement) {
+    if (element instanceof HTMLElement) {
+      if (element.dataset.editorInitialized !== 'true') {
+        element.textContent = initialContent
+        element.dataset.editorInitialized = 'true'
+      }
       blockRefs.set(id, element)
     } else {
       blockRefs.delete(id)
@@ -2719,8 +2727,8 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   }
 
   const onBlockInput = (block: Block, event: Event) => {
-    const target = event.target as HTMLTextAreaElement
-    block.content = target.value
+    const target = event.target as HTMLElement
+    block.content = (target.innerText || '').replace(/\r\n?/g, '\n')
 
     const nextDirtyBlockIds = new Set(dirtyBlockIds.value)
     nextDirtyBlockIds.add(block.id)
@@ -3139,14 +3147,15 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   background: rgba(18, 58, 92, 0.08);
 }
 
-.block-textarea {
+.block-editor {
   width: 100%;
-  direction: ltr;
   text-align: start;
-  text-indent: 0;
+  cursor: text;
   min-height: 430px;
   height: 100%;
-  resize: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: visible;
   border: 0;
   outline: 0;
   background: transparent;
@@ -3161,22 +3170,33 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   padding: 0;
 }
 
-.block-dialogue .block-textarea {
+.block-editor:empty::before {
+  content: attr(data-placeholder);
+  color: #9aa0a6;
+  pointer-events: none;
+}
+
+.block-editor > div {
+  margin: 0;
+  padding: 0;
+}
+
+.block-dialogue .block-editor {
   min-height: 480px;
   font-size: 20px;
   line-height: 1.35;
   font-weight: 500;
 }
 
-.block-direction .block-textarea {
+.block-direction .block-editor {
   color: #666;
   font-size: 16px;
   line-height: 1.85;
   font-weight: 400;
 }
 
-.block-sound .block-textarea,
-.block-lighting .block-textarea {
+.block-sound .block-editor,
+.block-lighting .block-editor {
   font-size: 15px;
   line-height: 1.8;
   font-weight: 600;
@@ -3429,11 +3449,11 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
     min-height: 380px;
   }
 
-  .block-textarea {
+  .block-editor {
     font-size: 17px;
   }
 
-  .block-dialogue .block-textarea {
+  .block-dialogue .block-editor {
     font-size: 18px;
     min-height: 410px;
   }
