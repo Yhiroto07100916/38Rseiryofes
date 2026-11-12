@@ -17,26 +17,24 @@
       台本の内容はまだありません。
     </div>
     <div v-else class="viewer-pages">
-      <template v-for="act in acts" :key="act.id">
-        <article v-for="scene in act.scenes || []" :key="scene.id" class="script-page">
-          <header class="page-header">
-            <div class="page-script-title">{{ script.title }}</div>
-            <div class="page-act-title">{{ act.title }}</div>
-            <div class="page-scene-title">{{ scene.title }}</div>
-            <div v-if="scene.characters?.length" class="page-characters">
-              登場人物：{{ scene.characters.map(character => character.character_name).join('、') }}
-            </div>
-          </header>
-          <div class="page-rule" />
-          <div class="page-columns">
-            <div v-for="block in scene.blocks || []" :key="block.id" class="script-column" :class="'block-' + block.type">
-              <div v-if="block.type === 'dialogue' && block.character_name" class="column-character">{{ block.character_name }}</div>
-              <div class="column-content">{{ block.content }}</div>
-            </div>
+      <article v-for="page in viewerPages" :key="page.id" class="script-page">
+        <header class="page-header">
+          <div class="page-script-title">{{ script.title }}</div>
+          <div class="page-act-title">{{ page.actTitle }}</div>
+          <div class="page-scene-title">{{ page.sceneTitle }}</div>
+          <div v-if="page.characters.length" class="page-characters">
+            登場人物：{{ page.characters.join('、') }}
           </div>
-          <footer class="page-footer">{{ act.title }} ・ {{ scene.title }}</footer>
-        </article>
-      </template>
+        </header>
+        <div class="page-rule" />
+        <div class="page-columns">
+          <div v-for="column in page.columns" :key="column.id" class="script-column" :class="'block-' + column.type">
+            <div v-if="column.type === 'dialogue' && column.character_name" class="column-character">{{ column.character_name }}</div>
+            <div class="column-content">{{ column.content }}</div>
+          </div>
+        </div>
+        <footer class="page-footer">{{ page.actTitle }} ・ {{ page.sceneTitle }}</footer>
+      </article>
     </div>
   </main>
 </template>
@@ -68,6 +66,54 @@ const script = ref<Script>({ id: '', title: '', description: null })
 const acts = ref<Act[]>([])
 const loading = ref(true)
 const errorMessage = ref('')
+
+interface ViewerColumn extends Block { id: string }
+interface ViewerPage {
+  id: string
+  actTitle: string
+  sceneTitle: string
+  characters: string[]
+  columns: ViewerColumn[]
+}
+
+const splitColumnText = (value: string, maxCharacters = 43): string[] => {
+  const characters = Array.from(value.replace(/\r\n?/g, '\n'))
+  if (!characters.length) return ['']
+  const chunks: string[] = []
+  for (let index = 0; index < characters.length; index += maxCharacters) {
+    chunks.push(characters.slice(index, index + maxCharacters).join(''))
+  }
+  return chunks
+}
+
+const viewerPages = computed<ViewerPage[]>(() => {
+  const pages: ViewerPage[] = []
+  for (const act of acts.value) {
+    for (const scene of act.scenes || []) {
+      const columns = (scene.blocks || []).flatMap(block =>
+        splitColumnText(block.content).map((content, fragmentIndex) => ({
+          ...block,
+          id: `${block.id}-${fragmentIndex}`,
+          character_name: fragmentIndex === 0 ? block.character_name : null,
+          content,
+        })),
+      )
+      const pageChunks = columns.length
+        ? Array.from({ length: Math.ceil(columns.length / 12) }, (_, index) => columns.slice(index * 12, (index + 1) * 12))
+        : [[]]
+      pageChunks.forEach((pageColumns, pageIndex) => {
+        pages.push({
+          id: `${scene.id}-${pageIndex}`,
+          actTitle: act.title,
+          sceneTitle: scene.title,
+          characters: (scene.characters || []).map(character => character.character_name),
+          columns: pageColumns,
+        })
+      })
+    }
+  }
+  return pages
+})
 
 const loadScript = async () => {
   loading.value = true
@@ -118,10 +164,10 @@ onMounted(loadScript)
 .page-rule { margin: 4mm 0; border-top: 1px solid #555; }
 .page-columns {
   display: flex; flex-direction: row; align-items: flex-start; gap: 3mm; direction: rtl;
-  min-height: 225mm; overflow-x: auto;
+  min-height: 225mm; overflow-x: auto; overflow-y: hidden;
 }
 .script-column {
-  flex: 0 0 12mm; width: 12mm; min-height: 220mm; writing-mode: vertical-rl;
+  flex: 0 0 12mm; width: 12mm; height: 220mm; writing-mode: vertical-rl;
   text-orientation: mixed; white-space: pre-wrap; overflow-wrap: anywhere;
   font-size: 10.5pt; line-height: 1.35;
 }
