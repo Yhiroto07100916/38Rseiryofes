@@ -1684,6 +1684,7 @@ definePageMeta({
              * 縦方向に折り返される。
              */
             .print-script-column {
+              direction: ltr;
               flex: 0 0 12mm;
 
               width: 12mm;
