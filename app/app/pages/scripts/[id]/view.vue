@@ -45,6 +45,7 @@ import { computed, onMounted, ref } from 'vue'
 definePageMeta({
   permissions: ['script.view'],
   middleware: ['auth'],
+  layout: false,
 })
 
 type BlockType = 'dialogue' | 'direction' | 'sound' | 'lighting'
@@ -76,7 +77,7 @@ interface ViewerPage {
   columns: ViewerColumn[]
 }
 
-const splitColumnText = (value: string, maxCharacters = 43): string[] => {
+const splitColumnText = (value: string, maxCharacters = 40): string[] => {
   const characters = Array.from(value.replace(/\r\n?/g, '\n'))
   if (!characters.length) return ['']
   const chunks: string[] = []
