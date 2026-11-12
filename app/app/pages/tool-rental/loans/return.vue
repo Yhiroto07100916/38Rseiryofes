@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="d-flex align-center ga-3 mb-6">
+    <div class="d-flex flex-wrap align-center ga-3 mb-6">
       <LayoutBackButton />
       <h1 class="text-h5 font-weight-bold">返却を記録</h1>
     </div>
@@ -10,7 +10,7 @@
         <v-text-field v-model="search" label="管理番号・工具名・借りた人で検索" prepend-inner-icon="mdi-magnify" clearable hide-details />
       </v-card-text>
       <v-divider />
-      <div class="tool-rental-table-scroll">
+      <div class="tool-rental-table-scroll d-none d-md-block">
       <v-table>
         <thead><tr><th>工具</th><th>個体ID</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th><th class="text-right">操作</th></tr></thead>
         <tbody>
@@ -24,6 +24,48 @@
           <tr v-if="!loading && filteredLoans.length === 0"><td colspan="6" class="text-center text-medium-emphasis py-6">該当する貸出中の個体はありません。</td></tr>
         </tbody>
       </v-table>
+      </div>
+      <div class="d-md-none pa-3 d-flex flex-column ga-3">
+        <v-card
+          v-for="loan in filteredLoans"
+          :key="loan.loan_item_id"
+          rounded="lg"
+          variant="outlined"
+        >
+          <v-card-text>
+            <div class="d-flex align-start justify-space-between ga-2 mb-3">
+              <div class="text-subtitle-1 font-weight-bold">{{ loan.tool_name }}</div>
+              <v-chip size="small" variant="tonal">{{ loan.management_number }}</v-chip>
+            </div>
+            <div class="loan-mobile-details mb-4">
+              <div class="loan-mobile-field">
+                <span>個体ID</span>
+                <strong>{{ loan.tool_item_id }}</strong>
+              </div>
+              <div class="loan-mobile-field">
+                <span>借りた人</span>
+                <strong>{{ loan.class_name }} {{ loan.borrower_name }}</strong>
+              </div>
+              <div class="loan-mobile-field loan-mobile-field-full">
+                <span>貸出日時</span>
+                <strong>{{ formatDate(loan.borrowed_at) }}</strong>
+              </div>
+            </div>
+            <v-btn
+              block
+              color="success"
+              variant="tonal"
+              :disabled="savingId !== null"
+              :loading="savingId === loan.loan_item_id"
+              @click="openReturn(loan)"
+            >
+              返却を記録
+            </v-btn>
+          </v-card-text>
+        </v-card>
+        <div v-if="!loading && filteredLoans.length === 0" class="text-center text-medium-emphasis py-6">
+          該当する貸出中の個体はありません。
+        </div>
       </div>
       <v-card-actions><v-spacer /><v-btn variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="loadLoans">更新</v-btn></v-card-actions>
     </v-card>
@@ -150,5 +192,28 @@ onMounted(loadLoans)
 }
 .tool-rental-table-scroll :deep(table) {
   min-width: 760px;
+}
+.loan-mobile-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+.loan-mobile-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.loan-mobile-field span {
+  color: rgb(var(--v-theme-on-surface-variant));
+  font-size: 0.75rem;
+}
+.loan-mobile-field strong {
+  overflow-wrap: anywhere;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.loan-mobile-field-full {
+  grid-column: 1 / -1;
 }
 </style>
