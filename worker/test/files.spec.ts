@@ -502,6 +502,102 @@ describe("Files access permissions", () => {
     expect(body.files[0].id).toBe(fixture.fileIds.receipt);
     expect(body.count).toBe(1);
   });
+  it("applies per-file visibility and defaults new uploads to all users", async () => {
+    const fixture = await createFixture();
+    const category = await env.DB.prepare(
+      "SELECT slug FROM file_categories WHERE is_active = 1 LIMIT 1",
+    ).first<{ slug: string }>();
+    expect(category).not.toBeNull();
+
+    const recipientSessionId = crypto.randomUUID();
+    await env.DB.prepare(`
+      INSERT INTO sessions (id, user_id, expires_at)
+      VALUES (?, ?, datetime('now', '+1 day'))
+    `).bind(recipientSessionId, fixture.recipientUserId).run();
+    await grantPermissions(fixture.recipientUserId, ["files.view"]);
+
+    try {
+      const upload = async (name: string, visibleToRecipient = false) => {
+        const formData = new FormData();
+        formData.set("file", new File([name], name, { type: "text/plain" }));
+        formData.set("category", category!.slug);
+        if (visibleToRecipient) {
+          formData.set("access_scope", "selected");
+          formData.append("visible_user_ids", fixture.recipientUserId);
+        }
+
+        const response = await SELF.fetch("http://example.com/api/files", {
+          method: "POST",
+          headers: { Cookie: fixture.cookie },
+          body: formData,
+        });
+        expect(response.status).toBe(201);
+        const uploaded = await response.json() as {
+          id: string;
+          object_key: string;
+          access_scope: "all" | "selected";
+        };
+        fixture.uploadedFileIds.push(uploaded.id);
+        fixture.objectKeys.push(uploaded.object_key);
+        return uploaded;
+      };
+
+      const everyoneFile = await upload("everyone.txt");
+      const selectedFile = await upload("selected.txt", true);
+      expect(everyoneFile.access_scope).toBe("all");
+      expect(selectedFile.access_scope).toBe("selected");
+
+      const ownerFiles = await listFiles(fixture);
+      expect(ownerFiles.files.map(file => file.id)).toContain(everyoneFile.id);
+      expect(ownerFiles.files.map(file => file.id)).toContain(selectedFile.id);
+
+      const recipientListResponse = await SELF.fetch("http://example.com/api/files", {
+        headers: { Cookie: `session_id=${recipientSessionId}` },
+      });
+      expect(recipientListResponse.status).toBe(200);
+      const recipientList = await recipientListResponse.json() as {
+        files: Array<{ id: string }>;
+      };
+      const recipientFileIds = recipientList.files.map(file => file.id);
+      expect(recipientFileIds).toContain(everyoneFile.id);
+      expect(recipientFileIds).toContain(selectedFile.id);
+
+      const otherUserId = crypto.randomUUID();
+      const otherSessionId = crypto.randomUUID();
+      await env.DB.prepare(
+        "INSERT INTO users (id, student_number, name) VALUES (?, ?, ?)",
+      ).bind(otherUserId, `files-outsider-${otherUserId}`, "公開対象外ユーザー").run();
+      await env.DB.prepare(
+        "INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, datetime('now', '+1 day'))",
+      ).bind(otherSessionId, otherUserId).run();
+      await grantPermissions(otherUserId, ["files.view"]);
+
+      try {
+        const outsiderListResponse = await SELF.fetch("http://example.com/api/files", {
+          headers: { Cookie: `session_id=${otherSessionId}` },
+        });
+        const outsiderList = await outsiderListResponse.json() as {
+          files: Array<{ id: string }>;
+        };
+        const outsiderFileIds = outsiderList.files.map(file => file.id);
+        expect(outsiderFileIds).toContain(everyoneFile.id);
+        expect(outsiderFileIds).not.toContain(selectedFile.id);
+
+        const selectedRead = await SELF.fetch(
+          `http://example.com/api/files/${selectedFile.object_key}`,
+          { headers: { Cookie: `session_id=${otherSessionId}` } },
+        );
+        expect(selectedRead.status).toBe(403);
+      } finally {
+        await env.DB.prepare("DELETE FROM sessions WHERE id = ?").bind(otherSessionId).run();
+        await env.DB.prepare("DELETE FROM user_permissions WHERE user_id = ?").bind(otherUserId).run();
+        await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(otherUserId).run();
+      }
+    } finally {
+      await env.DB.prepare("DELETE FROM sessions WHERE id = ?").bind(recipientSessionId).run();
+    }
+  });
+
   it("creates upload notifications only when the uploader opts in", async () => {
     const fixture = await createFixture();
     const category = await env.DB.prepare(
