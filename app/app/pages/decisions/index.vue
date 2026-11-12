@@ -635,7 +635,7 @@ async function saveDecision() {
     decided_at: decidedAt,
     decision_maker: form.value.decision_maker.trim() || null,
     meeting_name: form.value.meeting_name.trim() || null,
-    minute_id: form.value.minute_id || null,
+    minute_id: auth.hasPermission('minutes.view') ? form.value.minute_id || null : undefined,
     survey_id: form.value.survey_id.trim() || null,
   }
 
