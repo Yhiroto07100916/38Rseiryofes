@@ -74,12 +74,12 @@
             </v-btn>
             <v-btn
               v-if="auth.hasPermission('script.view')"
+              :to="'/scripts/' + script.id + '/view'"
               variant="outlined"
               color="primary"
-              prepend-icon="mdi-file-pdf-box"
-              @click="openViewer(script.id)"
+              prepend-icon="mdi-book-open-page-variant"
             >
-              閲覧専用・PDF
+              閲覧専用
             </v-btn>
           </v-card-actions>
         </v-card>
@@ -231,9 +231,6 @@ const openEditor = (id: string) => {
   navigateTo(`/scripts/${id}`)
 }
 
-const openViewer = (id: string) => {
-  navigateTo(`/scripts/${id}/view`)
-}
 
 const formatDate = (value: string) => {
   if (!value) return ''
