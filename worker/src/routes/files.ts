@@ -708,10 +708,19 @@ export async function handleFiles(
 
       const fileId = decodeURIComponent(pathParts[0])
       const file = await env.DB.prepare(`
-        SELECT id, archived_at FROM files WHERE id = ? LIMIT 1
-      `).bind(fileId).first<{ id: string; archived_at: string | null }>()
+        SELECT id, archived_at, uploaded_by, access_scope
+        FROM files WHERE id = ? LIMIT 1
+      `).bind(fileId).first<{
+        id: string
+        archived_at: string | null
+        uploaded_by: string
+        access_scope: 'all' | 'selected'
+      }>()
 
       if (!file) return json({ error: "File not found" }, 404)
+      if (!(await canViewFileAccess(env, auth.user.id, file))) {
+        return json({ error: "Forbidden" }, 403)
+      }
 
       if (request.method === "GET" && pathParts.length === 2) {
         const result = await env.DB.prepare(`

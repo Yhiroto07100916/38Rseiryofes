@@ -266,6 +266,9 @@ export async function handleDecisions(
       return responseError("Invalid task_ids or file_ids")
     }
 
+    if (minuteId && !(await hasPermission(env, userId, "minutes.view"))) {
+      return responseError("Forbidden", 403)
+    }
     const validationError = await validateLinks(
       env, taskIds, fileIds, surveyId ?? null, minuteId ?? null,
     )
@@ -445,6 +448,9 @@ export async function handleDecisions(
     ).results.map((row) => row.id)
     const currentFileIds = fileIds ?? previousFileIds
 
+    if (nextMinuteId && !(await hasPermission(env, userId, "minutes.view"))) {
+      return responseError("Forbidden", 403)
+    }
     const validationError = await validateLinks(
       env, currentTaskIds, currentFileIds, nextSurveyId, nextMinuteId,
     )

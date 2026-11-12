@@ -407,6 +407,14 @@
                   </div>
 
                   <v-chip
+                    size="x-small"
+                    :color="file.access_scope === 'selected' ? 'warning' : 'success'"
+                    variant="tonal"
+                    class="mt-2 mr-1"
+                  >
+                    {{ file.access_scope === 'selected' ? '限定公開' : '全員公開' }}
+                  </v-chip>
+                  <v-chip
                     v-if="file.ai_status === 'pending' || file.ai_status === 'processing'"
                     size="x-small"
                     color="info"
