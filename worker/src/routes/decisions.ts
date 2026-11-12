@@ -10,6 +10,7 @@ interface Decision {
   decided_at: string
   decision_maker: string | null
   meeting_name: string | null
+  minute_id: string | null
   survey_id: string | null
   created_by: string
   created_at: string
@@ -23,6 +24,7 @@ interface DecisionBody {
   decided_at?: unknown
   decision_maker?: unknown
   meeting_name?: unknown
+  minute_id?: unknown
   survey_id?: unknown
   task_ids?: unknown
   file_ids?: unknown
@@ -73,7 +75,7 @@ async function getDecision(
 ): Promise<Decision | null> {
   return env.DB.prepare(`
     SELECT id, title, content, rationale, decided_at, decision_maker,
-           meeting_name, survey_id, created_by, created_at, updated_at
+           meeting_name, minute_id, survey_id, created_by, created_at, updated_at
     FROM decisions
     WHERE id = ?
   `).bind(decisionId).first<Decision>()
@@ -131,6 +133,13 @@ async function getHistory(env: Env, decisionId: string) {
   return result.results
 }
 
+async function validateMinute(env: Env, minuteId: string | null): Promise<boolean> {
+  if (minuteId === null) return true
+  const row = await env.DB.prepare("SELECT id FROM minutes WHERE id = ?")
+    .bind(minuteId).first<{ id: string }>()
+  return Boolean(row)
+}
+
 async function validateSurvey(
   env: Env,
   surveyId: string | null,
@@ -147,6 +156,7 @@ async function validateLinks(
   taskIds: string[],
   fileIds: string[],
   surveyId: string | null,
+  minuteId: string | null,
 ): Promise<Response | null> {
   if (!(await validateIds(env, "tasks", taskIds))) {
     return responseError("One or more tasks were not found")
@@ -156,6 +166,9 @@ async function validateLinks(
   }
   if (!(await validateSurvey(env, surveyId))) {
     return responseError("Survey not found")
+  }
+  if (!(await validateMinute(env, minuteId))) {
+    return responseError("Minute not found")
   }
   return null
 }
@@ -205,7 +218,7 @@ export async function handleDecisions(
 
     const result = await env.DB.prepare(`
       SELECT d.id, d.title, d.content, d.rationale, d.decided_at,
-             d.decision_maker, d.meeting_name, d.survey_id,
+             d.decision_maker, d.meeting_name, d.minute_id, d.survey_id,
              d.created_by, d.created_at, d.updated_at
       FROM decisions d
       ORDER BY d.decided_at DESC, d.created_at DESC, d.id
@@ -235,11 +248,13 @@ export async function handleDecisions(
     const rationale = optionalString(body.rationale)
     const decisionMaker = optionalString(body.decision_maker)
     const meetingName = optionalString(body.meeting_name)
+    const minuteId = optionalString(body.minute_id)
     const surveyId = optionalString(body.survey_id)
     if (
       (body.rationale !== undefined && rationale === undefined) ||
       (body.decision_maker !== undefined && decisionMaker === undefined) ||
       (body.meeting_name !== undefined && meetingName === undefined) ||
+      (body.minute_id !== undefined && minuteId === undefined) ||
       (body.survey_id !== undefined && surveyId === undefined)
     ) {
       return responseError("Invalid optional field")
@@ -252,7 +267,7 @@ export async function handleDecisions(
     }
 
     const validationError = await validateLinks(
-      env, taskIds, fileIds, surveyId ?? null,
+      env, taskIds, fileIds, surveyId ?? null, minuteId ?? null,
     )
     if (validationError) return validationError
 
@@ -265,6 +280,7 @@ export async function handleDecisions(
       decided_at: decidedAt,
       decision_maker: decisionMaker ?? null,
       meeting_name: meetingName ?? null,
+      minute_id: minuteId ?? null,
       survey_id: surveyId ?? null,
       created_by: userId,
       created_at: now,
@@ -275,13 +291,13 @@ export async function handleDecisions(
       env.DB.prepare(`
         INSERT INTO decisions (
           id, title, content, rationale, decided_at, decision_maker,
-          meeting_name, survey_id, created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          meeting_name, minute_id, survey_id, created_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         newDecision.id, newDecision.title, newDecision.content,
         newDecision.rationale, newDecision.decided_at,
         newDecision.decision_maker, newDecision.meeting_name,
-        newDecision.survey_id, newDecision.created_by,
+        newDecision.minute_id, newDecision.survey_id, newDecision.created_by,
         newDecision.created_at, newDecision.updated_at,
       ),
       ...taskIds.map((taskId) => env.DB.prepare(`
@@ -382,12 +398,14 @@ export async function handleDecisions(
     const rationale = optionalString(body.rationale)
     const decisionMaker = optionalString(body.decision_maker)
     const meetingName = optionalString(body.meeting_name)
+    const minuteId = optionalString(body.minute_id)
     const surveyId = optionalString(body.survey_id)
 
     if (
       (body.rationale !== undefined && rationale === undefined) ||
       (body.decision_maker !== undefined && decisionMaker === undefined) ||
       (body.meeting_name !== undefined && meetingName === undefined) ||
+      (body.minute_id !== undefined && minuteId === undefined) ||
       (body.survey_id !== undefined && surveyId === undefined)
     ) {
       return responseError("Invalid optional field")
@@ -398,6 +416,8 @@ export async function handleDecisions(
       ? decision.decision_maker : decisionMaker ?? null
     const nextMeetingName = body.meeting_name === undefined
       ? decision.meeting_name : meetingName ?? null
+    const nextMinuteId = body.minute_id === undefined
+      ? decision.minute_id : minuteId ?? null
     const nextSurveyId = body.survey_id === undefined
       ? decision.survey_id : surveyId ?? null
 
@@ -426,7 +446,7 @@ export async function handleDecisions(
     const currentFileIds = fileIds ?? previousFileIds
 
     const validationError = await validateLinks(
-      env, currentTaskIds, currentFileIds, nextSurveyId,
+      env, currentTaskIds, currentFileIds, nextSurveyId, nextMinuteId,
     )
     if (validationError) return validationError
 
@@ -438,6 +458,7 @@ export async function handleDecisions(
       decided_at: decidedAt,
       decision_maker: nextDecisionMaker,
       meeting_name: nextMeetingName,
+      minute_id: nextMinuteId,
       survey_id: nextSurveyId,
       updated_at: new Date().toISOString(),
     }
@@ -446,12 +467,12 @@ export async function handleDecisions(
       env.DB.prepare(`
         UPDATE decisions
         SET title = ?, content = ?, rationale = ?, decided_at = ?,
-            decision_maker = ?, meeting_name = ?, survey_id = ?, updated_at = ?
+            decision_maker = ?, meeting_name = ?, minute_id = ?, survey_id = ?, updated_at = ?
         WHERE id = ?
       `).bind(
         updated.title, updated.content, updated.rationale,
         updated.decided_at, updated.decision_maker, updated.meeting_name,
-        updated.survey_id, updated.updated_at, decisionId,
+        updated.minute_id, updated.survey_id, updated.updated_at, decisionId,
       ),
     ]
 
