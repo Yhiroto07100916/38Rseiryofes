@@ -72,8 +72,19 @@
                 <v-chip size="small" color="primary" variant="tonal">
                   {{ formatDate(item.decided_at) }}
                 </v-chip>
+                <v-btn
+                  v-if="item.meeting_name && item.minute_id && auth.hasPermission('minutes.view')"
+                  size="small"
+                  density="comfortable"
+                  variant="text"
+                  color="primary"
+                  prepend-icon="mdi-notebook-outline"
+                  @click="navigateTo({ path: '/minutes', query: { open: item.minute_id } })"
+                >
+                  {{ item.meeting_name }}
+                </v-btn>
                 <span
-                  v-if="item.meeting_name"
+                  v-else-if="item.meeting_name"
                   class="text-body-2 text-medium-emphasis"
                 >
                   {{ item.meeting_name }}
@@ -179,12 +190,14 @@
             <v-text-field
               v-model="form.meeting_name"
               label="会議名（任意）"
+              hint="下の議事録を選ぶとタイトルが自動入力されます。手入力もできます。"
+              persistent-hint
               variant="outlined"
               class="mb-2"
             />
             <v-select
               v-model="form.minute_id"
-              label="関連する議事録（任意）"
+              label="紐づける議事録（任意）"
               :items="minutes"
               item-title="title"
               item-value="id"
@@ -192,7 +205,7 @@
               variant="outlined"
               class="mb-2"
               :disabled="!auth.hasPermission('minutes.view')"
-              hint="議事録を選ぶと、決定事項から議事録を開けます"
+              hint="選択した議事録は会議名と紐づき、決定事項から直接開けます"
               persistent-hint
               @update:model-value="handleMinuteSelection"
             />
