@@ -751,19 +751,11 @@
 
         <v-card-text>
           <div class="text-subtitle-2 mb-3">
-            用紙の向きを選択してください
+            A3横用紙にA4縦のページを2ページ並べて印刷します。
           </div>
-
-          <v-radio-group v-model="printOrientation">
-            <v-radio
-              label="A4 縦"
-              value="portrait"
-            />
-            <v-radio
-              label="A4 横"
-              value="landscape"
-            />
-          </v-radio-group>
+          <div class="text-body-2 text-medium-emphasis">
+            右側が奇数ページ、左側が次の偶数ページになります。
+          </div>
         </v-card-text>
 
         <v-card-actions>
@@ -913,7 +905,6 @@ definePageMeta({
     description: '',
   })
   const printDialog = ref(false)
-const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   const selectedBlockId = ref<string | null>(null)
   const pendingBlockType = ref<BlockType | null>(null)
   const pendingAfterBlock = ref<Block | null>(null)
@@ -1136,12 +1127,10 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
     showCharacter: boolean
   }
 
-  const getPrintLayout = (
-    orientation: 'portrait' | 'landscape' = printOrientation.value,
-  ) => {
-    const pageWidthMm = orientation === 'portrait' ? 210 : 297
-    const pageHeightMm = orientation === 'portrait' ? 297 : 210
-    const horizontalPaddingMm = orientation === 'portrait' ? 15 : 13
+  const getPrintLayout = () => {
+    const pageWidthMm = 210
+    const pageHeightMm = 297
+    const horizontalPaddingMm = 15
     const bodyHeightMm = pageHeightMm - 61
     const contentWidthMm = pageWidthMm - horizontalPaddingMm * 2
     const columnWidthMm = 12
@@ -1327,8 +1316,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
       return
     }
 
-    const orientation = printOrientation.value
-    const { maxCharacters, columnsPerPage } = getPrintLayout(orientation)
+    const { maxCharacters, columnsPerPage } = getPrintLayout()
 
     const pages: string[] = []
     let pageNumber = 1
@@ -1395,20 +1383,11 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
       return
     }
 
-    const pageWidth =
-      orientation === 'portrait'
-        ? '210mm'
-        : '297mm'
-
-    const pageHeight =
-      orientation === 'portrait'
-        ? '297mm'
-        : '210mm'
-
-    const horizontalPadding =
-      orientation === 'portrait'
-        ? '15mm'
-        : '13mm'
+    const pageWidth = '210mm'
+    const pageHeight = '297mm'
+    const sheetWidth = '420mm'
+    const sheetHeight = '297mm'
+    const horizontalPadding = '15mm'
 
     const verticalTopPadding = '9mm'
     const verticalBottomPadding = '11mm'
@@ -1427,7 +1406,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 
           <style>
             @page {
-              size: A4 ${orientation};
+              size: A3 landscape;
               margin: 0;
             }
 
@@ -1454,7 +1433,28 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
             }
 
             body {
-              width: ${pageWidth};
+              width: ${sheetWidth};
+            }
+
+            .print-sheet {
+              display: flex;
+              flex-direction: row;
+              direction: rtl;
+              width: ${sheetWidth};
+              height: ${sheetHeight};
+              overflow: hidden;
+              break-after: page;
+              break-inside: avoid;
+            }
+
+            .print-sheet:last-child {
+              break-after: auto;
+            }
+
+            .print-sheet-blank {
+              flex: 0 0 210mm;
+              width: 210mm;
+              height: 297mm;
             }
 
             /*
@@ -1476,11 +1476,10 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 
               background: #fff;
 
+              flex: 0 0 ${pageWidth};
+              width: ${pageWidth};
+              height: ${pageHeight};
               break-inside: avoid;
-              break-after: page;
-            }
-
-            .print-page:last-child {
               break-after: auto;
             }
 
@@ -1870,7 +1869,14 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
                 padding: 0;
               }
 
+              body,
+              .print-sheet {
+                width: ${sheetWidth};
+                height: ${sheetHeight};
+              }
+
               .print-page {
+                flex: 0 0 ${pageWidth};
                 width: ${pageWidth};
                 height: ${pageHeight};
               }
@@ -1879,7 +1885,12 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
         </head>
 
         <body>
-          ${pages.join('')}
+          ${Array.from({ length: Math.ceil(pages.length / 2) }, (_, index) => {
+            const rightPage = pages[index * 2]
+            const leftPage = pages[index * 2 + 1] ||
+              '<section class="print-page print-sheet-blank" aria-hidden="true"></section>'
+            return `<div class="print-sheet">${rightPage}${leftPage}</div>`
+          }).join('')}
         </body>
       </html>
     `)
