@@ -470,7 +470,7 @@ interface DecisionForm {
   decided_at: string
   decision_maker: string
   meeting_name: string
-  minute_id: string
+  minute_id: string | null
   survey_id: string
 }
 
@@ -496,7 +496,7 @@ const emptyForm = (): DecisionForm => ({
   decided_at: toLocalDateTime(new Date().toISOString()),
   decision_maker: '',
   meeting_name: '',
-  minute_id: '',
+  minute_id: null,
   survey_id: '',
 })
 
@@ -599,7 +599,7 @@ function openEdit(item: Decision) {
     decided_at: toLocalDateTime(item.decided_at),
     decision_maker: item.decision_maker ?? '',
     meeting_name: item.meeting_name ?? '',
-    minute_id: item.minute_id ?? '',
+    minute_id: item.minute_id,
     survey_id: item.survey_id ?? '',
   }
   if (item.survey_id && !surveys.value.some(survey => survey.id === item.survey_id)) {
@@ -635,7 +635,7 @@ async function saveDecision() {
     decided_at: decidedAt,
     decision_maker: form.value.decision_maker.trim() || null,
     meeting_name: form.value.meeting_name.trim() || null,
-    minute_id: form.value.minute_id.trim() || null,
+    minute_id: form.value.minute_id || null,
     survey_id: form.value.survey_id.trim() || null,
   }
 
