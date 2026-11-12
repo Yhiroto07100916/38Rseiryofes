@@ -74,7 +74,7 @@
             </v-btn>
             <v-btn
               v-if="auth.hasPermission('script.view')"
-              :to="'/scripts/' + script.id + '/view'"
+              :to="'/scripts/view/' + script.id'"
               variant="outlined"
               color="primary"
               prepend-icon="mdi-book-open-page-variant"
