@@ -465,6 +465,7 @@ onMounted(loadScript)
 }
 
 .print-script-column {
+  direction: ltr;
   position: relative;
   flex: 0 0 12mm;
   width: 12mm;
