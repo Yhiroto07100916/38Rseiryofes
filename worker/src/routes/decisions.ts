@@ -99,7 +99,7 @@ async function validateIds(
   return result.results.length === ids.length
 }
 
-async function getLinks(env: Env, decisionId: string) {
+async function getLinks(env: Env, decisionId: string, userId: string) {
   const tasks = await env.DB.prepare(`
     SELECT t.id, t.title, t.status, t.due_at
     FROM decision_tasks dt
@@ -114,8 +114,12 @@ async function getLinks(env: Env, decisionId: string) {
     INNER JOIN files f ON f.id = df.file_id
     WHERE df.decision_id = ?
       AND f.archived_at IS NULL
+      AND (f.access_scope = 'all' OR f.uploaded_by = ? OR EXISTS (
+        SELECT 1 FROM file_user_access fua
+        WHERE fua.file_id = f.id AND fua.user_id = ?
+      ))
     ORDER BY f.original_name, f.id
-  `).bind(decisionId).all()
+  `).bind(decisionId, userId, userId).all()
 
   return { tasks: tasks.results, files: files.results }
 }
@@ -345,7 +349,7 @@ export async function handleDecisions(
 
     return Response.json({
       decision: await getDecision(env, newDecision.id),
-      ...(await getLinks(env, newDecision.id)),
+      ...(await getLinks(env, newDecision.id, userId)),
     }, { status: 201 })
   }
 
@@ -371,7 +375,7 @@ export async function handleDecisions(
 
     return Response.json({
       decision,
-      ...(await getLinks(env, decisionId)),
+      ...(await getLinks(env, decisionId, userId)),
       history: await getHistory(env, decisionId),
     })
   }
@@ -521,7 +525,7 @@ export async function handleDecisions(
     }
     return Response.json({
       decision: await getDecision(env, decisionId),
-      ...(await getLinks(env, decisionId)),
+      ...(await getLinks(env, decisionId, userId)),
     })
   }
 

@@ -111,7 +111,8 @@ async function getTask(
 async function getTaskLinks(
   env: Env,
   taskId: string,
-  includeCalendarEvent = true,
+  includeCalendarEvent: boolean,
+  userId: string,
 ) {
   const event = includeCalendarEvent
     ? await env.DB
@@ -164,9 +165,13 @@ async function getTaskLinks(
         ON f.id = tf.file_id
       WHERE tf.task_id = ?
         AND f.archived_at IS NULL
+        AND (f.access_scope = 'all' OR f.uploaded_by = ? OR EXISTS (
+          SELECT 1 FROM file_user_access fua
+          WHERE fua.file_id = f.id AND fua.user_id = ?
+        ))
       ORDER BY tf.created_at
     `)
-    .bind(taskId)
+    .bind(taskId, userId, userId)
     .all<{
       id: string
       original_name: string
@@ -497,6 +502,7 @@ export async function handleTasks(
       env,
       task.id,
       canViewSchedule,
+      auth.user.id,
     )
 
     return Response.json({
@@ -965,6 +971,7 @@ export async function handleTasks(
             auth.user.id,
             "schedule.view",
           ),
+          auth.user.id,
         )),
       },
       { status: 201 },
@@ -1645,6 +1652,7 @@ export async function handleTasks(
           auth.user.id,
           "schedule.view",
         ),
+        auth.user.id,
       )),
     })
   }
