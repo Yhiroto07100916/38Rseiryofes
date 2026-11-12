@@ -21,7 +21,7 @@
         </v-row>
       </v-card-text>
       <v-divider />
-      <div class="tool-rental-table-scroll">
+      <div class="tool-rental-table-scroll d-none d-md-block">
       <v-table>
         <thead><tr><th>工具</th><th>個体ID</th><th>管理番号</th><th>借りた人</th><th>貸出日時</th><th>時間制限</th><th>タイマー終了予定</th><th>返却を記録した人</th><th>返却日時</th><th>状態</th></tr></thead>
         <tbody>
@@ -44,6 +44,61 @@
           <tr v-if="!loading && filteredRecords.length === 0"><td colspan="10" class="text-center text-medium-emphasis py-6">履歴はありません。</td></tr>
         </tbody>
       </v-table>
+      </div>
+      <div class="d-md-none pa-3 d-flex flex-column ga-3">
+        <v-card
+          v-for="record in filteredRecords"
+          :key="record.loan_item_id"
+          :data-loan-item-id="record.loan_item_id"
+          rounded="lg"
+          variant="outlined"
+          :class="{ 'loan-item-highlight': highlightedLoanItemId === String(record.loan_item_id) }"
+        >
+          <v-card-text>
+            <div class="d-flex align-start justify-space-between ga-2 mb-3">
+              <div class="text-subtitle-1 font-weight-bold">{{ record.tool_name }}</div>
+              <v-chip
+                size="small"
+                :color="record.status === 'returned' ? 'success' : 'warning'"
+                variant="tonal"
+              >
+                {{ record.status === 'returned' ? '返却済み' : '貸出中' }}
+              </v-chip>
+            </div>
+            <div class="text-body-2 text-medium-emphasis mb-3">
+              管理番号：{{ record.management_number }} · 個体ID：{{ record.tool_item_id }}
+            </div>
+            <div class="loan-mobile-details">
+              <div class="loan-mobile-field">
+                <span>借りた人</span>
+                <strong>{{ record.class_name }} {{ record.borrower_name }}</strong>
+              </div>
+              <div class="loan-mobile-field">
+                <span>貸出日時</span>
+                <strong>{{ formatDate(record.borrowed_at) }}</strong>
+              </div>
+              <div class="loan-mobile-field">
+                <span>時間制限</span>
+                <strong>{{ record.time_limit_minutes ? `${record.time_limit_minutes}分` : '—' }}</strong>
+              </div>
+              <div class="loan-mobile-field">
+                <span>タイマー終了予定</span>
+                <strong>{{ record.due_at ? formatDate(record.due_at) : '—' }}</strong>
+              </div>
+              <div class="loan-mobile-field">
+                <span>返却を記録した人</span>
+                <strong>{{ record.returned_by_name ? `${record.returned_by_class_name} ${record.returned_by_name}` : '—' }}</strong>
+              </div>
+              <div class="loan-mobile-field">
+                <span>返却日時</span>
+                <strong>{{ record.returned_at ? formatDate(record.returned_at) : '—' }}</strong>
+              </div>
+            </div>
+          </v-card-text>
+        </v-card>
+        <div v-if="!loading && filteredRecords.length === 0" class="text-center text-medium-emphasis py-6">
+          履歴はありません。
+        </div>
       </div>
       <v-card-actions class="text-caption text-medium-emphasis">直近500件を表示します。</v-card-actions>
     </v-card>
@@ -102,8 +157,10 @@ onMounted(async () => {
   await loadHistory()
   if (!highlightedLoanItemId.value) return
   await nextTick()
-  document.getElementById(`loan-item-${highlightedLoanItemId.value}`)
-    ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  const target = window.matchMedia('(max-width: 959px)').matches
+    ? document.querySelector<HTMLElement>(`[data-loan-item-id="${highlightedLoanItemId.value}"]`)
+    : document.getElementById(`loan-item-${highlightedLoanItemId.value}`)
+  target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 })
 </script>
 
@@ -119,5 +176,25 @@ onMounted(async () => {
 }
 .tool-rental-table-scroll :deep(table) {
   min-width: 1200px;
+}
+.loan-mobile-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+.loan-mobile-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.loan-mobile-field span {
+  color: rgb(var(--v-theme-on-surface-variant));
+  font-size: 0.75rem;
+}
+.loan-mobile-field strong {
+  overflow-wrap: anywhere;
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 </style>
