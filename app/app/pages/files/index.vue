@@ -772,7 +772,7 @@ definePageMeta({
   permissions: ['files.view'],
 })
 
-import { nextTick, onBeforeUnmount } from "vue"
+import { nextTick, onBeforeUnmount, watch } from "vue"
 import { useConfirmDialog } from '~/composables/useConfirmDialog'
 
 interface FileCategory {
