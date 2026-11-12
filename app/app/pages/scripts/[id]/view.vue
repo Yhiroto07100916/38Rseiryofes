@@ -152,6 +152,7 @@ onMounted(loadScript)
 }
 .viewer-alert, .viewer-pages { max-width: 1100px; margin: 0 auto; }
 .script-page {
+  box-sizing: border-box;
   width: min(100%, 210mm); min-height: 297mm; margin: 0 auto 18px; padding: 14mm 15mm 12mm;
   overflow: visible; background: white; box-shadow: 0 2px 14px rgb(0 0 0 / 10%);
   break-after: page; page-break-after: always;
@@ -187,7 +188,7 @@ onMounted(loadScript)
   @page { size: A4 portrait; margin: 0; }
   .script-viewer { padding: 0; background: white; }
   .viewer-toolbar, .viewer-alert { display: none !important; }
-  .script-page { width: 210mm; min-height: 297mm; margin: 0; padding: 14mm 15mm 12mm; box-shadow: none; overflow: visible; }
+  .script-page { box-sizing: border-box; width: 210mm; height: 296mm; min-height: 296mm; margin: 0; padding: 14mm 15mm 12mm; box-shadow: none; overflow: visible; }
   .page-columns { overflow: visible; }
 }
 </style>
