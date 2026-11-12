@@ -508,7 +508,7 @@ onMounted(loadScript)
   writing-mode: vertical-rl;
   text-orientation: mixed;
   direction: ltr;
-  unicode-bidi: isolate;
+
 }
 
 .print-direction-column {
