@@ -1242,9 +1242,7 @@ definePageMeta({
         if (block.type === 'dialogue') {
           return `
             <div class="print-script-column print-dialogue-column">
-              <span class="print-column-text">
-                ${isFirst ? '「' : ''}${escapedChunk}${isLast ? '」' : ''}
-              </span>
+              <span class="print-column-text">${isFirst ? '「' : ''}${escapedChunk}${isLast ? '」' : ''}</span>
             </div>
           `
         }
@@ -1258,9 +1256,7 @@ definePageMeta({
 
         return `
           <div class="print-script-column ${className}">
-            <span class="print-column-text">
-              ${escapedChunk}
-            </span>
+            <span class="print-column-text">${escapedChunk}</span>
           </div>
         `
       })
