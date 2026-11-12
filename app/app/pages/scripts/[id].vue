@@ -921,7 +921,29 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   const canvasRef = ref<HTMLElement | null>(null)
   const blockRefs = new Map<string, HTMLElement>()
   const draggingBlockId = ref<string | null>(null)
-  
+
+  const syncBlockWidth = (element: HTMLElement) => {
+    const blockElement = element.closest<HTMLElement>('.script-block')
+    if (!blockElement) return
+
+    const range = document.createRange()
+    range.selectNodeContents(element)
+    const contentWidth = range.getBoundingClientRect().width
+    const blockStyle = window.getComputedStyle(blockElement)
+    const horizontalPadding =
+      Number.parseFloat(blockStyle.paddingLeft) +
+      Number.parseFloat(blockStyle.paddingRight)
+
+    if (contentWidth > 0) {
+      blockElement.style.setProperty(
+        '--block-content-width',
+        `${Math.ceil(contentWidth + horizontalPadding)}px`,
+      )
+    } else {
+      blockElement.style.removeProperty('--block-content-width')
+    }
+  }
+
   const setBlockRef = (
     id: string,
     element: Element | ComponentPublicInstance | null,
@@ -933,6 +955,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
         element.dataset.editorInitialized = 'true'
       }
       blockRefs.set(id, element)
+      void nextTick(() => syncBlockWidth(element))
     } else {
       blockRefs.delete(id)
     }
@@ -2729,6 +2752,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   const onBlockInput = (block: Block, event: Event) => {
     const target = event.target as HTMLElement
     block.content = (target.innerText || '').replace(/\r\n?/g, '\n')
+    syncBlockWidth(target)
 
     const nextDirtyBlockIds = new Set(dirtyBlockIds.value)
     nextDirtyBlockIds.add(block.id)
@@ -3058,10 +3082,11 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 }
 
 .script-block {
+  --block-base-width: 118px;
   position: relative;
   display: inline-flex;
   vertical-align: top;
-  width: 118px;
+  width: max(var(--block-base-width), var(--block-content-width, 0px));
   min-height: 560px;
   margin-left: 38px;
   padding: 48px 12px 24px;
@@ -3097,7 +3122,7 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 }
 
 .block-dialogue {
-  width: 118px;
+  --block-base-width: 118px;
 }
 
 .block-dialogue .block-label {
@@ -3105,20 +3130,20 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
 }
 
 .block-direction {
-  width: 108px;
+  --block-base-width: 108px;
   min-height: 500px;
   color: #5f6368;
   background: rgba(0, 0, 0, 0.018);
 }
 
 .block-sound {
-  width: 108px;
+  --block-base-width: 108px;
   min-height: 420px;
   background: rgba(18, 58, 92, 0.045);
 }
 
 .block-lighting {
-  width: 108px;
+  --block-base-width: 108px;
   min-height: 420px;
   background: rgba(18, 58, 92, 0.065);
 }
@@ -3429,24 +3454,24 @@ const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   }
 
   .script-block {
-    width: 102px;
+    --block-base-width: 102px;
     min-height: 480px;
     margin-left: 22px;
     padding: 44px 10px 20px;
   }
 
   .block-dialogue {
-    width: 104px;
+    --block-base-width: 104px;
   }
 
   .block-direction {
-    width: 96px;
+    --block-base-width: 96px;
     min-height: 430px;
   }
 
   .block-sound,
   .block-lighting {
-    width: 96px;
+    --block-base-width: 96px;
     min-height: 380px;
   }
 
