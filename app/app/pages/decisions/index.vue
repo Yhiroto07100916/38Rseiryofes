@@ -183,6 +183,20 @@
               class="mb-2"
             />
             <v-select
+              v-model="form.minute_id"
+              label="関連する議事録（任意）"
+              :items="minutes"
+              item-title="title"
+              item-value="id"
+              clearable
+              variant="outlined"
+              class="mb-2"
+              :disabled="!auth.hasPermission('minutes.view')"
+              hint="議事録を選ぶと、決定事項から議事録を開けます"
+              persistent-hint
+              @update:model-value="handleMinuteSelection"
+            />
+            <v-select
               v-model="form.survey_id"
               label="関連アンケート（任意）"
               :items="surveys"
@@ -238,6 +252,16 @@
             <div v-if="detail.decision.meeting_name" class="mt-2">
               会議名：{{ detail.decision.meeting_name }}
             </div>
+            <v-btn
+              v-if="detail.decision.minute_id && auth.hasPermission('minutes.view')"
+              class="mt-2"
+              size="small"
+              variant="tonal"
+              prepend-icon="mdi-notebook-outline"
+              @click="navigateTo({ path: '/minutes', query: { open: detail.decision.minute_id } })"
+            >
+              関連する議事録を開く
+            </v-btn>
             <div v-if="detail.decision.decision_maker" class="mt-1">
               決定者：{{ detail.decision.decision_maker }}
             </div>
@@ -400,6 +424,7 @@ interface Decision {
   decided_at: string
   decision_maker: string | null
   meeting_name: string | null
+  minute_id: string | null
   survey_id: string | null
   created_by: string
   created_at: string
@@ -445,6 +470,7 @@ interface DecisionForm {
   decided_at: string
   decision_maker: string
   meeting_name: string
+  minute_id: string
   survey_id: string
 }
 
@@ -454,6 +480,7 @@ const snackbar = useSnackbar()
 
 const decisions = ref<Decision[]>([])
 const surveys = ref<SurveyChoice[]>([])
+const minutes = ref<Array<{ id: string; title: string; meeting_at: string }>>([])
 const loading = ref(false)
 const saving = ref(false)
 const detailLoading = ref(false)
@@ -469,6 +496,7 @@ const emptyForm = (): DecisionForm => ({
   decided_at: toLocalDateTime(new Date().toISOString()),
   decision_maker: '',
   meeting_name: '',
+  minute_id: '',
   survey_id: '',
 })
 
@@ -528,6 +556,23 @@ async function loadDecisions() {
   }
 }
 
+async function loadMinutes() {
+  if (!auth.hasPermission('minutes.view')) return
+  try {
+    const response = await apiFetch<{ minutes: Array<{ id: string; title: string; meeting_at: string }> }>('/api/minutes')
+    minutes.value = response.minutes
+  } catch (error) {
+    console.error('Failed to load minutes:', error)
+    showMessage('関連する議事録一覧を取得できませんでした。', 'error')
+  }
+}
+
+function handleMinuteSelection(id: string | null) {
+  if (!id) return
+  const minute = minutes.value.find(item => item.id === id)
+  if (minute) form.value.meeting_name = minute.title
+}
+
 async function loadSurveys() {
   if (!auth.hasPermission('surveys.view')) return
   try {
@@ -554,6 +599,7 @@ function openEdit(item: Decision) {
     decided_at: toLocalDateTime(item.decided_at),
     decision_maker: item.decision_maker ?? '',
     meeting_name: item.meeting_name ?? '',
+    minute_id: item.minute_id ?? '',
     survey_id: item.survey_id ?? '',
   }
   if (item.survey_id && !surveys.value.some(survey => survey.id === item.survey_id)) {
@@ -589,6 +635,7 @@ async function saveDecision() {
     decided_at: decidedAt,
     decision_maker: form.value.decision_maker.trim() || null,
     meeting_name: form.value.meeting_name.trim() || null,
+    minute_id: form.value.minute_id.trim() || null,
     survey_id: form.value.survey_id.trim() || null,
   }
 
@@ -678,7 +725,7 @@ function historyColor(action: string): string {
 const route = useRoute()
 
 onMounted(async () => {
-  await Promise.all([loadDecisions(), loadSurveys()])
+  await Promise.all([loadDecisions(), loadSurveys(), loadMinutes()])
   const openId = typeof route.query.open === "string" ? route.query.open : ""
   if (openId) await openDetail(openId)
 })
