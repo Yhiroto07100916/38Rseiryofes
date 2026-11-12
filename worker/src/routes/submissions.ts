@@ -565,6 +565,10 @@ export async function handleSubmissions(
               JOIN files f
                 ON f.id = srf.file_id
               WHERE srf.record_id = sr.id
+                AND (f.access_scope = 'all' OR f.uploaded_by = ? OR EXISTS (
+                  SELECT 1 FROM file_user_access fua
+                  WHERE fua.file_id = f.id AND fua.user_id = ?
+                ))
             ) AS files
           FROM submission_records sr
           LEFT JOIN users u
@@ -572,7 +576,7 @@ export async function handleSubmissions(
           WHERE sr.submission_id = ?
           ORDER BY sr.attempt_number DESC
         `)
-        .bind(id)
+        .bind(auth.user.id, auth.user.id, id)
         .all(),
 
       env.DB
