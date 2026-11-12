@@ -14,10 +14,21 @@ export async function notifyFileLinked(
   actorUserId: string,
 ): Promise<void> {
   const file = await env.DB.prepare(
-    "SELECT original_name, notify_on_upload FROM files WHERE id = ?",
-  ).bind(fileId).first<{ original_name: string; notify_on_upload: number }>()
+    "SELECT original_name, notify_on_upload, access_scope, uploaded_by FROM files WHERE id = ?",
+  ).bind(fileId).first<{
+    original_name: string
+    notify_on_upload: number
+    access_scope: 'all' | 'selected'
+    uploaded_by: string
+  }>()
 
   if (!file || file.notify_on_upload !== 1) return
+
+  const allowedUserIds = file.access_scope === 'selected'
+    ? new Set((await env.DB.prepare(
+      "SELECT user_id FROM file_user_access WHERE file_id = ?",
+    ).bind(fileId).all<{ user_id: string }>()).results.map(row => row.user_id))
+    : null
 
   const linkedFeatures = await Promise.all(FILE_FEATURE_PERMISSIONS.map(async feature => {
     const linked = await env.DB.prepare(
@@ -32,6 +43,11 @@ export async function notifyFileLinked(
   const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
   const eligible = await Promise.all(users.results.map(async user => {
     if (user.id === actorUserId) return false
+    if (
+      allowedUserIds &&
+      user.id !== file.uploaded_by &&
+      !allowedUserIds.has(user.id)
+    ) return false
     for (const permission of permissions) {
       if (await hasPermission(env as Env, user.id, permission)) return true
     }
