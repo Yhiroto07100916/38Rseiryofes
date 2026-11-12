@@ -750,11 +750,20 @@
         </v-card-title>
 
         <v-card-text>
-          <div class="text-subtitle-2 mb-3">
-            A3横用紙にA4縦のページを2ページ並べて印刷します。
-          </div>
+          <v-select
+            v-model="printOrientation"
+            :items="[
+              { title: 'A4 縦', value: 'portrait' },
+              { title: 'A4 横', value: 'landscape' },
+            ]"
+            label="用紙の向き"
+            variant="outlined"
+            density="comfortable"
+            hide-details
+            class="mb-3"
+          />
           <div class="text-body-2 text-medium-emphasis">
-            右側が奇数ページ、左側が次の偶数ページになります。
+            A4用紙1枚につき1ページで出力します。ページは右から左へ進む順番です。
           </div>
         </v-card-text>
 
@@ -905,6 +914,7 @@ definePageMeta({
     description: '',
   })
   const printDialog = ref(false)
+  const printOrientation = ref<'portrait' | 'landscape'>('portrait')
   const selectedBlockId = ref<string | null>(null)
   const pendingBlockType = ref<BlockType | null>(null)
   const pendingAfterBlock = ref<Block | null>(null)
@@ -1127,9 +1137,10 @@ definePageMeta({
     showCharacter: boolean
   }
 
-  const getPrintLayout = () => {
-    const pageWidthMm = 210
-    const pageHeightMm = 297
+  const getPrintLayout = (orientation: 'portrait' | 'landscape') => {
+    const isLandscape = orientation === 'landscape'
+    const pageWidthMm = isLandscape ? 297 : 210
+    const pageHeightMm = isLandscape ? 210 : 297
     const horizontalPaddingMm = 15
     const bodyHeightMm = pageHeightMm - 61
     const contentWidthMm = pageWidthMm - horizontalPaddingMm * 2
@@ -1316,7 +1327,9 @@ definePageMeta({
       return
     }
 
-    const { maxCharacters, columnsPerPage } = getPrintLayout()
+    const { maxCharacters, columnsPerPage } = getPrintLayout(
+      printOrientation.value,
+    )
 
     const pages: string[] = []
     let pageNumber = 1
@@ -1383,10 +1396,9 @@ definePageMeta({
       return
     }
 
-    const pageWidth = '210mm'
-    const pageHeight = '297mm'
-    const sheetWidth = '420mm'
-    const sheetHeight = '297mm'
+    const isLandscape = printOrientation.value === 'landscape'
+    const pageWidth = isLandscape ? '297mm' : '210mm'
+    const pageHeight = isLandscape ? '210mm' : '297mm'
     const horizontalPadding = '15mm'
 
     const verticalTopPadding = '9mm'
@@ -1406,7 +1418,7 @@ definePageMeta({
 
           <style>
             @page {
-              size: A3 landscape;
+              size: A4 ${printOrientation.value};
               margin: 0;
             }
 
@@ -1433,32 +1445,12 @@ definePageMeta({
             }
 
             body {
-              width: ${sheetWidth};
-            }
-
-            .print-sheet {
-              display: flex;
-              flex-direction: row;
-              direction: rtl;
-              width: ${sheetWidth};
-              height: ${sheetHeight};
-              overflow: hidden;
-              break-after: page;
-              break-inside: avoid;
-            }
-
-            .print-sheet:last-child {
-              break-after: auto;
-            }
-
-            .print-sheet-blank {
-              flex: 0 0 210mm;
-              width: 210mm;
-              height: 297mm;
+              width: ${pageWidth};
             }
 
             /*
-             * A4そのものを1枚の紙として扱う。
+             * A4用紙1枚につき、台本1ページを配置する。
+             * 各ページの改ページはここだけで制御する。
              */
             .print-page {
               position: relative;
@@ -1476,11 +1468,10 @@ definePageMeta({
 
               background: #fff;
 
-              flex: 0 0 ${pageWidth};
               width: ${pageWidth};
               height: ${pageHeight};
               break-inside: avoid;
-              break-after: auto;
+              break-after: page;
             }
 
             /*
@@ -1857,26 +1848,23 @@ definePageMeta({
               margin-left: 5mm;
             }
 
+            .print-page:last-child {
+              break-after: auto;
+            }
+
             /*
-             * 印刷時もA4サイズを維持。
+             * 印刷時も選択したA4の向き・寸法を維持する。
              */
             @media print {
               html,
               body {
-                width: auto;
+                width: ${pageWidth};
                 height: auto;
                 margin: 0;
                 padding: 0;
               }
 
-              body,
-              .print-sheet {
-                width: ${sheetWidth};
-                height: ${sheetHeight};
-              }
-
               .print-page {
-                flex: 0 0 ${pageWidth};
                 width: ${pageWidth};
                 height: ${pageHeight};
               }
@@ -1885,12 +1873,7 @@ definePageMeta({
         </head>
 
         <body>
-          ${Array.from({ length: Math.ceil(pages.length / 2) }, (_, index) => {
-            const rightPage = pages[index * 2]
-            const leftPage = pages[index * 2 + 1] ||
-              '<section class="print-page print-sheet-blank" aria-hidden="true"></section>'
-            return `<div class="print-sheet">${rightPage}${leftPage}</div>`
-          }).join('')}
+          ${pages.join('')}
         </body>
       </html>
     `)
