@@ -452,7 +452,7 @@ export async function handleDecisions(
     ).results.map((row) => row.id)
     const currentFileIds = fileIds ?? previousFileIds
 
-    if (body.minute_id !== undefined && nextMinuteId && !(await hasPermission(env, userId, "minutes.view"))) {
+    if (body.minute_id !== undefined && !(await hasPermission(env, userId, "minutes.view"))) {
       return responseError("Forbidden", 403)
     }
     const validationError = await validateLinks(
