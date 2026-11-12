@@ -343,10 +343,11 @@ const handleLogout = async () => {
 
 .drawer-social-links {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   align-self: stretch;
-  gap: 22px;
+  gap: 8px;
   width: 100%;
   margin-top: auto;
   margin-left: auto;
@@ -356,6 +357,7 @@ const handleLogout = async () => {
 
 .drawer-social-link {
   display: inline-flex;
+  flex: 0 0 36px;
   width: 36px;
   height: 36px;
   align-items: center;
