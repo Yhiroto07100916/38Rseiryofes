@@ -795,7 +795,7 @@
   const snackbar = useSnackbar()
 
 definePageMeta({
-  permissions: ['script.view'],
+  permissions: ['script.view', 'script.edit'],
   middleware: ['auth'],
   layout: false,
 })
