@@ -215,6 +215,60 @@ describe("Submissions API", () => {
   })
 
 
+  it("allows editors to load roles and change the assigned role", async () => {
+    const fixture = await createFixture()
+    await grantPermissions(fixture.userId, [
+      "submissions.create",
+      "submissions.edit",
+      "submissions.view",
+    ])
+
+    const firstRoleId = crypto.randomUUID()
+    const nextRoleId = crypto.randomUUID()
+    await env.DB.prepare(
+      "INSERT INTO roles (id, name, description) VALUES (?, ?, ?), (?, ?, ?)",
+    )
+      .bind(firstRoleId, "旧担当係", "", nextRoleId, "新担当係", "")
+      .run()
+
+    const rolesResponse = await SELF.fetch(
+      "http://example.com/api/submissions/roles",
+      { headers: { Cookie: fixture.cookie } },
+    )
+    expect(rolesResponse.status).toBe(200)
+
+    const submissionId = await createSubmission(fixture)
+    await env.DB.prepare(
+      "UPDATE submissions SET assigned_role_id = ? WHERE id = ?",
+    )
+      .bind(firstRoleId, submissionId)
+      .run()
+
+    const updateResponse = await SELF.fetch(
+      `http://example.com/api/submissions/${submissionId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: fixture.cookie,
+        },
+        body: JSON.stringify({ assigned_role_id: nextRoleId }),
+      },
+    )
+    expect(updateResponse.status).toBe(200)
+
+    const updated = await env.DB.prepare(
+      "SELECT assigned_role_id FROM submissions WHERE id = ?",
+    )
+      .bind(submissionId)
+      .first<{ assigned_role_id: string | null }>()
+    expect(updated?.assigned_role_id).toBe(nextRoleId)
+
+    await env.DB.prepare("DELETE FROM roles WHERE id IN (?, ?)")
+      .bind(firstRoleId, nextRoleId)
+      .run()
+  })
+
   it("creates a submission and returns it in the list and detail", async () => {
     const fixture = await createFixture();
 
