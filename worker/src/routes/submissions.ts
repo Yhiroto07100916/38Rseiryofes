@@ -296,10 +296,16 @@ export async function handleSubmissions(
   const sub = pathParts[1]
 
   if (method === "GET" && id === "roles" && !sub) {
-    const auth = await permitted(request, env, "submissions.create")
+    const auth = await requireAuth(request, env)
 
     if (auth instanceof Response) {
       return auth
+    }
+
+    const canCreate = await hasPermission(env, auth.user.id, "submissions.create")
+    const canEdit = await hasPermission(env, auth.user.id, "submissions.edit")
+    if (!canCreate && !canEdit) {
+      return json({ error: "Forbidden", permission: "submissions.edit" }, 403)
     }
 
     const roles = await env.DB
@@ -786,12 +792,11 @@ export async function handleSubmissions(
     }
 
     try {
-      const updatedSubmission = await getSubmission(env, id)
+      const assignedRoleId = Object.prototype.hasOwnProperty.call(updates, "assigned_role_id")
+        ? updates.assigned_role_id
+        : current.assigned_role_id
       const recipients = [...new Set([
-        ...await getSubmissionRoleMemberIds(
-          env,
-          updatedSubmission?.assigned_role_id ?? current.assigned_role_id,
-        ),
+        ...await getSubmissionRoleMemberIds(env, assignedRoleId),
         current.created_by,
       ])]
       await createNotificationsForUsers(env, {
