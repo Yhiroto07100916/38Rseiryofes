@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeRouteLeave } from 'vue-router'
+import { useConfirmDialog } from '~/composables/useConfirmDialog'
 
 definePageMeta({
   middleware: ['admin'],
@@ -72,6 +73,7 @@ interface SettingLog {
 }
 
 const api = useApi()
+const { confirm } = useConfirmDialog()
 const featureOptions = [
   { key: 'tasks', title: 'タスク' },
   { key: 'calendar', title: 'カレンダー' },
@@ -164,6 +166,7 @@ const users = ref<UserOption[]>([])
 const settingLogs = ref<SettingLog[]>([])
 const systemInfo = ref<{ api_status: string; database_status: string; version: string; checked_at: string } | null>(null)
 const selectedUserId = ref('')
+const assignDialogOpen = ref(false)
 const loading = ref(true)
 const saving = ref(false)
 const assigning = ref(false)
@@ -318,8 +321,24 @@ async function saveSettings() {
   }
 }
 
+function openAssignDialog() {
+  selectedUserId.value = ''
+  assignDialogOpen.value = true
+}
+
 async function addImportantAdmin() {
   if (!selectedUserId.value) return
+
+  const selectedUser = availableUsers.value.find((user) => user.id === selectedUserId.value)
+  if (!selectedUser) return
+
+  const confirmed = await confirm({
+    title: '重要設定管理者に任命',
+    message: `「${displayUser(selectedUser)}」を重要設定管理者に任命しますか？`,
+    confirmText: '任命',
+  })
+  if (!confirmed) return
+
   assigning.value = true
 
   try {
@@ -327,6 +346,7 @@ async function addImportantAdmin() {
       method: 'POST',
       body: { user_id: selectedUserId.value },
     })
+    assignDialogOpen.value = false
     selectedUserId.value = ''
     await loadImportantAdmins()
     snackbar.success('重要設定管理者を追加しました。')
@@ -344,7 +364,12 @@ async function removeImportantAdmin(user: UserOption) {
     return
   }
 
-  const confirmed = window.confirm(`${displayUser(user)} の重要設定管理者権限を解除しますか？`)
+  const confirmed = await confirm({
+    title: '重要設定管理者を解除',
+    message: `「${displayUser(user)}」の重要設定管理者権限を解除しますか？`,
+    confirmText: '解除',
+    confirmColor: 'error',
+  })
   if (!confirmed) return
 
   assigning.value = true
@@ -679,24 +704,66 @@ onBeforeUnmount(() => {
           <v-alert type="warning" variant="tonal" class="mb-4">
             重要設定管理者は、他の重要設定管理者を任命・解除できます。最低1人は必ず残す必要があります。
           </v-alert>
-          <div class="d-flex flex-column flex-sm-row ga-2 mb-4">
-            <v-select
-              v-model="selectedUserId"
-              :items="availableUsers.map((user) => ({ title: displayUser(user), value: user.id }))"
-              label="追加するユーザー"
-              hide-details
-              :disabled="availableUsers.length === 0"
-            />
-            <v-btn
-              color="primary"
-              prepend-icon="mdi-account-plus"
-              :loading="assigning"
-              :disabled="!selectedUserId"
-              @click="addImportantAdmin"
-            >
-              任命
-            </v-btn>
-          </div>
+          <v-btn
+            block
+            color="primary"
+            prepend-icon="mdi-account-plus"
+            class="mb-4"
+            :disabled="availableUsers.length === 0 || assigning"
+            @click="openAssignDialog"
+          >
+            重要設定管理者を追加
+          </v-btn>
+          <v-alert
+            v-if="availableUsers.length === 0"
+            type="info"
+            variant="tonal"
+            density="compact"
+            class="mb-4"
+          >
+            任命できるユーザーがいません。
+          </v-alert>
+          <v-dialog
+            v-model="assignDialogOpen"
+            max-width="440"
+            persistent
+          >
+            <v-card rounded="xl">
+              <v-card-title class="pa-6 pb-2">
+                重要設定管理者を追加
+              </v-card-title>
+              <v-card-text class="px-6">
+                <v-select
+                  v-model="selectedUserId"
+                  :items="availableUsers.map((user) => ({ title: displayUser(user), value: user.id }))"
+                  label="任命するユーザー"
+                  variant="outlined"
+                  rounded="lg"
+                  density="comfortable"
+                  hide-details
+                  :disabled="assigning"
+                />
+              </v-card-text>
+              <v-card-actions class="px-6 pb-6">
+                <v-spacer />
+                <v-btn
+                  variant="text"
+                  :disabled="assigning"
+                  @click="assignDialogOpen = false"
+                >
+                  キャンセル
+                </v-btn>
+                <v-btn
+                  color="primary"
+                  :loading="assigning"
+                  :disabled="!selectedUserId"
+                  @click="addImportantAdmin"
+                >
+                  次へ
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
           <v-list lines="two">
             <v-list-item
               v-for="user in importantAdmins"
