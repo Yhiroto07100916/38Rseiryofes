@@ -78,6 +78,7 @@ definePageMeta({
 
 const auth = useAuthStore()
 const snackbar = useSnackbar()
+const route = useRoute()
 
 const studentNumber = ref('')
 const password = ref('')
@@ -97,7 +98,9 @@ const handleLogin = async () => {
       password.value,
     )
 
-    await navigateTo('/')
+    await navigateTo(
+      route.query.maintenanceAdmin === '1' ? '/admin/settings' : '/',
+    )
   } catch (error: any) {
     console.error('Login failed:', error)
 
