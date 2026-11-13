@@ -309,6 +309,17 @@
           <v-text-field v-model="editForm.title" label="提出物名" variant="outlined" />
           <v-text-field v-model="editForm.destination" label="提出先" variant="outlined" />
           <CommonJstDateTimePicker v-model="editForm.dueAt" label="提出期限" clearable />
+          <v-select
+            v-model="editForm.assignedRoleId"
+            :items="submissionRoles"
+            item-title="name"
+            item-value="id"
+            label="担当係"
+            variant="outlined"
+            clearable
+            :loading="rolesLoading"
+            no-data-text="係がありません"
+          />
           <v-textarea v-model="editForm.description" label="説明・注意事項" variant="outlined" rows="4" />
         </v-card-text>
         <v-card-actions class="px-5 pb-5">
@@ -450,12 +461,15 @@ const cancelDialog = ref(false)
 const submitNote = ref('')
 const reviewNote = ref('')
 const selectedFiles = ref<File[]>([])
+const submissionRoles = ref<{ id: string; name: string }[]>([])
+const rolesLoading = ref(false)
 
 const editForm = reactive({
   title: '',
   destination: '',
   description: '',
   dueAt: '',
+  assignedRoleId: null as string | null,
 })
 
 const canEdit = computed(() =>
@@ -556,13 +570,24 @@ const toLocalDateTime = (value: string | null) => {
 const toIsoDate = (value: string) =>
   value ? new Date(value).toISOString() : null
 
-const openEdit = () => {
+const openEdit = async () => {
   if (!detail.value) return
+  rolesLoading.value = true
+  try {
+    const result = await api.getSubmissionRoles()
+    submissionRoles.value = result.roles
+  } catch (error) {
+    snackbar.error(getErrorMessage(error))
+    return
+  } finally {
+    rolesLoading.value = false
+  }
   const submission = detail.value.submission
   editForm.title = submission.title
   editForm.destination = submission.destination
   editForm.description = submission.description || ''
   editForm.dueAt = toLocalDateTime(submission.due_at)
+  editForm.assignedRoleId = submission.assigned_role_id ?? null
   editDialog.value = true
 }
 
@@ -575,6 +600,7 @@ const saveEdit = async () => {
       destination: editForm.destination.trim(),
       description: editForm.description.trim() || null,
       due_at: toIsoDate(editForm.dueAt),
+      assigned_role_id: editForm.assignedRoleId,
     })
     editDialog.value = false
     snackbar.success('提出物を更新しました')
