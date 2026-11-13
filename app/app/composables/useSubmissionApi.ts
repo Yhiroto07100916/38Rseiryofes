@@ -94,6 +94,7 @@ export const useSubmissionApi = () => {
     destination: string
     description?: string | null
     due_at?: string | null
+    assigned_role_id?: string | null
   }) =>
     apiFetch<{ id: string; status: SubmissionStatus }>('/api/submissions', {
       method: 'POST',
