@@ -48,16 +48,23 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo("/")
   }
 
+  const isMaintenanceAdminLogin =
+    to.path === "/login" &&
+    to.query.maintenanceAdmin === "1"
+
   if (
     siteStatus?.maintenance_mode &&
     !siteStatus.is_important_settings_admin &&
     to.path !== "/maintenance" &&
-    to.path !== "/login"
+    !isMaintenanceAdminLogin
   ) {
     return navigateTo("/maintenance")
   }
 
-  if (to.path === "/maintenance" && siteStatus?.is_admin) {
+  if (
+    to.path === "/maintenance" &&
+    siteStatus?.is_important_settings_admin
+  ) {
     return navigateTo("/")
   }
 
