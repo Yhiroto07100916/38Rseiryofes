@@ -295,6 +295,20 @@ export async function handleSubmissions(
   const id = pathParts[0]
   const sub = pathParts[1]
 
+  if (method === "GET" && id === "roles" && !sub) {
+    const auth = await permitted(request, env, "submissions.create")
+
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const roles = await env.DB
+      .prepare("SELECT id, name FROM roles ORDER BY name")
+      .all<{ id: string; name: string }>()
+
+    return json({ roles: roles.results })
+  }
+
   if (method === "GET" && !id) {
     const auth = await permitted(request, env, "submissions.view")
 

@@ -159,6 +159,62 @@ afterEach(async () => {
 });
 
 describe("Submissions API", () => {
+  it("lists assignable roles and saves the selected role when creating a submission", async () => {
+    const fixture = await createFixture()
+    await grantPermissions(fixture.userId, [
+      "submissions.create",
+      "submissions.view",
+    ])
+
+    const roleId = crypto.randomUUID()
+    await env.DB.prepare(
+      "INSERT INTO roles (id, name, description) VALUES (?, ?, ?)",
+    )
+      .bind(roleId, "広報係", "提出物担当")
+      .run()
+
+    const rolesResponse = await SELF.fetch(
+      "http://example.com/api/submissions/roles",
+      { headers: { Cookie: fixture.cookie } },
+    )
+    expect(rolesResponse.status).toBe(200)
+    const rolesBody = await rolesResponse.json() as {
+      roles: Array<{ id: string; name: string }>
+    }
+    expect(rolesBody.roles).toContainEqual({ id: roleId, name: "広報係" })
+
+    const createResponse = await SELF.fetch(
+      "http://example.com/api/submissions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: fixture.cookie,
+        },
+        body: JSON.stringify({
+          title: "係指定テスト",
+          destination: "先生",
+          assigned_role_id: roleId,
+        }),
+      },
+    )
+    expect(createResponse.status).toBe(201)
+    const created = await createResponse.json() as { id: string }
+    fixture.submissionIds.push(created.id)
+
+    const detailResponse = await SELF.fetch(
+      `http://example.com/api/submissions/${created.id}`,
+      { headers: { Cookie: fixture.cookie } },
+    )
+    expect(detailResponse.status).toBe(200)
+    const detailBody = await detailResponse.json() as {
+      submission: { assigned_role_id: string; assigned_role_name: string }
+    }
+    expect(detailBody.submission.assigned_role_id).toBe(roleId)
+    expect(detailBody.submission.assigned_role_name).toBe("広報係")
+  })
+
+
   it("creates a submission and returns it in the list and detail", async () => {
     const fixture = await createFixture();
 

@@ -17,7 +17,7 @@
         color="primary"
         prepend-icon="mdi-plus"
         rounded="lg"
-        @click="createDialog = true"
+        @click="openCreateDialog"
       >
         提出物を作成
       </v-btn>
@@ -204,6 +204,20 @@
             variant="outlined"
             maxlength="200"
           />
+          <v-select
+            v-model="form.assignedRoleId"
+            :items="roleOptions"
+            item-title="name"
+            item-value="id"
+            label="担当係"
+            variant="outlined"
+            clearable
+            :loading="loadingRoles"
+            :disabled="loadingRoles"
+            no-data-text="担当係がありません"
+            hint="担当する係を選択してください（任意）"
+            persistent-hint
+          />
           <CommonJstDateTimePicker
             v-model="form.dueAt"
             label="提出期限"
@@ -268,7 +282,11 @@ const form = reactive({
   destination: '',
   description: '',
   dueAt: '',
+  assignedRoleId: null as string | null,
 })
+
+const roleOptions = ref<Array<{ id: string; name: string }>>([])
+const loadingRoles = ref(false)
 
 const statusOptions = [
   { title: '準備中', value: 'preparing' },
@@ -384,6 +402,19 @@ const loadSubmissions = async () => {
   }
 }
 
+const openCreateDialog = async () => {
+  createDialog.value = true
+  loadingRoles.value = true
+  try {
+    const response = await api.getSubmissionRoles()
+    roleOptions.value = response.roles
+  } catch (error) {
+    snackbar.error(getErrorMessage(error))
+  } finally {
+    loadingRoles.value = false
+  }
+}
+
 const create = async () => {
   creating.value = true
   try {
@@ -392,10 +423,12 @@ const create = async () => {
       destination: form.destination.trim(),
       description: form.description.trim() || null,
       due_at: toIsoDate(form.dueAt),
+      assigned_role_id: form.assignedRoleId,
     })
 
     snackbar.success('提出物を作成しました')
     createDialog.value = false
+    form.assignedRoleId = null
     await navigateTo(`/submissions/${result.id}`)
   } catch (error) {
     snackbar.error(getErrorMessage(error))
