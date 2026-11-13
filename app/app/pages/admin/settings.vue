@@ -819,29 +819,33 @@ onBeforeUnmount(() => {
           <v-card-subtitle>直近100件の設定変更を表示します。</v-card-subtitle>
         </v-card-item>
         <v-divider />
-        <v-table density="comfortable">
-          <thead>
-            <tr>
-              <th>変更日時</th>
-              <th>設定項目</th>
-              <th>変更者</th>
-              <th>変更後の値</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="log in settingLogs" :key="log.id">
-              <td class="text-no-wrap">{{ new Date(log.changed_at + 'Z').toLocaleString('ja-JP') }}</td>
-              <td><code>{{ log.setting_key }}</code></td>
-              <td>{{ log.changed_by_nickname || log.changed_by_name || '不明' }}</td>
-              <td class="setting-log-value">{{ log.new_value }}</td>
-            </tr>
-            <tr v-if="settingLogs.length === 0">
-              <td colspan="4" class="text-center text-medium-emphasis py-6">
-                変更履歴はありません。
-              </td>
-            </tr>
-          </tbody>
-        </v-table>
+        <div class="setting-logs-scroll">
+          <v-table density="comfortable" class="setting-logs-table">
+            <thead>
+              <tr>
+                <th>変更日時</th>
+                <th>設定項目</th>
+                <th>変更者</th>
+                <th>変更後の値</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="log in settingLogs" :key="log.id">
+                <td class="text-no-wrap">{{ new Date(log.changed_at + 'Z').toLocaleString('ja-JP') }}</td>
+                <td><code>{{ log.setting_key }}</code></td>
+                <td>{{ log.changed_by_nickname || log.changed_by_name || '不明' }}</td>
+                <td>
+                  <div class="setting-log-value">{{ log.new_value }}</div>
+                </td>
+              </tr>
+              <tr v-if="settingLogs.length === 0">
+                <td colspan="4" class="text-center text-medium-emphasis py-6">
+                  変更履歴はありません。
+                </td>
+              </tr>
+            </tbody>
+          </v-table>
+        </div>
       </v-card>
 
       <v-card rounded="xl" variant="outlined" class="mt-5">
@@ -904,8 +908,42 @@ onBeforeUnmount(() => {
   margin-top: 12px;
   color: rgba(var(--v-theme-on-surface), 0.68);
 }
+.setting-logs-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.setting-logs-table :deep(.v-table__wrapper > table) {
+  min-width: 760px;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.setting-logs-table :deep(th:nth-child(1)),
+.setting-logs-table :deep(td:nth-child(1)) {
+  width: 190px;
+}
+
+.setting-logs-table :deep(th:nth-child(2)),
+.setting-logs-table :deep(td:nth-child(2)) {
+  width: 160px;
+}
+
+.setting-logs-table :deep(th:nth-child(3)),
+.setting-logs-table :deep(td:nth-child(3)) {
+  width: 140px;
+}
+
+.setting-logs-table :deep(th:nth-child(4)),
+.setting-logs-table :deep(td:nth-child(4)) {
+  width: 270px;
+}
+
 .setting-log-value {
-  max-width: 280px;
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 </style>
