@@ -36,6 +36,8 @@ const SETTING_RULES: Record<string, {
   critical?: boolean
 }> = {
   site_name: { type: "string", minLength: 1, maxLength: 80 },
+  app_version: { type: "string", minLength: 5, maxLength: 32 },
+  release_notes: { type: "string", maxLength: 500 },
   site_description: { type: "string", maxLength: 300 },
   event_name: { type: "string", minLength: 1, maxLength: 80 },
   event_year: { type: "integer", min: 2020, max: 2100 },
@@ -161,14 +163,25 @@ async function handleSiteSettings(
       CF_VERSION_METADATA?: { id?: string; tag?: string }
       APP_VERSION?: string
     }).CF_VERSION_METADATA
-    const version = versionMetadata?.tag ||
-      versionMetadata?.id?.slice(0, 12) ||
-      (env as Env & { APP_VERSION?: string }).APP_VERSION ||
-      "未設定"
+    const environmentVersion = (env as Env & { APP_VERSION?: string }).APP_VERSION
+    const releaseSettings = await env.DB.prepare(
+      "SELECT key, value FROM site_settings WHERE key IN ('app_version', 'release_notes')",
+    ).all<{ key: string; value: string }>()
+    const releaseValues = Object.fromEntries(
+      releaseSettings.results.map(({ key, value }) => {
+        try { return [key, JSON.parse(value)] } catch { return [key, value] }
+      }),
+    ) as { app_version?: string; release_notes?: string }
+    const appVersion = releaseValues.app_version || environmentVersion || "未設定"
+    const deploymentId = versionMetadata?.id?.slice(0, 12) || "未設定"
     return Response.json({
       api_status: "ok",
       database_status: databaseStatus,
-      version,
+      app_version: appVersion,
+      release_notes: releaseValues.release_notes || "",
+      deployment_id: deploymentId,
+      deployment_tag: versionMetadata?.tag || null,
+      version: deploymentId,
       checked_at: new Date().toISOString(),
     })
   }
@@ -395,6 +408,7 @@ async function handleSiteSettings(
         return Response.json({ error: `Setting requires important settings administrator: ${key}` }, { status: 403 })
       }
       if (
+        (key === "app_version" && (typeof value !== "string" || !/^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(value))) ||
         (rule.type === "string" && (typeof value !== "string" || value.length < (rule.minLength ?? 0) || value.length > (rule.maxLength ?? 1000))) ||
         (rule.type === "boolean" && typeof value !== "boolean") ||
         (rule.type === "integer" && (!Number.isInteger(value) || (value as number) < (rule.min ?? -Infinity) || (value as number) > (rule.max ?? Infinity))) ||
