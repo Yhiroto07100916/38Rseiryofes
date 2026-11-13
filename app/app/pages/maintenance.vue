@@ -21,16 +21,27 @@
         {{ message }}
       </p>
 
-      <v-btn
-        color="primary"
-        size="large"
-        rounded="lg"
-        prepend-icon="mdi-refresh"
-        :loading="checking"
-        @click="checkAgain"
-      >
-        再読み込み
-      </v-btn>
+      <div class="d-flex flex-column ga-3 align-center">
+        <v-btn
+          color="primary"
+          size="large"
+          rounded="lg"
+          prepend-icon="mdi-refresh"
+          :loading="checking"
+          @click="checkAgain"
+        >
+          再読み込み
+        </v-btn>
+
+        <v-btn
+          variant="text"
+          color="secondary"
+          prepend-icon="mdi-shield-account"
+          to="/login?maintenanceAdmin=1"
+        >
+          重要管理者ログイン
+        </v-btn>
+      </div>
     </v-card>
   </v-container>
 </template>
@@ -54,14 +65,14 @@ async function checkAgain() {
     const status = await $fetch<{
       maintenance_mode: boolean
       maintenance_message: string
-      is_admin: boolean
+      is_important_settings_admin: boolean
     }>(`${apiBaseUrl}/api/site-status`, {
       credentials: "include",
     })
 
     message.value = status.maintenance_message
 
-    if (!status.maintenance_mode || status.is_admin) {
+    if (!status.maintenance_mode || status.is_important_settings_admin) {
       await navigateTo("/")
     }
   } catch {
