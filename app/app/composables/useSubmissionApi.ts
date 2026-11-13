@@ -8,6 +8,11 @@ export type SubmissionStatus =
   | 'completed'
   | 'cancelled'
 
+export interface SubmissionRole {
+  id: string
+  name: string
+}
+
 export interface SubmissionFile {
   id: string
   original_name: string
@@ -77,6 +82,9 @@ export const useSubmissionApi = () => {
 
   const getSubmissions = () =>
     apiFetch<{ submissions: Submission[] }>('/api/submissions')
+
+  const getSubmissionRoles = () =>
+    apiFetch<{ roles: SubmissionRole[] }>('/api/submissions/roles')
 
   const getSubmission = (id: string) =>
     apiFetch<SubmissionDetailResponse>(`/api/submissions/${id}`)
@@ -175,6 +183,7 @@ export const useSubmissionApi = () => {
 
   return {
     getSubmissions,
+    getSubmissionRoles,
     getSubmission,
     createSubmission,
     updateSubmission,
