@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeRouteLeave } from 'vue-router'
+import { useConfirmDialog } from '~/composables/useConfirmDialog'
 
 definePageMeta({
   middleware: ['admin'],
