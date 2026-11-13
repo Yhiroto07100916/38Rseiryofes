@@ -639,5 +639,70 @@ describe("site settings authorization", () => {
       }
     }
   })
+  it("manages the application release version separately from the deployment ID", async () => {
+    const cookie = await createAdminSession()
+    const previousVersion = await env.DB.prepare(
+      "SELECT value FROM site_settings WHERE key = 'app_version'",
+    ).first<{ value: string }>()
+    const previousNotes = await env.DB.prepare(
+      "SELECT value FROM site_settings WHERE key = 'release_notes'",
+    ).first<{ value: string }>()
+
+    try {
+      const invalidVersion = await SELF.fetch(
+        "http://example.com/api/account-roles/settings",
+        {
+          method: "PATCH",
+          headers: { Cookie: cookie, "Content-Type": "application/json" },
+          body: JSON.stringify({ settings: { app_version: "1.2" } }),
+        },
+      )
+      expect(invalidVersion.status).toBe(400)
+
+      const update = await SELF.fetch(
+        "http://example.com/api/account-roles/settings",
+        {
+          method: "PATCH",
+          headers: { Cookie: cookie, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            settings: {
+              app_version: "v1.2.3",
+              release_notes: "通知機能を改善しました。",
+            },
+          }),
+        },
+      )
+      expect(update.status).toBe(200)
+
+      const systemInfo = await SELF.fetch(
+        "http://example.com/api/admin/settings/system-info",
+        { headers: { Cookie: cookie } },
+      )
+      expect(systemInfo.status).toBe(200)
+      expect(await systemInfo.json()).toMatchObject({
+        app_version: "v1.2.3",
+        release_notes: "通知機能を改善しました。",
+      })
+
+      const logs = await SELF.fetch(
+        "http://example.com/api/account-roles/settings/logs",
+        { headers: { Cookie: cookie } },
+      )
+      const logBody = await logs.json() as {
+        logs: Array<{ setting_key: string; new_value: string }>
+      }
+      expect(logBody.logs.some(log =>
+        log.setting_key === "app_version" && log.new_value === '"v1.2.3"',
+      )).toBe(true)
+    } finally {
+      await env.DB.batch([
+        env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'app_version'")
+          .bind(previousVersion?.value ?? '"v1.0.0"'),
+        env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'release_notes'")
+          .bind(previousNotes?.value ?? '"初期リリース"'),
+      ])
+    }
+  })
+
 
 })
