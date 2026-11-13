@@ -408,7 +408,7 @@ async function handleSiteSettings(
         return Response.json({ error: `Setting requires important settings administrator: ${key}` }, { status: 403 })
       }
       if (
-        (key === "app_version" && (typeof value !== "string" || !/^v?\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$/.test(value))) ||
+        (key === "app_version" && (typeof value !== "string" || !/^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(value))) ||
         (rule.type === "string" && (typeof value !== "string" || value.length < (rule.minLength ?? 0) || value.length > (rule.maxLength ?? 1000))) ||
         (rule.type === "boolean" && typeof value !== "boolean") ||
         (rule.type === "integer" && (!Number.isInteger(value) || (value as number) < (rule.min ?? -Infinity) || (value as number) > (rule.max ?? Infinity))) ||
