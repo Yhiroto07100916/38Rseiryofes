@@ -20,6 +20,8 @@ interface SiteSettings {
   site_description: string
   event_name: string
   event_year: number
+  app_version: string
+  release_notes: string
   timezone: string
   logo_url: string
   favicon_url: string
@@ -125,6 +127,8 @@ const defaultSettings = (): SiteSettings => ({
   site_description: '',
   event_name: '',
   event_year: new Date().getFullYear(),
+  app_version: 'v1.0.0',
+  release_notes: '初期リリース',
   timezone: 'Asia/Tokyo',
   logo_url: '',
   favicon_url: '',
@@ -164,7 +168,15 @@ const initialSnapshot = ref('')
 const importantAdmins = ref<UserOption[]>([])
 const users = ref<UserOption[]>([])
 const settingLogs = ref<SettingLog[]>([])
-const systemInfo = ref<{ api_status: string; database_status: string; version: string; checked_at: string } | null>(null)
+const systemInfo = ref<{
+  api_status: string
+  database_status: string
+  app_version: string
+  release_notes: string
+  deployment_id: string
+  deployment_tag: string | null
+  checked_at: string
+} | null>(null)
 const selectedUserId = ref('')
 const assignDialogOpen = ref(false)
 const loading = ref(true)
@@ -235,7 +247,10 @@ async function loadSettings() {
       systemInfo.value = await api.apiFetch<{
         api_status: string
         database_status: string
-        version: string
+        app_version: string
+        release_notes: string
+        deployment_id: string
+        deployment_tag: string | null
         checked_at: string
       }>('/api/admin/settings/system-info')
     } catch (systemError) {
@@ -280,6 +295,8 @@ async function saveSettings() {
     site_description: settings.site_description.trim(),
     event_name: settings.event_name.trim(),
     event_year: Number(settings.event_year),
+    app_version: settings.app_version.trim(),
+    release_notes: settings.release_notes.trim(),
     timezone: settings.timezone,
     logo_url: settings.logo_url.trim(),
     favicon_url: settings.favicon_url.trim(),
@@ -788,6 +805,38 @@ onBeforeUnmount(() => {
 
       <v-card rounded="xl" variant="outlined" class="mt-5">
         <v-card-item>
+          <template #prepend>
+            <v-icon icon="mdi-tag-multiple-outline" size="30" color="primary" />
+          </template>
+          <v-card-title>リリース管理</v-card-title>
+          <v-card-subtitle>ユーザー向けのアプリバージョンと今回の更新内容を管理します。</v-card-subtitle>
+        </v-card-item>
+        <v-divider />
+        <v-card-text class="pa-5">
+          <v-text-field
+            v-model="settings.app_version"
+            label="アプリケーションバージョン"
+            placeholder="v1.2.0"
+            hint="セマンティックバージョニング（例: v1.2.0）"
+            persistent-hint
+          />
+          <v-textarea
+            v-model="settings.release_notes"
+            label="今回のリリース内容"
+            placeholder="追加した機能や修正内容"
+            rows="3"
+            auto-grow
+            maxlength="500"
+            counter
+          />
+          <v-alert type="info" variant="tonal" density="compact">
+            バージョンと更新内容は設定保存時に記録されます。変更履歴から過去のリリース情報も確認できます。
+          </v-alert>
+        </v-card-text>
+      </v-card>
+
+      <v-card rounded="xl" variant="outlined" class="mt-5">
+        <v-card-item>
           <template #prepend><v-icon icon="mdi-server-network" size="30" color="primary" /></template>
           <v-card-title>システム情報</v-card-title>
           <v-card-subtitle>API・データベースの稼働状況とバージョンを表示します。</v-card-subtitle>
@@ -801,7 +850,12 @@ onBeforeUnmount(() => {
             <v-chip :color="systemInfo.database_status === 'ok' ? 'success' : 'error'" variant="tonal">
               DB: {{ systemInfo.database_status === 'ok' ? '正常' : '異常' }}
             </v-chip>
-            <span class="text-body-2 align-self-center">バージョン: {{ systemInfo.version }}</span>
+            <div class="d-flex flex-column">
+              <span class="text-body-2 font-weight-medium">アプリ: {{ systemInfo.app_version }}</span>
+              <span class="text-caption text-medium-emphasis">デプロイID: {{ systemInfo.deployment_id }}</span>
+              <span v-if="systemInfo.deployment_tag" class="text-caption text-medium-emphasis">デプロイタグ: {{ systemInfo.deployment_tag }}</span>
+            </div>
+            <span v-if="systemInfo.release_notes" class="text-body-2 align-self-center">{{ systemInfo.release_notes }}</span>
           </div>
           <div v-else class="text-body-2 text-medium-emphasis">システム情報を取得できませんでした。</div>
           <div v-if="systemInfo" class="text-caption text-medium-emphasis mt-3">
