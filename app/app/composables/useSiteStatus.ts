@@ -6,6 +6,8 @@ export interface SiteStatus {
   login_enabled: boolean
   site_name: string
   site_description: string
+  app_version: string
+  release_notes: string
   event_name: string
   event_year: number
   timezone: string

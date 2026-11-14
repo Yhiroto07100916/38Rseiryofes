@@ -421,6 +421,44 @@ describe("site settings authorization", () => {
     }
   })
 
+  it("exposes the configured application release information through the public site status", async () => {
+    const cookie = await createAdminSession()
+    const previousVersion = await env.DB.prepare(
+      "SELECT value FROM site_settings WHERE key = 'app_version'",
+    ).first<{ value: string }>()
+    const previousNotes = await env.DB.prepare(
+      "SELECT value FROM site_settings WHERE key = 'release_notes'",
+    ).first<{ value: string }>()
+
+    try {
+      const update = await SELF.fetch("http://example.com/api/account-roles/settings", {
+        method: "PATCH",
+        headers: { Cookie: cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: {
+            app_version: "v2.3.4",
+            release_notes: "フッター表示のテスト",
+          },
+        }),
+      })
+      expect(update.status).toBe(200)
+
+      const response = await SELF.fetch("http://example.com/api/site-status")
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        app_version: "v2.3.4",
+        release_notes: "フッター表示のテスト",
+      })
+    } finally {
+      await env.DB.batch([
+        env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'app_version'")
+          .bind(previousVersion?.value ?? '"v1.0.0"'),
+        env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'release_notes'")
+          .bind(previousNotes?.value ?? '"初期リリース"'),
+      ])
+    }
+  })
+
   it("enforces and can disable the global login requirement", async () => {
     const initialStatus = await SELF.fetch("http://example.com/api/site-status")
     expect(await initialStatus.json()).toMatchObject({

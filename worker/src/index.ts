@@ -38,6 +38,8 @@ async function readSiteAccessSettings(env: Env): Promise<{
   loginEnabled: boolean
   siteName: string
   siteDescription: string
+  appVersion: string
+  releaseNotes: string
   eventName: string
   eventYear: number
   timezone: string
@@ -53,7 +55,7 @@ async function readSiteAccessSettings(env: Env): Promise<{
     const rows = await env.DB.prepare(`
       SELECT key, value
       FROM site_settings
-      WHERE key IN ('site_visibility', 'maintenance_mode', 'maintenance_message', 'require_login', 'login_enabled', 'site_name', 'site_description', 'event_name', 'event_year', 'timezone', 'logo_url', 'favicon_url', 'social_links', 'operation_settings', 'feature_settings')
+      WHERE key IN ('site_visibility', 'maintenance_mode', 'maintenance_message', 'require_login', 'login_enabled', 'site_name', 'site_description', 'app_version', 'release_notes', 'event_name', 'event_year', 'timezone', 'logo_url', 'favicon_url', 'social_links', 'operation_settings', 'feature_settings')
     `).all<{ key: string; value: string }>()
 
     const settings = new Map(rows.results.map(row => {
@@ -74,6 +76,8 @@ async function readSiteAccessSettings(env: Env): Promise<{
       loginEnabled: settings.get("login_enabled") !== false,
       siteName: typeof settings.get("site_name") === "string" ? settings.get("site_name") as string : "38R星陵祭準備サイト",
       siteDescription: typeof settings.get("site_description") === "string" ? settings.get("site_description") as string : "38Rの星陵祭準備を管理するサイトです。",
+      appVersion: typeof settings.get("app_version") === "string" ? settings.get("app_version") as string : "v1.0.0",
+      releaseNotes: typeof settings.get("release_notes") === "string" ? settings.get("release_notes") as string : "初期リリース",
       eventName: typeof settings.get("event_name") === "string" ? settings.get("event_name") as string : "星陵祭",
       eventYear: typeof settings.get("event_year") === "number" ? settings.get("event_year") as number : 2026,
       timezone: typeof settings.get("timezone") === "string" ? settings.get("timezone") as string : "Asia/Tokyo",
@@ -116,6 +120,8 @@ async function readSiteAccessSettings(env: Env): Promise<{
       loginEnabled: true,
       siteName: "38R星陵祭準備サイト",
       siteDescription: "38Rの星陵祭準備を管理するサイトです。",
+      appVersion: "v1.0.0",
+      releaseNotes: "初期リリース",
       eventName: "星陵祭",
       eventYear: 2026,
       timezone: "Asia/Tokyo",
@@ -350,6 +356,8 @@ export default {
       return withCors(request, Response.json({
         site_name: settings.siteName,
         site_description: settings.siteDescription,
+        app_version: settings.appVersion,
+        release_notes: settings.releaseNotes,
         event_name: settings.eventName,
         event_year: settings.eventYear,
         timezone: settings.timezone,
@@ -389,6 +397,8 @@ export default {
         login_enabled: settings.loginEnabled,
         site_name: settings.siteName,
         site_description: settings.siteDescription,
+        app_version: settings.appVersion,
+        release_notes: settings.releaseNotes,
         event_name: settings.eventName,
         event_year: settings.eventYear,
         timezone: settings.timezone,
