@@ -1,6 +1,11 @@
+<script setup lang="ts">
+const siteStatus = useSiteStatus()
+</script>
+
 <template>
   <footer class="legal-links">
-    <p>© {{ new Date().getFullYear() }} 38R 星陵祭準備サイト</p><span>{{ systemInfo.app_version }}</span>
+    <p>© {{ new Date().getFullYear() }} 38R 星陵祭準備サイト</p>
+    <span v-if="siteStatus?.app_version">{{ siteStatus.app_version }}</span>
   </footer>
 </template>
 
