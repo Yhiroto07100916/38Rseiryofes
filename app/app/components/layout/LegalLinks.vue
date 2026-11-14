@@ -3,7 +3,7 @@
     <p>© {{ new Date().getFullYear() }} 38R 星陵祭準備サイト</p>
   </footer>
 </template>
-<scripts>
+<script>
 async function loadSettings() {
   loading.value = true
 
@@ -94,7 +94,7 @@ async function loadSettings() {
     loading.value = false
   }
 }
-</scripts>
+</script>
 
 <style scoped>
 .legal-links {
