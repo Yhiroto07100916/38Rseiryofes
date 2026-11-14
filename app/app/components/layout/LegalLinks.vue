@@ -1,7 +1,6 @@
 <template>
   <footer class="legal-links">
-    <p>© {{ new Date().getFullYear() }} 38R 星陵祭準備サイト</p>
-	<p>{{ systemInfo.app_version }}<p>
+    <p>© {{ new Date().getFullYear() }} 38R 星陵祭準備サイト</p><span>{{ systemInfo.app_version }}<span>
   </footer>
 </template>
 
