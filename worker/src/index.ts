@@ -397,6 +397,8 @@ export default {
         login_enabled: settings.loginEnabled,
         site_name: settings.siteName,
         site_description: settings.siteDescription,
+        app_version: settings.appVersion,
+        release_notes: settings.releaseNotes,
         event_name: settings.eventName,
         event_year: settings.eventYear,
         timezone: settings.timezone,
