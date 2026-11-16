@@ -4,7 +4,7 @@ const siteStatus = useSiteStatus()
 
 <template>
   <footer class="legal-links">
-    <p>© {{ new Date().getFullYear() }} 38R 星陵祭準備サイト</p>
+    <p>© {{ new Date().getFullYear() }} 38R Tokyo Metropolitan Hibiya High School</p>
     <span v-if="siteStatus?.app_version">{{ siteStatus.app_version }}</span>
   </footer>
 </template>
