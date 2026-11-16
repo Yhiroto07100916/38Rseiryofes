@@ -178,7 +178,7 @@ export async function handleAvatarMutation(
       httpMetadata: {
         contentType: image.contentType,
         contentDisposition: "inline",
-        cacheControl: "no-store",
+        cacheControl: "private, max-age=86400, immutable",
       },
       customMetadata: {
         userId: user.id,
@@ -288,7 +288,7 @@ export async function handleAvatarImage(
   const headers = new Headers()
   object.writeHttpMetadata(headers)
   headers.set("Content-Disposition", "inline")
-  headers.set("Cache-Control", "no-store")
+  headers.set("Cache-Control", "private, max-age=86400, immutable")
   headers.set("X-Content-Type-Options", "nosniff")
   headers.set("Referrer-Policy", "no-referrer")
 
