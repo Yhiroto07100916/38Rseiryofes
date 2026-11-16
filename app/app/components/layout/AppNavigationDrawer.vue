@@ -235,8 +235,9 @@ const handleLogout = async () => {
   display: flex;
   width: 100%;
   height: 100%;
-  min-height: 100%;
+  min-height: 0;
   flex-direction: column;
+  overflow: hidden;
   background: white;
 }
 
@@ -261,6 +262,7 @@ const handleLogout = async () => {
 }
 
 .account-section {
+  flex: 0 0 auto;
   padding: 60px 16px 16px;
 }
 
@@ -311,7 +313,13 @@ const handleLogout = async () => {
 
 .drawer-navigation {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 12px;
 }
 
@@ -343,13 +351,13 @@ const handleLogout = async () => {
 
 .drawer-social-links {
   display: flex;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   align-self: stretch;
   gap: 8px;
   width: 100%;
-  margin-top: auto;
   margin-left: auto;
   padding: 18px 16px max(18px, env(safe-area-inset-bottom));
   border-top: 1px solid rgb(18 58 92 / 8%);
