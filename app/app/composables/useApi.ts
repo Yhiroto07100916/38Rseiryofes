@@ -226,8 +226,9 @@ export interface TaskCommentsResponse {
 
 export const useApi = () => {
   const config = useRuntimeConfig()
+  const ui = useUiStore()
 
-  const apiFetch = <T>(
+  const apiFetch = async <T>(
     path: string,
     options: Parameters<typeof $fetch<T>>[1] = {},
   ) => {
@@ -245,12 +246,22 @@ export const useApi = () => {
       }
     }
 
-    return $fetch<T>(path, {
-      baseURL: config.public.apiBaseUrl,
-      credentials: 'include',
-      ...options,
-      headers,
-    })
+    if (import.meta.client) {
+      ui.startApiRequest()
+    }
+
+    try {
+      return await $fetch<T>(path, {
+        baseURL: config.public.apiBaseUrl,
+        credentials: 'include',
+        ...options,
+        headers,
+      })
+    } finally {
+      if (import.meta.client) {
+        ui.finishApiRequest()
+      }
+    }
   }
 
   const getTasks = (scope?: Task['scope']) => {
