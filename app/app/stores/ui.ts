@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 type SnackbarType = 'success' | 'error' | 'warning' | 'info'
 
@@ -12,6 +12,17 @@ interface ConfirmOptions {
 }
 
 export const useUiStore = defineStore('ui', () => {
+  const apiPendingCount = ref(0)
+  const isApiLoading = computed(() => apiPendingCount.value > 0)
+
+  const startApiRequest = () => {
+    apiPendingCount.value += 1
+  }
+
+  const finishApiRequest = () => {
+    apiPendingCount.value = Math.max(0, apiPendingCount.value - 1)
+  }
+
   const snackbarVisible = ref(false)
   const snackbarMessage = ref('')
   const snackbarType = ref<SnackbarType>('info')
@@ -91,6 +102,10 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   return {
+    apiPendingCount,
+    isApiLoading,
+    startApiRequest,
+    finishApiRequest,
     snackbarVisible,
     snackbarMessage,
     snackbarType,
