@@ -2,6 +2,7 @@
   <NuxtLayout>
     <NuxtPage />
   </NuxtLayout>
+  <CommonApiLoadingBar />
   <CommonAppConfirmDialog />
   <CommonAppSnackbar />
 </template>
@@ -10,6 +11,16 @@
 import { setDefaultTimeZone } from "~/utils/jst"
 
 const siteStatus = useSiteStatus()
+
+if (import.meta.client) {
+  const nuxtApp = useNuxtApp()
+  const snackbar = useSnackbar()
+
+  nuxtApp.hook('vue:error', (error) => {
+    console.error('[App] Unhandled Vue error:', error)
+    snackbar.error('画面の表示中に問題が発生しました。ページを再読み込みしてください。')
+  })
+}
 
 watch(
   () => siteStatus.value?.timezone,
