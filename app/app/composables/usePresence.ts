@@ -95,6 +95,8 @@ export function usePresence() {
       });
       status.value = result.status;
       method.value = result.method ?? "manual";
+      manualPromptOpen.value = false;
+      manualPromptDismissed.value = true;
     } catch (cause: any) {
       error.value = cause?.data?.error || "手動登録に失敗しました。";
     } finally {
