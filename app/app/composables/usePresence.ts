@@ -14,6 +14,11 @@ export function usePresence() {
   const error = ref("");
   const enabled = useState<boolean>("presence-location-enabled", () => false);
   const loadedUserId = useState<string | null>("presence-loaded-user-id", () => null);
+  const manualPromptOpen = useState<boolean>("presence-manual-prompt-open", () => false);
+  const manualPromptDismissed = useState<boolean>(
+    `presence-manual-prompt-dismissed:${auth.user?.id ?? "anonymous"}`,
+    () => false,
+  );
 
   const refresh = async () => {
     if (!import.meta.client) return;
@@ -62,9 +67,12 @@ export function usePresence() {
       method.value = result.method ?? "gps";
     } catch (cause: any) {
       // 位置情報取得失敗は新しい判定として扱わず、既存状態を維持する。
-      error.value = cause?.data?.error || (cause?.code === 1
-        ? "位置情報が許可されていません。ブラウザの設定を確認してください。"
-        : "位置情報を取得できませんでした。現在の在校状態は変更していません。");
+      if (cause?.code === 1) {
+        error.value = "位置情報が許可されていません。";
+        if (!manualPromptDismissed.value) manualPromptOpen.value = true;
+      } else {
+        error.value = cause?.data?.error || "位置情報を取得できませんでした。現在の在校状態は変更していません。";
+      }
     } finally {
       busy.value = false;
     }
@@ -87,11 +95,18 @@ export function usePresence() {
       });
       status.value = result.status;
       method.value = result.method ?? "manual";
+      manualPromptOpen.value = false;
+      manualPromptDismissed.value = true;
     } catch (cause: any) {
       error.value = cause?.data?.error || "手動登録に失敗しました。";
     } finally {
       busy.value = false;
     }
+  };
+
+  const dismissManualPrompt = () => {
+    manualPromptOpen.value = false;
+    manualPromptDismissed.value = true;
   };
 
   const disable = async () => {
@@ -115,5 +130,18 @@ export function usePresence() {
     enabled.value = localStorage.getItem(consentKey.value) === "true";
   }
 
-  return { status, method, busy, error, enabled, refresh, checkLocation, enable, manualRegister, disable };
+  return {
+    status,
+    method,
+    busy,
+    error,
+    enabled,
+    manualPromptOpen,
+    refresh,
+    checkLocation,
+    enable,
+    manualRegister,
+    dismissManualPrompt,
+    disable,
+  };
 }
