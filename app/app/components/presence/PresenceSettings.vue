@@ -20,19 +20,59 @@
         <div class="text-caption text-medium-emphasis">自動判定を有効にすると、サイトを開いたとき・前面に戻ったときに位置情報を確認します。手動登録は当日中のみ有効で、GPSで校外と判定された場合は校外が優先されます。</div>
       </div>
       <div v-else class="d-flex flex-wrap ga-2">
-        <v-btn color="primary" variant="tonal" :loading="busy" :disabled="busy" @click="checkLocation">今すぐ再判定</v-btn>
+        <v-btn color="primary" variant="tonal" :loading="busy" :disabled="busy" @click="checkLocation(true)">今すぐ再判定</v-btn>
         <v-btn variant="outlined" :loading="busy" :disabled="busy" @click="manualRegister">手動で在校登録</v-btn>
         <v-btn color="error" variant="text" :loading="busy" :disabled="busy" @click="disable">位置情報の利用を停止</v-btn>
       </div>
     </v-card-text>
   </v-card>
+
+  <v-dialog v-model="permissionHelpOpen" max-width="440">
+    <v-card rounded="xl">
+      <v-card-title class="text-h6">位置情報の許可を確認してください</v-card-title>
+      <v-card-text>
+        <p class="mb-3">
+          このサイトの位置情報がブラウザまたは端末の設定で拒否されています。拒否された状態では、サイト側から許可確認を再表示できません。
+        </p>
+        <p class="mb-2 font-weight-medium">次の手順で、このサイトの位置情報を許可してください。</p>
+        <ol class="pl-5">
+          <li>ブラウザまたは端末の設定を開く</li>
+          <li>このサイトの位置情報へのアクセスを「許可」に変更する</li>
+          <li>この画面に戻り、「設定を変更したので再判定」を押す</li>
+        </ol>
+        <v-alert type="info" variant="tonal" density="comfortable" class="mt-3">
+          許可状態が「確認」になっている場合は、再判定を押したときにブラウザの許可確認が表示されます。
+        </v-alert>
+      </v-card-text>
+      <v-card-actions class="flex-wrap px-4 pb-4">
+        <v-spacer />
+        <v-btn variant="text" @click="permissionHelpOpen = false">閉じる</v-btn>
+        <v-btn color="primary" variant="flat" :loading="busy" :disabled="busy" @click="retryLocationPermission">
+          設定を変更したので再判定
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 import { usePresence } from "~/composables/usePresence";
 
-const { status, method, busy, error, enabled, refresh, checkLocation, enable, manualRegister, disable } = usePresence();
+const {
+  status,
+  method,
+  busy,
+  error,
+  enabled,
+  permissionHelpOpen,
+  refresh,
+  checkLocation,
+  enable,
+  retryLocationPermission,
+  manualRegister,
+  disable,
+} = usePresence();
 const statusLabel = computed(() => ({
   inside: "学校内",
   outside: "校外",

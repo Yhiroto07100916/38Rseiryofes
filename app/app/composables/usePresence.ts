@@ -15,6 +15,7 @@ export function usePresence() {
   const enabled = useState<boolean>("presence-location-enabled", () => false);
   const loadedUserId = useState<string | null>("presence-loaded-user-id", () => null);
   const manualPromptOpen = useState<boolean>("presence-manual-prompt-open", () => false);
+  const permissionHelpOpen = useState<boolean>("presence-permission-help-open", () => false);
   const manualPromptDismissed = useState<boolean>(
     `presence-manual-prompt-dismissed:${auth.user?.id ?? "anonymous"}`,
     () => false,
@@ -44,7 +45,8 @@ export function usePresence() {
     }
   };
 
-  const checkLocation = async () => {
+  // showPermissionHelp は、ユーザーが明示的に再判定した場合だけ設定案内を表示する。
+  const checkLocation = async (showPermissionHelp = false) => {
     if (!import.meta.client || !auth.user?.id || !enabled.value || busy.value || !navigator.geolocation) return;
     busy.value = true;
     error.value = "";
@@ -65,11 +67,16 @@ export function usePresence() {
       });
       status.value = result.status;
       method.value = result.method ?? "gps";
+      permissionHelpOpen.value = false;
     } catch (cause: any) {
       // 位置情報取得失敗は新しい判定として扱わず、既存状態を維持する。
       if (cause?.code === 1) {
         error.value = "位置情報が許可されていません。";
-        if (!manualPromptDismissed.value) manualPromptOpen.value = true;
+        if (showPermissionHelp) {
+          permissionHelpOpen.value = true;
+        } else if (!manualPromptDismissed.value) {
+          manualPromptOpen.value = true;
+        }
       } else {
         error.value = cause?.data?.error || "位置情報を取得できませんでした。現在の在校状態は変更していません。";
       }
@@ -83,6 +90,12 @@ export function usePresence() {
     localStorage.setItem(consentKey.value, "true");
     enabled.value = true;
     await checkLocation();
+  };
+
+  const retryLocationPermission = async () => {
+    permissionHelpOpen.value = false;
+    // 設定変更後にユーザー操作から位置情報取得を再試行する。
+    await checkLocation(true);
   };
 
   const manualRegister = async () => {
@@ -137,9 +150,11 @@ export function usePresence() {
     error,
     enabled,
     manualPromptOpen,
+    permissionHelpOpen,
     refresh,
     checkLocation,
     enable,
+    retryLocationPermission,
     manualRegister,
     dismissManualPrompt,
     disable,
