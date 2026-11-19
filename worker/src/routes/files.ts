@@ -1079,12 +1079,10 @@ export async function handleFiles(
       }
 
       let category: string
+      let destinationFolderId = folderId
 
       try {
-        category = await normalizeCategory(
-          env,
-          formData.get("category"),
-        )
+        category = await normalizeCategory(env, formData.get("category"))
       } catch (error) {
         if (error instanceof Error && error.message === "INVALID_FILE_CATEGORY") {
           return json({ error: "Invalid or inactive file category" }, 400)
@@ -1092,9 +1090,28 @@ export async function handleFiles(
         throw error
       }
 
-      if (folderId) {
-        const folder = await env.DB.prepare("SELECT id FROM file_folders WHERE id = ? LIMIT 1").bind(folderId).first()
-        if (!folder) return json({ error: "Folder not found" }, 404)
+      if (category === "receipts") {
+        const operationSettings = await getSiteSetting<{
+          receipt_storage?: { folder_id?: string | null; category?: string }
+        }>(env, "operation_settings", {})
+        const receiptStorage = operationSettings.receipt_storage
+        if (receiptStorage?.category) {
+          try {
+            category = await normalizeCategory(env, receiptStorage.category)
+          } catch {
+            return json({ error: "サイト設定のレシート保存カテゴリが無効です。管理者に設定を確認してください。" }, 409)
+          }
+        }
+        if (receiptStorage && Object.prototype.hasOwnProperty.call(receiptStorage, "folder_id")) {
+          destinationFolderId = typeof receiptStorage.folder_id === "string"
+            ? receiptStorage.folder_id.trim() || null
+            : null
+        }
+      }
+
+      if (destinationFolderId) {
+        const folder = await env.DB.prepare("SELECT id FROM file_folders WHERE id = ? LIMIT 1").bind(destinationFolderId).first()
+        if (!folder) return json({ error: "保存先フォルダが見つかりません。サイト設定を確認してください。" }, 409)
       }
 
       const originalName = file.name.trim() || "file"
@@ -1126,7 +1143,7 @@ export async function handleFiles(
       try {
         await env.DB.batch([
           env.DB.prepare("INSERT INTO files (id, object_key, original_name, content_type, size, category, folder_id, uploaded_by, notify_on_upload, access_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-            .bind(id, objectKey, originalName, contentType, file.size, category, folderId, auth.user.id, notifyUpload ? 1 : 0, accessScope),
+            .bind(id, objectKey, originalName, contentType, file.size, category, destinationFolderId, auth.user.id, notifyUpload ? 1 : 0, accessScope),
           ...visibleUserIds.map(userId => env.DB.prepare(
             "INSERT INTO file_user_access (file_id, user_id) VALUES (?, ?)",
           ).bind(id, userId)),
