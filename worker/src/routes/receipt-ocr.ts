@@ -133,7 +133,7 @@ export async function handleReceiptOcr(
           "itemsは画像の上から順番に並べてください。",
           "返却前に、各商品行の単価×数量と印字された行金額、商品行の並び、最終合計をもう一度画像と照合してください。",
           "計算上の金額と印字金額が異なる場合も、画像に印字された値を優先し、勝手に修正しないでください。",
-          "合計金額は『合計』『お買上げ』『今回お支払額』などの最終支払額を優先し、小計や税額を返さないでください。
+          "合計金額は『合計』『お買上げ』『今回お支払額』などの最終支払額を優先し、小計や税額を返さないでください。",
           "必ず指定されたJSONオブジェクトだけを返してください。説明文、Markdown、コードフェンスは付けないでください。",
           '形式: {"purchased_at":null,"store_name":null,"total_amount":null,"items":[{"name":"商品名","unit_price":null,"quantity":1,"discount_rate":0,"tax_rate":null,"price_type":"unknown","amount":null}]}',
         ].join("\n"),
