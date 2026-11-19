@@ -837,11 +837,6 @@ onBeforeUnmount(() => {
       <v-card rounded="xl" variant="outlined" class="mt-5">
         <v-card-item>
           <template #prepend>
-            <v-icon icon="mdi-tag-multiple-outline" size="30" color="primary" />
-          </template>
-          <v-card rounded="xl" variant="outlined" class="mt-5">
-        <v-card-item>
-          <template #prepend>
             <v-icon icon="mdi-receipt-text-outline" size="30" color="primary" />
           </template>
           <v-card-title>レシート保存設定</v-card-title>
