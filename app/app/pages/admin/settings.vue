@@ -841,7 +841,9 @@ onBeforeUnmount(() => {
           </template>
           <v-card rounded="xl" variant="outlined" class="mt-5">
         <v-card-item>
-          <template #prepend><v-icon icon="mdi-receipt-text-outline" size="30" color="primary" /></template>
+          <template #prepend>
+            <v-icon icon="mdi-receipt-text-outline" size="30" color="primary" />
+          </template>
           <v-card-title>レシート保存設定</v-card-title>
           <v-card-subtitle>会計に添付するレシート画像の保存先とファイルカテゴリを指定します。</v-card-subtitle>
         </v-card-item>
@@ -873,7 +875,12 @@ onBeforeUnmount(() => {
         </v-card-text>
       </v-card>
 
-      <v-card-title>リリース管理</v-card-title>
+      <v-card rounded="xl" variant="outlined" class="mt-5">
+        <v-card-item>
+          <template #prepend>
+            <v-icon icon="mdi-tag-multiple-outline" size="30" color="primary" />
+          </template>
+          <v-card-title>リリース管理</v-card-title>
           <v-card-subtitle>ユーザー向けのアプリバージョンと今回の更新内容を管理します。</v-card-subtitle>
         </v-card-item>
         <v-divider />
