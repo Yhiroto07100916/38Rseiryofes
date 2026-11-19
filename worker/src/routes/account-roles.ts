@@ -105,10 +105,21 @@ function isValidSettingValue(key: string, value: unknown): boolean {
   if (key === "operation_settings") {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false
     const settings = value as Record<string, unknown>
+    const receiptStorage = settings.receipt_storage
+    const validReceiptStorage = receiptStorage === undefined || (
+      Boolean(receiptStorage) &&
+      typeof receiptStorage === "object" &&
+      !Array.isArray(receiptStorage) &&
+      typeof (receiptStorage as Record<string, unknown>).category === "string" &&
+      /^[a-z0-9_-]{1,40}$/.test(String((receiptStorage as Record<string, unknown>).category)) &&
+      ((receiptStorage as Record<string, unknown>).folder_id === null ||
+        typeof (receiptStorage as Record<string, unknown>).folder_id === "string")
+    )
     return ["month", "list"].includes(String(settings.calendar_default_view)) &&
       ["todo", "in_progress", "review", "done"].includes(String(settings.task_default_status)) &&
       Number.isInteger(settings.upload_max_file_size_mb) &&
-      Number(settings.upload_max_file_size_mb) >= 1 && Number(settings.upload_max_file_size_mb) <= 100
+      Number(settings.upload_max_file_size_mb) >= 1 && Number(settings.upload_max_file_size_mb) <= 100 &&
+      validReceiptStorage
   }
   if (key === "security_settings") {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false
