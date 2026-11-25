@@ -296,14 +296,18 @@ export async function handleFiles(
         }>()
 
         const filesToRetry = failed.results ?? []
-        const claimedFiles = []
-        for (const file of filesToRetry) {
-          const claimed = await env.DB.prepare(`
-            UPDATE files
-            SET ai_status = 'processing', ai_error = NULL
-            WHERE id = ? AND ai_status = 'failed' AND archived_at IS NULL
-          `).bind(file.id).run()
-          if (claimed.meta.changes > 0) claimedFiles.push(file)
+        let claimedFiles = filesToRetry
+        if (filesToRetry.length > 0) {
+          const claimResults = await env.DB.batch(
+            filesToRetry.map(file => env.DB.prepare(`
+              UPDATE files
+              SET ai_status = 'processing', ai_error = NULL
+              WHERE id = ? AND ai_status = 'failed' AND archived_at IS NULL
+            `).bind(file.id)),
+          )
+          claimedFiles = filesToRetry.filter((_, index) =>
+            Number(claimResults[index]?.meta.changes ?? 0) > 0,
+          )
         }
 
         const indexing = Promise.all(claimedFiles.map(file => indexFileForAiSearch(env, file, ctx)))
