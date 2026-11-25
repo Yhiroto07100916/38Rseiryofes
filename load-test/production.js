@@ -99,9 +99,19 @@ function get(url, session, name) {
     timeout: '15s',
   });
 
-  check(response, {
+  const ok = check(response, {
     [`${name}: HTTP 200`]: (r) => r.status === 200,
   });
+
+  if (!ok) {
+    console.warn(
+      `[LOAD TEST ERROR] ${name} ` +
+      `status=${response.status} ` +
+      `server=${response.headers.Server || 'unknown'} ` +
+      `cf-ray=${response.headers['Cf-Ray'] || 'unknown'} ` +
+      `retry-after=${response.headers['Retry-After'] || 'none'}`
+    );
+  }
 
   return response;
 }
