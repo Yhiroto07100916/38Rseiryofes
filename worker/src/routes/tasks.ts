@@ -254,6 +254,88 @@ async function getTaskAssignments(
   }
 }
 
+async function getTaskAssignmentsByTaskIds(
+  env: Env,
+  taskIds: string[],
+): Promise<Map<string, Awaited<ReturnType<typeof getTaskAssignments>>>> {
+  const assignments = new Map<
+    string,
+    Awaited<ReturnType<typeof getTaskAssignments>>
+  >()
+
+  for (const taskId of taskIds) {
+    assignments.set(taskId, { users: [], roles: [] })
+  }
+
+  const batchSize = 80
+
+  for (let index = 0; index < taskIds.length; index += batchSize) {
+    const batch = taskIds.slice(index, index + batchSize)
+    const placeholders = batch.map(() => "?").join(", ")
+
+    const [assignees, roles] = await Promise.all([
+      env.DB.prepare(`
+        SELECT
+          ta.task_id,
+          u.id,
+          u.student_number,
+          u.name,
+          u.nickname,
+          u.avatar_key
+        FROM task_assignees ta
+        INNER JOIN users u
+          ON u.id = ta.user_id
+        WHERE ta.task_id IN (${placeholders})
+        ORDER BY ta.task_id, u.student_number
+      `).bind(...batch).all<{
+        task_id: string
+        id: string
+        student_number: string
+        name: string
+        nickname: string | null
+        avatar_key: string | null
+      }>(),
+      env.DB.prepare(`
+        SELECT
+          tr.task_id,
+          r.id,
+          r.name,
+          r.description
+        FROM task_roles tr
+        INNER JOIN roles r
+          ON r.id = tr.role_id
+        WHERE tr.task_id IN (${placeholders})
+        ORDER BY tr.task_id, r.name
+      `).bind(...batch).all<{
+        task_id: string
+        id: string
+        name: string
+        description: string | null
+      }>(),
+    ])
+
+    for (const assignee of assignees.results) {
+      assignments.get(assignee.task_id)?.users.push({
+        id: assignee.id,
+        student_number: assignee.student_number,
+        name: assignee.name,
+        nickname: assignee.nickname,
+        avatar_key: assignee.avatar_key,
+      })
+    }
+
+    for (const role of roles.results) {
+      assignments.get(role.task_id)?.roles.push({
+        id: role.id,
+        name: role.name,
+        description: role.description,
+      })
+    }
+  }
+
+  return assignments
+}
+
 export async function processDueTaskNotifications(env: Env): Promise<void> {
   const result = await env.DB.prepare(
     "SELECT id, title, due_at, status, scope FROM tasks " +
@@ -459,15 +541,17 @@ export async function handleTasks(
       .bind(...params)
       .all<Task>()
 
-    const tasks = await Promise.all(
-      result.results.map(async (task) => ({
-        ...task,
-        assignments: await getTaskAssignments(
-          env,
-          task.id,
-        ),
-      })),
+    const assignmentsByTaskId = await getTaskAssignmentsByTaskIds(
+      env,
+      result.results.map(task => task.id),
     )
+    const tasks = result.results.map(task => ({
+      ...task,
+      assignments: assignmentsByTaskId.get(task.id) ?? {
+        users: [],
+        roles: [],
+      },
+    }))
 
     return Response.json({ tasks })
   }
