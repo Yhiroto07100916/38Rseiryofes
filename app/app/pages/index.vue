@@ -1,6 +1,6 @@
 <template>
 
-
+ 
     <main class="home-intro">
       <v-img
         v-if="siteStatus?.logo_url"
@@ -26,10 +26,6 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 const siteStatus = useSiteStatus()
-
-definePageMeta({
-  middleware: 'auth',
-})
 
 
 /*
