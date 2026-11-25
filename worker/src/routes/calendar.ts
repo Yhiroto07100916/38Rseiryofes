@@ -1,4 +1,4 @@
-import { hasPermission, requireAuth } from "../lib/authz"
+import { getUsersWithPermission, hasPermission, requireAuth } from "../lib/authz"
 import { createNotificationsForUsers } from "../lib/notifications"
 
 export interface CalendarEvent {
@@ -83,16 +83,6 @@ async function notifyCalendarAttendanceChange(
     dedupeKey: "calendar.attendance_updated:" + event.id + ":" + targetUserId + ":" + operationId,
   })
 }
-
-async function getScheduleViewUserIds(env: Env): Promise<string[]> {
-  const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
-  const eligible = await Promise.all(users.results.map(async user => ({
-    id: user.id,
-    allowed: await hasPermission(env, user.id, "schedule.view"),
-  })))
-  return eligible.filter(user => user.allowed).map(user => user.id)
-}
-
 
 
 function generateId(): string {
@@ -468,43 +458,34 @@ export async function handleCalendar(
       )
     }
 
-    const result = await env.DB
+    const attendanceSummary = await env.DB
       .prepare(`
         SELECT
-          status,
-          COUNT(*) AS count
+          COALESCE(SUM(CASE WHEN status = 'attending' THEN 1 ELSE 0 END), 0) AS attending,
+          COALESCE(SUM(CASE WHEN status = 'not_attending' THEN 1 ELSE 0 END), 0) AS not_attending,
+          COALESCE(SUM(CASE WHEN status = 'undecided' THEN 1 ELSE 0 END), 0) AS undecided,
+          (
+            SELECT status
+            FROM calendar_event_attendance
+            WHERE event_id = ? AND user_id = ?
+            LIMIT 1
+          ) AS my_status
         FROM calendar_event_attendance
         WHERE event_id = ?
-        GROUP BY status
       `)
-      .bind(eventId)
-      .all<{
-        status: "attending" | "not_attending" | "undecided"
-        count: number
+      .bind(eventId, auth.user.id, eventId)
+      .first<{
+        attending: number
+        not_attending: number
+        undecided: number
+        my_status: "attending" | "not_attending" | "undecided" | null
       }>()
 
     const counts = {
-      attending: 0,
-      not_attending: 0,
-      undecided: 0,
+      attending: Number(attendanceSummary?.attending ?? 0),
+      not_attending: Number(attendanceSummary?.not_attending ?? 0),
+      undecided: Number(attendanceSummary?.undecided ?? 0),
     }
-
-    for (const row of result.results) {
-      counts[row.status] = Number(row.count)
-    }
-
-    const mine = await env.DB
-      .prepare(`
-        SELECT status
-        FROM calendar_event_attendance
-        WHERE event_id = ?
-          AND user_id = ?
-        LIMIT 1
-      `)
-      .bind(eventId, auth.user.id)
-      .first<{
-        status: "attending" | "not_attending" | "undecided"
-      }>()
 
     const canViewCounts = await hasPermission(
       env,
@@ -514,7 +495,7 @@ export async function handleCalendar(
 
     return Response.json({
       event_id: eventId,
-      my_status: mine?.status ?? null,
+      my_status: attendanceSummary?.my_status ?? null,
       counts: canViewCounts
         ? counts
         : { attending: 0, not_attending: 0, undecided: 0 },
@@ -789,7 +770,7 @@ export async function handleCalendar(
     const event = await getCalendarEvent(env, id)
 
     try {
-      const recipientUserIds = await getScheduleViewUserIds(env)
+      const recipientUserIds = await getUsersWithPermission(env, "schedule.view")
       await createNotificationsForUsers(env, {
         recipientUserIds,
         eventKey: "calendar.created",
@@ -971,7 +952,7 @@ export async function handleCalendar(
 
     if (meaningfulChanges && event) {
       try {
-        const recipientUserIds = await getScheduleViewUserIds(env)
+        const recipientUserIds = await getUsersWithPermission(env, "schedule.view")
         await createNotificationsForUsers(env, {
           recipientUserIds,
           eventKey: "calendar.updated",
@@ -1024,7 +1005,7 @@ export async function handleCalendar(
       .run()
 
     try {
-      const recipientUserIds = await getScheduleViewUserIds(env)
+      const recipientUserIds = await getUsersWithPermission(env, "schedule.view")
       await createNotificationsForUsers(env, {
         recipientUserIds,
         eventKey: "calendar.deleted",

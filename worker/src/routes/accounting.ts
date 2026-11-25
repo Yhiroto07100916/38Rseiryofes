@@ -1,5 +1,5 @@
 import { isFileLinkConflict } from "../lib/file-link-errors"
-import { hasPermission, requireAuth } from "../lib/authz"
+import { getUsersWithPermission, hasPermission, requireAuth } from "../lib/authz"
 import { createNotificationsForUsers } from "../lib/notifications"
 import { notifyFileLinked } from "../lib/file-notifications"
 
@@ -1041,14 +1041,9 @@ export async function handleAccounting(
 
           if (reimbursementId && paidByUserId) {
             try {
-              const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
-              const eligible = await Promise.all(users.results.map(async candidate => ({
-                id: candidate.id,
-                allowed: candidate.id !== createdBy &&
-                  await hasPermission(env, candidate.id, "accounting.approve"),
-              })))
+              const recipientUserIds = await getUsersWithPermission(env, "accounting.approve", createdBy)
               await createNotificationsForUsers(env, {
-                recipientUserIds: eligible.filter(candidate => candidate.allowed).map(candidate => candidate.id),
+                recipientUserIds,
                 eventKey: "accounting.reimbursement_requested",
                 category: "accounting",
                 title: "新しい返金申請があります",

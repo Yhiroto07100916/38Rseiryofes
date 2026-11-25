@@ -1,4 +1,4 @@
-import { hasPermission, requireAuth } from "../lib/authz"
+import { getUsersWithPermission, hasPermission, requireAuth } from "../lib/authz"
 import { processDuePushDeliveries, reenqueueNewsPushDeliveries } from "./push"
 import { createNotificationsForUsers } from "../lib/notifications"
 
@@ -609,12 +609,7 @@ export async function handleNews(
     // お知らせを閲覧できるユーザーへ、アプリ内通知を作成する。
     // Pushは通知設定とアカウントに紐づくSubscriptionを確認して別キューから送信する。
     try {
-      const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
-      const eligible = await Promise.all(users.results.map(async user => ({
-        id: user.id,
-        allowed: user.id !== auth.user.id && await hasPermission(env, user.id, "news.view"),
-      })))
-      const recipientUserIds = eligible.filter(user => user.allowed).map(user => user.id)
+      const recipientUserIds = await getUsersWithPermission(env, "news.view", auth.user.id)
 
       await createNotificationsForUsers(env, {
         recipientUserIds,

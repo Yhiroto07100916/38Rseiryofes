@@ -170,6 +170,81 @@ afterEach(async () => {
   }
 });
 
+describe("Task list query batching", () => {
+  it("returns user and role assignments without dropping task associations", async () => {
+    const fixture = await createFixture();
+    const taskIds = [
+      fixture.taskIds[0],
+      crypto.randomUUID(),
+      crypto.randomUUID(),
+    ];
+    fixture.taskIds.push(...taskIds.slice(1));
+
+    await grantPermissions(fixture.actorId, ["tasks.view"]);
+
+    for (const [index, taskId] of taskIds.entries()) {
+      await createTaskDirectly(
+        taskId,
+        fixture.actorId,
+        `一覧取得テスト-${index}`,
+      );
+    }
+
+    await env.DB.prepare(`
+      INSERT INTO task_assignees (task_id, user_id)
+      VALUES (?, ?), (?, ?)
+    `).bind(
+      taskIds[0],
+      fixture.assigneeId,
+      taskIds[1],
+      fixture.actorId,
+    ).run();
+
+    await env.DB.prepare(`
+      INSERT INTO task_roles (task_id, role_id)
+      VALUES (?, ?), (?, ?)
+    `).bind(
+      taskIds[0],
+      fixture.roleId,
+      taskIds[2],
+      fixture.roleId,
+    ).run();
+
+    const response = await SELF.fetch(
+      "http://example.com/api/tasks?scope=class",
+      {
+        headers: { Cookie: fixture.cookie },
+      },
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      tasks: Array<{
+        id: string;
+        assignments: {
+          users: Array<{ id: string }>;
+          roles: Array<{ id: string }>;
+        };
+      }>;
+    };
+
+    const tasksById = new Map(body.tasks.map(task => [task.id, task]));
+
+    expect(tasksById.get(taskIds[0])?.assignments).toEqual({
+      users: [expect.objectContaining({ id: fixture.assigneeId })],
+      roles: [expect.objectContaining({ id: fixture.roleId })],
+    });
+    expect(tasksById.get(taskIds[1])?.assignments).toEqual({
+      users: [expect.objectContaining({ id: fixture.actorId })],
+      roles: [],
+    });
+    expect(tasksById.get(taskIds[2])?.assignments).toEqual({
+      users: [],
+      roles: [expect.objectContaining({ id: fixture.roleId })],
+    });
+  });
+});
+
 describe("Task write atomicity", () => {
   it("creates a task and all its links together", async () => {
     const fixture = await createFixture();

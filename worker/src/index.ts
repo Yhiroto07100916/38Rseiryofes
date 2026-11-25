@@ -28,7 +28,7 @@ import { handleSubmissions, processDueSubmissionNotifications } from "./routes/s
 import { handleWishlist } from "./routes/wishlist"
 import { processDueCalendarNotifications } from "./routes/calendar-reminders"
 import { getSessionUser } from "./lib/session"
-import { getSecuritySettings, getSiteSetting } from "./lib/site-settings"
+
 
 async function readSiteAccessSettings(env: Env): Promise<{
   visibility: "public" | "private"
@@ -50,12 +50,14 @@ async function readSiteAccessSettings(env: Env): Promise<{
   taskDefaultStatus: "todo" | "in_progress" | "review" | "done"
   uploadMaxFileSizeMb: number
   featureEnabled: Record<string, boolean>
+  featureSettings: Record<string, { enabled?: boolean; view?: boolean; create?: boolean; edit?: boolean; delete?: boolean }>
+  securitySettings: { force_password_change: boolean }
 }> {
   try {
     const rows = await env.DB.prepare(`
       SELECT key, value
       FROM site_settings
-      WHERE key IN ('site_visibility', 'maintenance_mode', 'maintenance_message', 'require_login', 'login_enabled', 'site_name', 'site_description', 'app_version', 'release_notes', 'event_name', 'event_year', 'timezone', 'logo_url', 'favicon_url', 'social_links', 'operation_settings', 'feature_settings')
+      WHERE key IN ('site_visibility', 'maintenance_mode', 'maintenance_message', 'require_login', 'login_enabled', 'site_name', 'site_description', 'app_version', 'release_notes', 'event_name', 'event_year', 'timezone', 'logo_url', 'favicon_url', 'social_links', 'operation_settings', 'feature_settings', 'security_settings')
     `).all<{ key: string; value: string }>()
 
     const settings = new Map(rows.results.map(row => {
@@ -109,6 +111,16 @@ async function readSiteAccessSettings(env: Env): Promise<{
         const features = settings.get("feature_settings") as Record<string, { enabled?: boolean }> | null
         return Object.fromEntries(Object.entries(features ?? {}).map(([key, value]) => [key, value?.enabled !== false]))
       })(),
+      featureSettings: (() => {
+        const features = settings.get("feature_settings")
+        return features && typeof features === "object" && !Array.isArray(features)
+          ? features as Record<string, { enabled?: boolean; view?: boolean; create?: boolean; edit?: boolean; delete?: boolean }>
+          : {}
+      })(),
+      securitySettings: (() => {
+        const security = settings.get("security_settings") as { force_password_change?: unknown } | null
+        return { force_password_change: security?.force_password_change === true }
+      })(),
     }
   } catch {
     // Keep the existing access behavior until the settings migration is applied.
@@ -132,6 +144,8 @@ async function readSiteAccessSettings(env: Env): Promise<{
       taskDefaultStatus: "todo",
       uploadMaxFileSizeMb: 25,
       featureEnabled: {},
+      featureSettings: {},
+      securitySettings: { force_password_change: false },
     }
   }
 }
@@ -183,18 +197,7 @@ async function enforceSiteAccess(
     pathname === prefix || pathname.startsWith(prefix + "/"),
   )
   if (matchedFeature) {
-    const featureSettings = await getSiteSetting<Record<string, {
-      enabled?: boolean
-      view?: boolean
-      create?: boolean
-      edit?: boolean
-      delete?: boolean
-    }>>(
-      env,
-      "feature_settings",
-      {},
-    )
-    const feature = featureSettings[matchedFeature[1]]
+    const feature = settings.featureSettings[matchedFeature[1]]
     if (feature?.enabled === false) {
       return Response.json(
         { error: "This feature is currently disabled", feature: matchedFeature[1] },
@@ -219,8 +222,7 @@ async function enforceSiteAccess(
   }
 
   if (user) {
-    const securitySettings = await getSecuritySettings(env)
-    if (securitySettings.force_password_change) {
+    if (settings.securitySettings.force_password_change) {
       const passwordState = await env.DB.prepare(
         "SELECT password_changed_at FROM users WHERE id = ?",
       ).bind(user.id).first<{ password_changed_at: string | null }>()
