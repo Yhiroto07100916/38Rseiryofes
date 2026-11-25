@@ -1,4 +1,4 @@
-import { hasPermission, requireAuth } from "../lib/authz"
+import { getUsersWithPermission, hasPermission, requireAuth } from "../lib/authz"
 import { createNotificationsForUsers } from "../lib/notifications"
 
 export interface CalendarEvent {
@@ -83,16 +83,6 @@ async function notifyCalendarAttendanceChange(
     dedupeKey: "calendar.attendance_updated:" + event.id + ":" + targetUserId + ":" + operationId,
   })
 }
-
-async function getScheduleViewUserIds(env: Env): Promise<string[]> {
-  const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
-  const eligible = await Promise.all(users.results.map(async user => ({
-    id: user.id,
-    allowed: await hasPermission(env, user.id, "schedule.view"),
-  })))
-  return eligible.filter(user => user.allowed).map(user => user.id)
-}
-
 
 
 function generateId(): string {
@@ -789,7 +779,7 @@ export async function handleCalendar(
     const event = await getCalendarEvent(env, id)
 
     try {
-      const recipientUserIds = await getScheduleViewUserIds(env)
+      const recipientUserIds = await getUsersWithPermission(env, "schedule.view")
       await createNotificationsForUsers(env, {
         recipientUserIds,
         eventKey: "calendar.created",
