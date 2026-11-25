@@ -27,9 +27,6 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 const siteStatus = useSiteStatus()
 
-definePageMeta({
-  middleware: 'auth',
-})
 
 /*
  * 星陵祭の日付
