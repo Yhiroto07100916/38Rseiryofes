@@ -81,7 +81,8 @@ export default defineNuxtRouteMiddleware(async (to) => {
     await auth.fetchMe()
   }
 
-  if (!auth.isLoggedIn && requiresLogin) {
+  // The /top page is public even when the site requires login.
+  if (!auth.isLoggedIn && requiresLogin && to.path !== "/top") {
     return navigateTo("/login")
   }
 
