@@ -48,6 +48,7 @@ interface SiteSettings {
     calendar_default_view: 'month' | 'list'
     task_default_status: 'todo' | 'in_progress' | 'review' | 'done'
     upload_max_file_size_mb: number
+    receipt_storage: { folder_id: string | null; category: string }
   }
   security_settings: {
     session_duration_hours: number
@@ -155,6 +156,7 @@ const defaultSettings = (): SiteSettings => ({
     calendar_default_view: 'month',
     task_default_status: 'todo',
     upload_max_file_size_mb: 25,
+    receipt_storage: { folder_id: null, category: 'receipts' },
   },
   security_settings: {
     session_duration_hours: 168,
@@ -184,6 +186,8 @@ const saving = ref(false)
 const assigning = ref(false)
 const isImportantSettingsAdmin = ref(false)
 const snackbar = useSnackbar()
+const receiptStorageFolders = ref<Array<{ id: string; path: string; name: string }>>([])
+const receiptStorageCategories = ref<Array<{ slug: string; name: string }>>([])
 
 const hasUnsavedChanges = computed(() => initialSnapshot.value !== JSON.stringify(settings))
 const availableUsers = computed(() => {
@@ -233,6 +237,22 @@ async function loadSettings() {
     settings.operation_settings = {
       ...defaultSettings().operation_settings,
       ...(response.settings.operation_settings ?? {}),
+      receipt_storage: {
+        ...defaultSettings().operation_settings.receipt_storage,
+        ...(response.settings.operation_settings?.receipt_storage ?? {}),
+      },
+    }
+    try {
+      const [folderResponse, categoryResponse] = await Promise.all([
+        api.apiFetch<{ folders: Array<{ id: string; path: string; name: string }> }>('/api/file-folders?all=true'),
+        api.apiFetch<{ categories: Array<{ slug: string; name: string; is_active?: number }> }>('/api/files/categories'),
+      ])
+      receiptStorageFolders.value = folderResponse.folders ?? []
+      receiptStorageCategories.value = (categoryResponse.categories ?? []).filter(category => category.is_active !== 0)
+    } catch (storageError) {
+      console.warn('レシート保存先の候補を取得できませんでした。', storageError)
+      receiptStorageFolders.value = []
+      receiptStorageCategories.value = []
     }
     settings.security_settings = {
       ...defaultSettings().security_settings,
@@ -811,6 +831,42 @@ onBeforeUnmount(() => {
               </template>
             </v-list-item>
           </v-list>
+        </v-card-text>
+      </v-card>
+
+      <v-card rounded="xl" variant="outlined" class="mt-5">
+        <v-card-item>
+          <template #prepend>
+            <v-icon icon="mdi-receipt-text-outline" size="30" color="primary" />
+          </template>
+          <v-card-title>レシート保存設定</v-card-title>
+          <v-card-subtitle>会計に添付するレシート画像の保存先とファイルカテゴリを指定します。</v-card-subtitle>
+        </v-card-item>
+        <v-divider />
+        <v-card-text class="pa-5">
+          <v-select
+            v-model="settings.operation_settings.receipt_storage.folder_id"
+            :items="receiptStorageFolders.map(folder => ({ title: folder.path || folder.name, value: folder.id }))"
+            label="保存先フォルダ"
+            variant="outlined"
+            clearable
+            hint="未選択の場合はルート直下に保存します。"
+            persistent-hint
+          />
+          <v-select
+            v-model="settings.operation_settings.receipt_storage.category"
+            :items="receiptStorageCategories.map(category => ({ title: category.name, value: category.slug }))"
+            label="ファイルカテゴリ"
+            variant="outlined"
+            class="mt-3"
+            :disabled="receiptStorageCategories.length === 0"
+          />
+          <v-alert v-if="receiptStorageCategories.length === 0" type="warning" variant="tonal" density="compact" class="mt-2">
+            ファイルカテゴリを取得できません。ファイル管理のカテゴリ設定と閲覧権限を確認してください。
+          </v-alert>
+          <div class="text-caption text-medium-emphasis mt-2">
+            設定保存後に新しく登録するレシート画像から適用されます。既存ファイルの保存先・カテゴリは変更しません。
+          </div>
         </v-card-text>
       </v-card>
 
