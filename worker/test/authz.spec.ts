@@ -2,7 +2,7 @@ declare const __D1_MIGRATIONS__: string;
 
 import { applyD1Migrations, env } from "cloudflare:test";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { hasPermission } from "../src/lib/authz";
+import { getUsersWithPermission, hasPermission } from "../src/lib/authz";
 
 const userIds: string[] = [];
 const roleIds: string[] = [];
@@ -263,3 +263,56 @@ describe("hasPermission", () => {
     }
   });
 });
+
+
+describe("getUsersWithPermission", () => {
+  it("resolves user, role, account-role, deny precedence, and admin in one permission lookup", async () => {
+    const directAllowUser = await createUser();
+    const userDenyUser = await createUser();
+    const roleAllowUser = await createUser();
+    const roleDenyUser = await createUser();
+    const accountRoleUser = await createUser();
+    const adminUser = await createUser();
+
+    const allowRoleId = await createRole();
+    const denyRoleId = await createRole();
+    const accountRoleId = await createAccountRole();
+
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)").bind(userDenyUser, allowRoleId),
+      env.DB.prepare("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)").bind(roleAllowUser, allowRoleId),
+      env.DB.prepare("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)").bind(roleDenyUser, allowRoleId),
+      env.DB.prepare("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)").bind(roleDenyUser, denyRoleId),
+      env.DB.prepare("INSERT INTO user_account_roles (user_id, account_role_id) VALUES (?, ?)").bind(accountRoleUser, accountRoleId),
+      env.DB.prepare("INSERT INTO user_account_roles (user_id, account_role_id) SELECT ?, id FROM account_roles WHERE name = 'admin'").bind(adminUser),
+    ]);
+
+    await assignPermission("user_permissions", "user_id", directAllowUser, "tasks.view", "allow");
+    await assignPermission("user_permissions", "user_id", userDenyUser, "tasks.view", "deny");
+    await assignPermission("role_permissions", "role_id", allowRoleId, "tasks.view", "allow");
+    await assignPermission("role_permissions", "role_id", denyRoleId, "tasks.view", "deny");
+    await assignPermission("account_role_permissions", "account_role_id", accountRoleId, "tasks.view", "allow");
+
+    const recipients = await getUsersWithPermission(env, "tasks.view");
+
+    expect(recipients).toContain(directAllowUser);
+    expect(recipients).not.toContain(userDenyUser);
+    expect(recipients).toContain(roleAllowUser);
+    expect(recipients).not.toContain(roleDenyUser);
+    expect(recipients).toContain(accountRoleUser);
+    expect(recipients).toContain(adminUser);
+  });
+
+  it("can exclude the actor without changing other recipients", async () => {
+    const actorId = await createUser();
+    const recipientId = await createUser();
+    await assignPermission("user_permissions", "user_id", actorId, "news.view", "allow");
+    await assignPermission("user_permissions", "user_id", recipientId, "news.view", "allow");
+
+    const recipients = await getUsersWithPermission(env, "news.view", actorId);
+
+    expect(recipients).not.toContain(actorId);
+    expect(recipients).toContain(recipientId);
+  });
+});
+

@@ -75,7 +75,11 @@ export function setup() {
     throw new Error(`Login failed: HTTP ${response.status}`);
   }
 
-  const session = response.cookies.session_id?.[0]?.value;
+  const sessionCookies = response.cookies.session_id || [];
+  const session = sessionCookies.find(
+    (cookie) => cookie.value && cookie.max_age !== 0
+  )?.value;
+
 
   if (!session) {
     throw new Error('session_id cookie was not returned');
@@ -95,9 +99,20 @@ function get(url, session, name) {
     timeout: '15s',
   });
 
-  check(response, {
+  const ok = check(response, {
     [`${name}: HTTP 200`]: (r) => r.status === 200,
   });
+
+  if (!ok) {
+    console.warn(
+      `[LOAD TEST ERROR] ${name} ` +
+      `status=${response.status} ` +
+      `server=${response.headers.Server || 'unknown'} ` +
+      `cf-ray=${response.headers['Cf-Ray'] || 'unknown'} ` +
+      `content-type=${response.headers['Content-Type'] || 'unknown'} ` +
+      `body=${String(response.body || '').slice(0, 300)}`
+    );
+  }
 
   return response;
 }

@@ -147,7 +147,21 @@ export function createLogoutSessionHeaders(
   return headers
 }
 
-export async function getSessionUser(
+const sessionUserCache = new WeakMap<Request, Promise<SessionUser | null>>()
+
+export function getSessionUser(
+  request: Request,
+  env: SessionEnv,
+): Promise<SessionUser | null> {
+  const cached = sessionUserCache.get(request)
+  if (cached) return cached
+
+  const pending = loadSessionUser(request, env)
+  sessionUserCache.set(request, pending)
+  return pending
+}
+
+async function loadSessionUser(
   request: Request,
   env: SessionEnv,
 ): Promise<SessionUser | null> {
