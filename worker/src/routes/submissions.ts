@@ -1,4 +1,4 @@
-import { hasPermission, requireAuth } from "../lib/authz"
+import { getUsersWithPermission, hasPermission, requireAuth } from "../lib/authz"
 import { createNotificationsForUsers } from "../lib/notifications"
 import { notifyFileLinked } from "../lib/file-notifications"
 
