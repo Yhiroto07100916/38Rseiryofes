@@ -75,7 +75,11 @@ export function setup() {
     throw new Error(`Login failed: HTTP ${response.status}`);
   }
 
-  const session = response.cookies.session_id?.[0]?.value;
+  const sessionCookies = response.cookies.session_id || [];
+  const session = sessionCookies.find(
+    (cookie) => cookie.value && cookie.max_age !== 0
+  )?.value;
+
 
   if (!session) {
     throw new Error('session_id cookie was not returned');
