@@ -109,7 +109,8 @@ function get(url, session, name) {
       `status=${response.status} ` +
       `server=${response.headers.Server || 'unknown'} ` +
       `cf-ray=${response.headers['Cf-Ray'] || 'unknown'} ` +
-      `retry-after=${response.headers['Retry-After'] || 'none'}`
+      `content-type=${response.headers['Content-Type'] || 'unknown'} ` +
+      `body=${String(response.body || '').slice(0, 300)}`
     );
   }
 
