@@ -952,7 +952,7 @@ export async function handleCalendar(
 
     if (meaningfulChanges && event) {
       try {
-        const recipientUserIds = await getScheduleViewUserIds(env)
+        const recipientUserIds = await getUsersWithPermission(env, "schedule.view")
         await createNotificationsForUsers(env, {
           recipientUserIds,
           eventKey: "calendar.updated",
@@ -1005,7 +1005,7 @@ export async function handleCalendar(
       .run()
 
     try {
-      const recipientUserIds = await getScheduleViewUserIds(env)
+      const recipientUserIds = await getUsersWithPermission(env, "schedule.view")
       await createNotificationsForUsers(env, {
         recipientUserIds,
         eventKey: "calendar.deleted",
