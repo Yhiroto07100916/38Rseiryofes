@@ -214,6 +214,88 @@ export async function getUserPermissions(
   return filterEnabledFeaturePermissions(env, granted)
 }
 
+
+/**
+ * Returns all users who have an effective permission using one D1 query.
+ * Permission precedence matches hasPermission: user > role > account role,
+ * with deny taking precedence among assignments at the same level.
+ */
+export async function getUsersWithPermission(
+  env: AuthEnv,
+  permissionKey: string,
+  excludedUserId?: string,
+): Promise<string[]> {
+  if (!(await isFeaturePermissionEnabled(env, permissionKey))) return []
+
+  const result = await env.DB.prepare(`
+    WITH target_permission AS (
+      SELECT id FROM permissions WHERE key = ?
+    ),
+    admin_users AS (
+      SELECT DISTINCT uar.user_id
+      FROM user_account_roles uar
+      INNER JOIN account_roles ar ON ar.id = uar.account_role_id
+      WHERE ar.name = 'admin'
+    ),
+    user_effects AS (
+      SELECT
+        up.user_id,
+        CASE
+          WHEN MAX(CASE WHEN up.effect = 'deny' THEN 1 ELSE 0 END) = 1 THEN 'deny'
+          WHEN MAX(CASE WHEN up.effect = 'allow' THEN 1 ELSE 0 END) = 1 THEN 'allow'
+          ELSE NULL
+        END AS effect
+      FROM user_permissions up
+      INNER JOIN target_permission tp ON tp.id = up.permission_id
+      GROUP BY up.user_id
+    ),
+    role_effects AS (
+      SELECT
+        ur.user_id,
+        CASE
+          WHEN MAX(CASE WHEN rp.effect = 'deny' THEN 1 ELSE 0 END) = 1 THEN 'deny'
+          WHEN MAX(CASE WHEN rp.effect = 'allow' THEN 1 ELSE 0 END) = 1 THEN 'allow'
+          ELSE NULL
+        END AS effect
+      FROM user_roles ur
+      INNER JOIN role_permissions rp ON rp.role_id = ur.role_id
+      INNER JOIN target_permission tp ON tp.id = rp.permission_id
+      GROUP BY ur.user_id
+    ),
+    account_role_effects AS (
+      SELECT
+        uar.user_id,
+        CASE
+          WHEN MAX(CASE WHEN arp.effect = 'deny' THEN 1 ELSE 0 END) = 1 THEN 'deny'
+          WHEN MAX(CASE WHEN arp.effect = 'allow' THEN 1 ELSE 0 END) = 1 THEN 'allow'
+          ELSE NULL
+        END AS effect
+      FROM user_account_roles uar
+      INNER JOIN account_role_permissions arp ON arp.account_role_id = uar.account_role_id
+      INNER JOIN target_permission tp ON tp.id = arp.permission_id
+      GROUP BY uar.user_id
+    )
+    SELECT u.id
+    FROM users u
+    LEFT JOIN admin_users au ON au.user_id = u.id
+    LEFT JOIN user_effects ue ON ue.user_id = u.id
+    LEFT JOIN role_effects re ON re.user_id = u.id
+    LEFT JOIN account_role_effects aref ON aref.user_id = u.id
+    WHERE (? IS NULL OR u.id <> ?)
+      AND CASE
+        WHEN au.user_id IS NOT NULL THEN 1
+        WHEN ue.effect IS NOT NULL THEN ue.effect = 'allow'
+        WHEN re.effect IS NOT NULL THEN re.effect = 'allow'
+        WHEN aref.effect IS NOT NULL THEN aref.effect = 'allow'
+        ELSE 0
+      END = 1
+    ORDER BY u.id
+  `).bind(permissionKey, excludedUserId ?? null, excludedUserId ?? null)
+    .all<{ id: string }>()
+
+  return result.results.map(row => row.id)
+}
+
 export async function hasPermission(
   env: AuthEnv,
   userId: string,
