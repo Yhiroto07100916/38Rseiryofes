@@ -175,7 +175,6 @@ async function loadSessionUser(
   const session = await env.DB
     .prepare(`
       SELECT
-        s.id,
         s.expires_at,
         u.id,
         u.student_number,
