@@ -116,6 +116,7 @@ export const useAuthStore = defineStore('auth', () => {
       await fetchMe(true)
     }
 
+    invalidateSiteStatus()
     return response.user
   }
 
@@ -156,6 +157,7 @@ export const useAuthStore = defineStore('auth', () => {
       accountRoles.value = []
       initialized.value = true
       lastFetchedAt = Date.now()
+      invalidateSiteStatus()
     }
   }
 
