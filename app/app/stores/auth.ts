@@ -31,7 +31,7 @@ export const useAuthStore = defineStore('auth', () => {
   const accountRoles = ref<AuthRole[]>([])
   const initialized = ref(false)
   let fetchMePromise: Promise<AuthUser | null> | null = null
-  const lastFetchedAt = ref(0)
+  let lastFetchedAt = 0
   let authRevision = 0
 
   const isLoggedIn = computed(() => user.value !== null)
@@ -43,7 +43,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (
       !force &&
       initialized.value &&
-      Date.now() - lastFetchedAt.value < cacheTtl
+      Date.now() - lastFetchedAt < cacheTtl
     ) {
       return Promise.resolve(user.value)
     }
@@ -78,7 +78,7 @@ export const useAuthStore = defineStore('auth', () => {
       } finally {
         if (revision === authRevision) {
           initialized.value = true
-          lastFetchedAt.value = Date.now()
+          lastFetchedAt = Date.now()
 
           fetchMePromise = null
         }
@@ -95,7 +95,7 @@ export const useAuthStore = defineStore('auth', () => {
   ) => {
     authRevision += 1
     fetchMePromise = null
-    lastFetchedAt.value = 0
+    lastFetchedAt = 0
 
     const response = await apiFetch<LoginResponse>('/api/auth/login', {
       method: 'POST',
@@ -110,7 +110,7 @@ export const useAuthStore = defineStore('auth', () => {
     roles.value = response.roles ?? []
     accountRoles.value = response.account_roles ?? []
     initialized.value = true
-    lastFetchedAt.value = Date.now()
+    lastFetchedAt = Date.now()
 
     if (!response.roles || !response.account_roles) {
       await fetchMe(true)
@@ -141,7 +141,7 @@ export const useAuthStore = defineStore('auth', () => {
     roles.value = []
     accountRoles.value = []
     initialized.value = true
-    lastFetchedAt.value = Date.now()
+    lastFetchedAt = Date.now()
 
     try {
       await apiFetch('/api/auth/logout', {
@@ -155,7 +155,7 @@ export const useAuthStore = defineStore('auth', () => {
       roles.value = []
       accountRoles.value = []
       initialized.value = true
-      lastFetchedAt.value = Date.now()
+      lastFetchedAt = Date.now()
     }
   }
 
