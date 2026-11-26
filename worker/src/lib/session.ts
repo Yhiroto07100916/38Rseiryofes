@@ -10,6 +10,7 @@ export interface SessionUser {
   name: string
   nickname: string | null
   avatar_key: string | null
+  password_changed_at: string | null
 }
 
 function parseCookies(request: Request): Record<string, string> {
@@ -174,18 +175,21 @@ async function loadSessionUser(
   const session = await env.DB
     .prepare(`
       SELECT
-        s.id,
-        s.user_id,
-        s.expires_at
+        s.expires_at,
+        u.id,
+        u.student_number,
+        u.name,
+        u.nickname,
+        u.avatar_key,
+        u.password_changed_at
       FROM sessions s
+      INNER JOIN users u
+        ON u.id = s.user_id
       WHERE s.id = ?
+      LIMIT 1
     `)
     .bind(sessionId)
-    .first<{
-      id: string
-      user_id: string
-      expires_at: string
-    }>()
+    .first<SessionUser & { expires_at: string }>()
 
   if (!session) {
     return null
@@ -202,21 +206,14 @@ async function loadSessionUser(
     return null
   }
 
-  const user = await env.DB
-    .prepare(`
-      SELECT
-        id,
-        student_number,
-        name,
-        nickname,
-        avatar_key
-      FROM users
-      WHERE id = ?
-    `)
-    .bind(session.user_id)
-    .first<SessionUser>()
-
-  return user ?? null
+  return {
+    id: session.id,
+    student_number: session.student_number,
+    name: session.name,
+    nickname: session.nickname,
+    avatar_key: session.avatar_key,
+    password_changed_at: session.password_changed_at,
+  }
 }
 
 export async function deleteSession(

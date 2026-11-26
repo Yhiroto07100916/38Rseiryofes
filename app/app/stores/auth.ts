@@ -31,13 +31,23 @@ export const useAuthStore = defineStore('auth', () => {
   const accountRoles = ref<AuthRole[]>([])
   const initialized = ref(false)
   let fetchMePromise: Promise<AuthUser | null> | null = null
+  let lastFetchedAt = 0
   let authRevision = 0
 
   const isLoggedIn = computed(() => user.value !== null)
 
   const { apiFetch } = useApi()
 
-  const fetchMe = () => {
+  const fetchMe = (force = false) => {
+    const cacheTtl = user.value ? 60_000 : 15_000
+    if (
+      !force &&
+      initialized.value &&
+      Date.now() - lastFetchedAt < cacheTtl
+    ) {
+      return Promise.resolve(user.value)
+    }
+
     if (fetchMePromise) {
       return fetchMePromise
     }
@@ -68,6 +78,7 @@ export const useAuthStore = defineStore('auth', () => {
       } finally {
         if (revision === authRevision) {
           initialized.value = true
+          lastFetchedAt = Date.now()
 
           fetchMePromise = null
         }
@@ -84,6 +95,7 @@ export const useAuthStore = defineStore('auth', () => {
   ) => {
     authRevision += 1
     fetchMePromise = null
+    lastFetchedAt = 0
 
     const response = await apiFetch<LoginResponse>('/api/auth/login', {
       method: 'POST',
@@ -98,9 +110,10 @@ export const useAuthStore = defineStore('auth', () => {
     roles.value = response.roles ?? []
     accountRoles.value = response.account_roles ?? []
     initialized.value = true
+    lastFetchedAt = Date.now()
 
     if (!response.roles || !response.account_roles) {
-      await fetchMe()
+      await fetchMe(true)
     }
 
     return response.user
@@ -128,6 +141,7 @@ export const useAuthStore = defineStore('auth', () => {
     roles.value = []
     accountRoles.value = []
     initialized.value = true
+    lastFetchedAt = Date.now()
 
     try {
       await apiFetch('/api/auth/logout', {
@@ -141,6 +155,7 @@ export const useAuthStore = defineStore('auth', () => {
       roles.value = []
       accountRoles.value = []
       initialized.value = true
+      lastFetchedAt = Date.now()
     }
   }
 

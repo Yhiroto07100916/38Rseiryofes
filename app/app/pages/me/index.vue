@@ -1293,7 +1293,7 @@ const changePassword = async () => {
       body: passwordForm.value,
     })
 
-    await auth.fetchMe()
+    await auth.fetchMe(true)
     snackbar.success('パスワードを変更しました。')
 
     passwordForm.value = {

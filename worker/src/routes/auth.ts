@@ -321,17 +321,19 @@ async function handleMe(
     )
   }
 
-  const [access, securitySettings, passwordState] = await Promise.all([
+  const [access, securitySettings] = await Promise.all([
     getAuthData(env, user.id),
     getSecuritySettings(env),
-    env.DB.prepare("SELECT password_changed_at FROM users WHERE id = ?")
-      .bind(user.id).first<{ password_changed_at: string | null }>(),
   ])
 
   return Response.json({
     user: {
-      ...user,
-      must_change_password: securitySettings.force_password_change && !passwordState?.password_changed_at,
+      id: user.id,
+      student_number: user.student_number,
+      name: user.name,
+      nickname: user.nickname,
+      avatar_key: user.avatar_key,
+      must_change_password: securitySettings.force_password_change && !user.password_changed_at,
     },
     ...access,
   })
