@@ -29,6 +29,11 @@ export function useSiteStatus() {
   return useState<SiteStatus | null>("site-status", () => null)
 }
 
+export function invalidateSiteStatus() {
+  useSiteStatus().value = null
+  useState<number>("site-status-refreshed-at", () => 0).value = 0
+}
+
 export async function refreshSiteStatus(
   options: { force?: boolean } = {},
 ) {
