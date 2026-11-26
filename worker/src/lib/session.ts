@@ -206,8 +206,14 @@ async function loadSessionUser(
     return null
   }
 
-  const { expires_at: _expiresAt, ...user } = session
-  return user
+  return {
+    id: session.id,
+    student_number: session.student_number,
+    name: session.name,
+    nickname: session.nickname,
+    avatar_key: session.avatar_key,
+    password_changed_at: session.password_changed_at,
+  }
 }
 
 export async function deleteSession(
