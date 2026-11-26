@@ -23,11 +23,26 @@ export interface SiteStatus {
   is_important_settings_admin: boolean
 }
 
+const SITE_STATUS_CACHE_TTL_MS = 30_000
+
 export function useSiteStatus() {
   return useState<SiteStatus | null>("site-status", () => null)
 }
 
-export async function refreshSiteStatus() {
+export async function refreshSiteStatus(
+  options: { force?: boolean } = {},
+) {
+  const statusState = useSiteStatus()
+  const refreshedAt = useState<number>("site-status-refreshed-at", () => 0)
+
+  if (
+    !options.force &&
+    statusState.value &&
+    Date.now() - refreshedAt.value < SITE_STATUS_CACHE_TTL_MS
+  ) {
+    return statusState.value
+  }
+
   const config = useRuntimeConfig()
   const apiBaseUrl = String(config.public.apiBaseUrl).replace(/\/$/, "")
   const status = await $fetch<SiteStatus>(`${apiBaseUrl}/api/site-status`, {
@@ -35,6 +50,7 @@ export async function refreshSiteStatus() {
     headers: import.meta.server ? useRequestHeaders(["cookie"]) : undefined,
   })
 
-  useSiteStatus().value = status
+  statusState.value = status
+  refreshedAt.value = Date.now()
   return status
 }
