@@ -2,7 +2,6 @@ import type { SiteStatus } from "~/composables/useSiteStatus"
 
 export default defineNuxtRouteMiddleware(async (to) => {
   const siteStatusState = useSiteStatus()
-  siteStatusState.value = null
 
   let siteStatus: SiteStatus | null = null
 

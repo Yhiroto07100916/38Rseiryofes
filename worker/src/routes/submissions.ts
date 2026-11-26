@@ -68,15 +68,6 @@ async function getSubmissionRoleMemberIds(env: Env, roleId: string | null): Prom
   return result.results.map(row => row.user_id)
 }
 
-async function getUsersWithPermission(env: Env, permission: string): Promise<string[]> {
-  const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
-  const allowed = await Promise.all(users.results.map(async user => ({
-    id: user.id,
-    allowed: await hasPermission(env, user.id, permission),
-  })))
-  return allowed.filter(user => user.allowed).map(user => user.id)
-}
-
 async function getSubmission(
   env: Env,
   id: string,

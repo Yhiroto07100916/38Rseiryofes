@@ -344,7 +344,7 @@ async function saveSettings() {
       body: { settings: payload },
     })
     try {
-      await refreshSiteStatus()
+      await refreshSiteStatus({ force: true })
     } catch (statusError) {
       console.warn('サイト表示設定の再取得に失敗しました。', statusError)
     }
