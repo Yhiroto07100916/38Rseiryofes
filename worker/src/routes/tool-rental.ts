@@ -525,7 +525,6 @@ export async function handleToolRental(
           body: (loanItem.tool_name_snapshot || "工具") + "（" + loanItem.management_number + "）が返却されました。",
           targetUrl: "/tool-rental/loans/history?open=" + encodeURIComponent(String(loanItem.id)),
           actorUserId: auth.user.id,
-          includeActor: true,
           entityType: "tool_loan_item",
           entityId: String(loanItem.id),
           dedupeKey: "tool_rental.returned:" + loanItem.id,
