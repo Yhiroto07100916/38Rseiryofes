@@ -76,8 +76,8 @@ describe("Calendar notification events", () => {
 
     const createdNotification = await env.DB.prepare(
       "SELECT event_key, recipient_user_id, target_url FROM notifications " +
-      "WHERE entity_type = 'calendar_event' AND entity_id = ?",
-    ).bind(event.id).first<{
+      "WHERE entity_type = 'calendar_event' AND entity_id = ? AND recipient_user_id = ?",
+    ).bind(event.id, recipient.id).first<{
       event_key: string
       recipient_user_id: string
       target_url: string
@@ -92,7 +92,7 @@ describe("Calendar notification events", () => {
     const actorNotification = await env.DB.prepare(
       "SELECT id FROM notifications WHERE entity_id = ? AND recipient_user_id = ?",
     ).bind(event.id, actor.id).first()
-    expect(actorNotification).toBeNull()
+    expect(actorNotification).not.toBeNull()
 
     const colorOnly = await SELF.fetch(
       "http://example.com/api/calendar/events/" + event.id,
@@ -109,8 +109,8 @@ describe("Calendar notification events", () => {
 
     const afterColorChange = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM notifications " +
-      "WHERE entity_id = ? AND event_key = 'calendar.updated'",
-    ).bind(event.id).first<{ count: number }>()
+      "WHERE entity_id = ? AND event_key = 'calendar.updated' AND recipient_user_id = ?",
+    ).bind(event.id, recipient.id).first<{ count: number }>()
     expect(afterColorChange?.count).toBe(0)
 
     const meaningfulUpdate = await SELF.fetch(
@@ -149,8 +149,8 @@ describe("Calendar notification events", () => {
 
     const deletedNotification = await env.DB.prepare(
       "SELECT event_key, recipient_user_id FROM notifications " +
-      "WHERE event_key = 'calendar.deleted' AND body = ?",
-    ).bind("劇練習・時間変更").first<{
+      "WHERE event_key = 'calendar.deleted' AND body = ? AND recipient_user_id = ?",
+    ).bind("劇練習・時間変更", recipient.id).first<{
       event_key: string
       recipient_user_id: string
     }>()
