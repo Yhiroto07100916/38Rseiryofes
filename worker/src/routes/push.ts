@@ -289,7 +289,7 @@ export async function reenqueueNewsPushDeliveries(
   }
 
   if (operatorUserId === undefined) {
-    // 既存の内部呼び出しとの互換性。HTTP経由の再通知では必ず操作者IDを渡し、権限・設定で絞り込む。
+    // 既存の内部呼び出しとの互換性。HTTP経由の再通知では権限・設定で対象者を絞り込む。
     const legacyResult = await env.DB.prepare(
       "INSERT INTO push_notification_deliveries (" +
       "id, news_id, subscription_id, recipient_user_id, status, attempt_count, next_attempt_at" +
@@ -305,7 +305,7 @@ export async function reenqueueNewsPushDeliveries(
   const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
   const eligible = await Promise.all(users.results.map(async user => ({
     id: user.id,
-    allowed: user.id !== operatorUserId && await hasPermission(env, user.id, "news.view"),
+    allowed: await hasPermission(env, user.id, "news.view"),
   })))
   const recipientIds = eligible.filter(user => user.allowed).map(user => user.id)
 
