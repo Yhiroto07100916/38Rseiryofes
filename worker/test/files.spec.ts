@@ -622,7 +622,6 @@ describe("Files access permissions", () => {
     fixture.objectKeys.push(uploaded.object_key);
 
     await grantPermissions(fixture.userId, ["tasks.view"]);
-    await grantPermissions(fixture.userId, ["tasks.view"]);
     await grantPermissions(fixture.recipientUserId, ["tasks.view"]);
     await env.DB.prepare(
       "INSERT INTO task_files (task_id, file_id) VALUES (?, ?)",
@@ -632,8 +631,8 @@ describe("Files access permissions", () => {
     const notification = await env.DB.prepare(`
       SELECT event_key, recipient_user_id, body, target_url
       FROM notifications
-      WHERE entity_type = 'file' AND entity_id = ?
-    `).bind(uploaded.id).first<{
+      WHERE entity_type = 'file' AND entity_id = ? AND recipient_user_id = ?
+    `).bind(uploaded.id, fixture.recipientUserId).first<{
       event_key: string;
       recipient_user_id: string;
       body: string;
