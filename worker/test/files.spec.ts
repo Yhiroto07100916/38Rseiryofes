@@ -621,6 +621,7 @@ describe("Files access permissions", () => {
     fixture.uploadedFileIds.push(uploaded.id);
     fixture.objectKeys.push(uploaded.object_key);
 
+    await grantPermissions(fixture.userId, ["tasks.view"]);
     await grantPermissions(fixture.recipientUserId, ["tasks.view"]);
     await env.DB.prepare(
       "INSERT INTO task_files (task_id, file_id) VALUES (?, ?)",
@@ -648,7 +649,7 @@ describe("Files access permissions", () => {
     const actorNotification = await env.DB.prepare(
       "SELECT id FROM notifications WHERE entity_id = ? AND recipient_user_id = ?",
     ).bind(uploaded.id, fixture.userId).first();
-    expect(actorNotification).toBeNull();
+    expect(actorNotification).not.toBeNull();
 
     const silentFormData = new FormData();
     silentFormData.set("file", new File(["silent upload"], "silent.txt", { type: "text/plain" }));
