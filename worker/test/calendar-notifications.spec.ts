@@ -128,8 +128,8 @@ describe("Calendar notification events", () => {
 
     const updatedNotification = await env.DB.prepare(
       "SELECT event_key, recipient_user_id FROM notifications " +
-      "WHERE entity_id = ? AND event_key = 'calendar.updated'",
-    ).bind(event.id).first<{
+      "WHERE entity_id = ? AND event_key = 'calendar.updated' AND recipient_user_id = ?",
+    ).bind(event.id, recipient.id).first<{
       event_key: string
       recipient_user_id: string
     }>()
