@@ -294,12 +294,96 @@
         </v-card-actions>
       </v-card>
     </template>
+
+    <v-card
+      v-if="news && (canViewReadStats || canViewUnreadUsers)"
+      variant="outlined"
+      class="rounded-xl mt-4"
+    >
+      <v-card-text class="d-flex flex-wrap align-center ga-4">
+        <div
+          v-if="canViewReadStats"
+          class="flex-grow-1"
+        >
+          <div class="text-subtitle-1 font-weight-bold mb-1">
+            <v-icon icon="mdi-eye-check-outline" size="20" class="mr-1" />
+            閲覧状況
+          </div>
+          <div v-if="readStats" class="d-flex flex-wrap align-center ga-2">
+            <span class="text-h6 font-weight-bold">{{ readStats.read_count }}人</span>
+            <span class="text-body-2 text-medium-emphasis">
+              / {{ readStats.total_count }}人が既読
+            </span>
+            <v-chip size="small" color="warning" variant="tonal">
+              未読 {{ readStats.unread_count }}人
+            </v-chip>
+          </div>
+          <div v-else class="text-body-2 text-medium-emphasis">
+            閲覧状況を取得できません
+          </div>
+        </div>
+
+        <v-btn
+          v-if="canViewUnreadUsers"
+          variant="outlined"
+          prepend-icon="mdi-account-alert-outline"
+          @click="openUnreadUsers"
+        >
+          未読者を確認
+        </v-btn>
+      </v-card-text>
+    </v-card>
+
+    <v-dialog
+      v-model="unreadDialog"
+      max-width="520"
+      scrollable
+    >
+      <v-card rounded="xl">
+        <v-card-title class="d-flex align-center">
+          <span class="font-weight-bold">未読者一覧</span>
+          <v-spacer />
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            size="small"
+            aria-label="閉じる"
+            @click="unreadDialog = false"
+          />
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-0">
+          <div v-if="loadingUnreadUsers" class="pa-4">
+            <v-skeleton-loader type="list-item-three-line@4" />
+          </div>
+          <v-list v-else-if="unreadUsers.length > 0" lines="two">
+            <v-list-item
+              v-for="user in unreadUsers"
+              :key="user.id"
+              :title="user.name"
+              :subtitle="[user.student_number, user.nickname].filter(Boolean).join(' · ')"
+              prepend-icon="mdi-account-outline"
+            />
+          </v-list>
+          <div v-else class="text-center text-medium-emphasis pa-8">
+            未読者はいません
+          </div>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="unreadDialog = false">
+            閉じる
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>
 
 <script setup lang="ts">
 import { getDefaultTimeZone } from '~/utils/jst'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import BackButton from '~/components/layout/BackButton.vue'
 import {
   type NewsWithCalendarEvents,
@@ -316,7 +400,7 @@ definePageMeta({
 
 const route = useRoute()
 const auth = useAuthStore()
-const { getNewsById, deleteNews, renotifyNews } = useApi()
+const { getNewsById, deleteNews, renotifyNews, markNewsAsRead, getNewsReadStats, getNewsUnreadUsers } = useApi()
 const { confirm } = useConfirmDialog()
 const snackbar = useSnackbar()
 
@@ -325,6 +409,12 @@ const loading = ref(false)
 const deleting = ref(false)
 const renotifying = ref(false)
 const notFound = ref(false)
+const readStats = ref<Awaited<ReturnType<typeof getNewsReadStats>> | null>(null)
+const unreadUsers = ref<Awaited<ReturnType<typeof getNewsUnreadUsers>>['users']>([])
+const unreadDialog = ref(false)
+const loadingUnreadUsers = ref(false)
+const canViewReadStats = computed(() => auth.hasPermission('news.read_stats.view'))
+const canViewUnreadUsers = computed(() => auth.hasPermission('news.unread_users.view'))
 
 const newsId = computed(() => String(route.params.id))
 
@@ -400,6 +490,22 @@ const loadNews = async () => {
 
   try {
     news.value = await getNewsById(newsId.value)
+
+    // 詳細画面を正常に開いた時点で既読として記録する。
+    try {
+      await markNewsAsRead(newsId.value)
+    } catch (error) {
+      console.error('Failed to record news read receipt:', error)
+    }
+
+    if (canViewReadStats.value) {
+      try {
+        readStats.value = await getNewsReadStats(newsId.value)
+      } catch (error) {
+        console.error('Failed to load news read stats:', error)
+        readStats.value = null
+      }
+    }
   } catch (error: unknown) {
     console.error('Failed to load news:', error)
 
@@ -418,6 +524,24 @@ const loadNews = async () => {
     }
   } finally {
     loading.value = false
+  }
+}
+
+const openUnreadUsers = async () => {
+  if (!news.value || !canViewUnreadUsers.value || loadingUnreadUsers.value) {
+    return
+  }
+
+  unreadDialog.value = true
+  loadingUnreadUsers.value = true
+  try {
+    const result = await getNewsUnreadUsers(news.value.id)
+    unreadUsers.value = result.users
+  } catch (error) {
+    console.error('Failed to load news unread users:', error)
+    snackbar.error('未読者一覧の取得に失敗しました')
+  } finally {
+    loadingUnreadUsers.value = false
   }
 }
 

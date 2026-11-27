@@ -140,6 +140,19 @@ export interface NewsWithCalendarEvents extends News {
   attachments: NewsAttachment[]
 }
 
+export interface NewsReadStats {
+  read_count: number
+  unread_count: number
+  total_count: number
+}
+
+export interface NewsUnreadUser {
+  id: string
+  student_number: string
+  name: string
+  nickname: string | null
+}
+
 export interface CalendarEventListResponse {
   events: CalendarEvent[]
 }
@@ -432,6 +445,26 @@ export const useApi = () => {
     )
   }
 
+
+  const markNewsAsRead = (newsId: string) => {
+    return apiFetch<{ success: boolean; read_at: string | null }>(
+      `/api/news/${newsId}/read`,
+      { method: 'POST' },
+    )
+  }
+
+  const getNewsReadStats = (newsId: string) => {
+    return apiFetch<NewsReadStats>(
+      `/api/news/${newsId}/read-stats`,
+    )
+  }
+
+  const getNewsUnreadUsers = (newsId: string) => {
+    return apiFetch<{ users: NewsUnreadUser[] }>(
+      `/api/news/${newsId}/unread-users`,
+    )
+  }
+
   const createNews = (data: {
     title: string
     detail: string
@@ -609,6 +642,9 @@ export const useApi = () => {
     deleteCalendarEvent,
     getNews,
     getNewsById,
+    markNewsAsRead,
+    getNewsReadStats,
+    getNewsUnreadUsers,
     createNews,
     updateNews,
     renotifyNews,
