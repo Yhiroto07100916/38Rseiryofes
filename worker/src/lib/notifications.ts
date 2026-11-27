@@ -37,7 +37,6 @@ export async function createNotificationsForUsers(
 ): Promise<number> {
   // recipientUserIds は従来どおり、個人宛て通知・Pushの対象者。
   const personalRecipientIds = new Set([...new Set(input.recipientUserIds)].filter(Boolean))
-  if (personalRecipientIds.size === 0) return 0
 
   // 閲覧権限を持つユーザーには活動記録も残す。権限が取得できない場合でも
   // 個人宛て通知の作成は継続し、Push対象を誤って広げない。
@@ -59,6 +58,7 @@ export async function createNotificationsForUsers(
     ...personalRecipientIds,
     ...activityRecipientIds,
   ])]
+  if (recipientIds.length === 0) return 0
 
   const results = await env.DB.batch(
     recipientIds.map(userId => env.DB.prepare(
