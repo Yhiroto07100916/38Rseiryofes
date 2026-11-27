@@ -41,6 +41,13 @@ async function createUser(): Promise<{ userId: string; cookie: string }> {
   return { userId, cookie: "session_id=" + sessionId }
 }
 
+async function grantPermission(userId: string, permissionKey: string): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO user_permissions (user_id, permission_id, effect) " +
+    "SELECT ?, id, 'allow' FROM permissions WHERE key = ?",
+  ).bind(userId, permissionKey).run()
+}
+
 async function insertNotification(
   userId: string,
   values: Partial<{
@@ -103,6 +110,42 @@ describe("Notification center API", () => {
     expect(createdCount).toBe(2)
     expect(rows.results.map(row => row.recipient_user_id)).toContain(actor.userId)
     expect(rows.results.map(row => row.recipient_user_id)).toContain(other.userId)
+    for (const row of rows.results) {
+      const notification = await env.DB.prepare(
+        "SELECT id FROM notifications WHERE recipient_user_id = ? AND dedupe_key = ?",
+      ).bind(row.recipient_user_id, dedupeKey).first<{ id: string }>()
+      if (notification) notificationIds.push(notification.id)
+    }
+  })
+
+  it("stores activity-only records for users with the feature view permission", async () => {
+    const personal = await createUser()
+    const activityOnly = await createUser()
+    const unrelated = await createUser()
+    await grantPermission(activityOnly.userId, "tasks.view")
+    await grantPermission(unrelated.userId, "schedule.view")
+    const dedupeKey = "test.activity-audience:" + crypto.randomUUID()
+
+    const createdCount = await createNotificationsForUsers(env, {
+      recipientUserIds: [personal.userId],
+      eventKey: "test.task_updated",
+      category: "tasks",
+      title: "タスクが更新されました",
+      actorUserId: personal.userId,
+      dedupeKey,
+    })
+
+    const rows = await env.DB.prepare(
+      "SELECT recipient_user_id, is_personal FROM notifications WHERE dedupe_key = ?",
+    ).bind(dedupeKey).all<{ recipient_user_id: string; is_personal: number }>()
+
+    expect(createdCount).toBe(2)
+    expect(rows.results).toEqual(expect.arrayContaining([
+      { recipient_user_id: personal.userId, is_personal: 1 },
+      { recipient_user_id: activityOnly.userId, is_personal: 0 },
+    ]))
+    expect(rows.results.some(row => row.recipient_user_id === unrelated.userId)).toBe(false)
+
     for (const row of rows.results) {
       const notification = await env.DB.prepare(
         "SELECT id FROM notifications WHERE recipient_user_id = ? AND dedupe_key = ?",

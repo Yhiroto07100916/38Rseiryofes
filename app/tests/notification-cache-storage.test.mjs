@@ -44,6 +44,18 @@ test("persists cache records separately for each account", async () => {
   assert.equal(accountB?.unreadCount, 2)
 })
 
+test("preserves activity labels and actor names in the local cache", async () => {
+  await saveNotificationCache("account-activity", [{
+    ...notification("activity-1"),
+    is_personal: 0,
+    actor_name: "活動したユーザー",
+  }], 1)
+
+  const cached = await loadNotificationCache("account-activity")
+  assert.equal(cached?.notifications[0]?.is_personal, 0)
+  assert.equal(cached?.notifications[0]?.actor_name, "活動したユーザー")
+})
+
 test("deleting one account cache does not affect another account", async () => {
   await deleteNotificationCache("account-a")
 

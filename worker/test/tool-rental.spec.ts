@@ -278,6 +278,7 @@ describe("38R tool inventory and lending ledger", () => {
       "tool_rental.return",
       "tool_rental.history",
     ])
+    await grant(offCampus.userId, ["tool_rental.view"])
 
     const now = new Date()
     const checkedAt = now.toISOString()
@@ -312,10 +313,17 @@ describe("38R tool inventory and lending ledger", () => {
     expect(borrowerMapping?.borrower_user_id).toBe(offCampus.userId)
 
     const checkoutNotifications = await env.DB.prepare(
-      "SELECT recipient_user_id FROM notifications WHERE event_key = ?",
-    ).bind("tool_rental.checked_out:" + checkoutBody.loan_id).all<{ recipient_user_id: string }>()
-    expect(checkoutNotifications.results.map(row => row.recipient_user_id).sort())
+      "SELECT recipient_user_id, is_personal FROM notifications WHERE event_key = ?",
+    ).bind("tool_rental.checked_out:" + checkoutBody.loan_id).all<{
+      recipient_user_id: string;
+      is_personal: number;
+    }>()
+    expect(checkoutNotifications.results.filter(row => row.is_personal === 1).map(row => row.recipient_user_id).sort())
       .toEqual([manager.userId, onCampus.userId].sort())
+    expect(checkoutNotifications.results).toContainEqual({
+      recipient_user_id: offCampus.userId,
+      is_personal: 0,
+    })
 
     const currentResponse = await api(manager, "/loans/current")
     const current = await currentResponse.json() as Array<{ loan_item_id: number }>
@@ -330,9 +338,12 @@ describe("38R tool inventory and lending ledger", () => {
     expect(returned.status).toBe(200)
 
     const returnNotifications = await env.DB.prepare(
-      "SELECT recipient_user_id FROM notifications WHERE event_key = ?",
-    ).bind("tool_rental.returned:" + current[0].loan_item_id).all<{ recipient_user_id: string }>()
-    expect(returnNotifications.results.map(row => row.recipient_user_id).sort())
+      "SELECT recipient_user_id, is_personal FROM notifications WHERE event_key = ?",
+    ).bind("tool_rental.returned:" + current[0].loan_item_id).all<{
+      recipient_user_id: string;
+      is_personal: number;
+    }>()
+    expect(returnNotifications.results.filter(row => row.is_personal === 1).map(row => row.recipient_user_id).sort())
       .toEqual([manager.userId, onCampus.userId, offCampus.userId].sort())
   })
   it("sends due-soon, timer-end, and overdue notifications to everyone", async () => {

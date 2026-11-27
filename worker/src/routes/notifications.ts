@@ -25,8 +25,10 @@ type NotificationRow = {
   body: string
   target_url: string | null
   actor_user_id: string | null
+  actor_name: string | null
   entity_type: string | null
   entity_id: string | null
+  is_personal: number
   is_read: number
   read_updated_at: string
   read_version: number
@@ -122,7 +124,7 @@ export async function handleNotifications(
     }
 
     const rows = await env.DB.prepare(
-      "SELECT id, event_key, category, title, body, target_url, actor_user_id, entity_type, entity_id, is_read, " +
+      "SELECT id, event_key, category, title, body, target_url, actor_user_id, (SELECT COALESCE(NULLIF(nickname, ''), name) FROM users WHERE id = notifications.actor_user_id) AS actor_name, entity_type, entity_id, is_personal, is_read, " +
       "COALESCE(read_updated_at, created_at) AS read_updated_at, read_version, created_at, expires_at " +
       "FROM notifications WHERE " + conditions.join(" AND ") +
       " ORDER BY created_at DESC, id DESC LIMIT ?",
@@ -164,7 +166,7 @@ export async function handleNotifications(
   if (pathParts.length === 1 && method === "GET" && pathParts[0] !== "settings") {
     await purgeExpiredNotifications(env, userId)
     const notification = await env.DB.prepare(
-      "SELECT id, event_key, category, title, body, target_url, actor_user_id, entity_type, entity_id, " +
+      "SELECT id, event_key, category, title, body, target_url, actor_user_id, (SELECT COALESCE(NULLIF(nickname, ''), name) FROM users WHERE id = notifications.actor_user_id) AS actor_name, entity_type, entity_id, is_personal, " +
       "is_read, COALESCE(read_updated_at, created_at) AS read_updated_at, read_version, created_at, expires_at " +
       "FROM notifications WHERE id = ? AND recipient_user_id = ?",
     ).bind(pathParts[0], userId).first<NotificationRow>()
