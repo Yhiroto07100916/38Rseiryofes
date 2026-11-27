@@ -598,7 +598,7 @@ describe("Files access permissions", () => {
     }
   });
 
-  it("creates upload notifications only when the uploader opts in", async () => {
+  it("keeps file activity for viewers while the opt-in controls personal push notifications", async () => {
     const fixture = await createFixture();
     const category = await env.DB.prepare(
       "SELECT slug FROM file_categories WHERE is_active = 1 LIMIT 1",
@@ -666,10 +666,24 @@ describe("Files access permissions", () => {
     fixture.uploadedFileIds.push(silentUpload.id);
     fixture.objectKeys.push(silentUpload.object_key);
 
+    await env.DB.prepare(
+      "INSERT INTO task_files (task_id, file_id) VALUES (?, ?)",
+    ).bind(fixture.taskId, silentUpload.id).run();
+    await notifyFileLinked(env, silentUpload.id, fixture.userId);
+
     const silentNotification = await env.DB.prepare(
-      "SELECT id FROM notifications WHERE entity_type = 'file' AND entity_id = ?",
-    ).bind(silentUpload.id).first();
-    expect(silentNotification).toBeNull();
+      "SELECT id, is_personal FROM notifications " +
+      "WHERE entity_type = 'file' AND entity_id = ? AND recipient_user_id = ?",
+    ).bind(silentUpload.id, fixture.recipientUserId).first<{
+      id: string;
+      is_personal: number;
+    }>();
+    expect(silentNotification).toMatchObject({ is_personal: 0 });
+
+    const silentPushDeliveries = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM notification_push_deliveries WHERE notification_id = ?",
+    ).bind(silentNotification!.id).first<{ count: number }>();
+    expect(silentPushDeliveries?.count ?? 0).toBe(0);
   });
 
 });

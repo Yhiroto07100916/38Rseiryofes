@@ -24,6 +24,15 @@ function generateId(): string {
   return crypto.randomUUID()
 }
 
+async function getAdminUserIds(env: Env): Promise<string[]> {
+  const result = await env.DB.prepare(
+    "SELECT DISTINCT uar.user_id FROM user_account_roles uar " +
+    "INNER JOIN account_roles ar ON ar.id = uar.account_role_id " +
+    "WHERE ar.name = 'admin'",
+  ).all<{ user_id: string }>()
+  return result.results.map(row => row.user_id)
+}
+
 
 const IMPORTANT_SETTINGS_ROLE = "important_settings_admin"
 
@@ -993,6 +1002,7 @@ export async function handleUserAccountRoles(
     try {
       await createNotificationsForUsers(env, {
         recipientUserIds: [userId],
+        activityRecipientUserIds: await getAdminUserIds(env),
         eventKey: "account_admin.role_granted",
         category: "account_admin",
         title: "アカウントロールが付与されました",
@@ -1076,6 +1086,7 @@ export async function handleUserAccountRoles(
       try {
         await createNotificationsForUsers(env, {
           recipientUserIds: [userId],
+          activityRecipientUserIds: await getAdminUserIds(env),
           eventKey: "account_admin.role_revoked",
           category: "account_admin",
           title: "アカウントロールが解除されました",

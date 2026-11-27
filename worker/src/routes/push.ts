@@ -657,6 +657,7 @@ export async function enqueueNotificationPushDeliveries(
     "LEFT JOIN notification_category_settings cs " +
     "ON cs.user_id = n.recipient_user_id AND cs.category = n.category " +
     "WHERE n.id = ? " +
+    "AND n.is_personal = 1 " +
     "AND COALESCE(us.global_push_enabled, 1) = 1 " +
     "AND COALESCE(cs.push_enabled, 1) = 1",
   ).bind(notificationId).run()
