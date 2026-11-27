@@ -249,7 +249,7 @@ export async function processDueSubmissionNotifications(env: Env): Promise<void>
       const eventKey = "submissions.deadline_reminder_" + option.key
       reminders.push({
         eventKey,
-        title: \`提出物の期限まで\${option.label}です\`,
+        title: `提出物の期限まで${option.label}です`,
         dedupeKey: eventKey + ":" + submission.id + ":" + submission.due_at,
       })
     }

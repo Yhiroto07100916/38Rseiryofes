@@ -167,7 +167,7 @@ export async function processDailyScheduleNotifications(env: Env): Promise<void>
   if (minutesSinceSchedule < 0 || minutesSinceSchedule >= 5) return
 
   const { year, month, day } = jstParts(now)
-  const dateKey = \`\${year}-\${String(month).padStart(2, "0")}-\${String(day).padStart(2, "0")}\`
+  const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`
   const dayStart = new Date(Date.UTC(year, month - 1, day, -9))
   const nextDayStart = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
   const events = await env.DB.prepare(
@@ -196,24 +196,24 @@ export async function processDailyScheduleNotifications(env: Env): Promise<void>
     hourCycle: "h23",
   })
   const lines = events.results.slice(0, 10).map(event => {
-    if (event.is_all_day === 1) return \`・終日 \${event.title}\`
+    if (event.is_all_day === 1) return `・終日 ${event.title}`
     const startsAt = new Date(event.starts_at)
     const timeLabel = startsAt.getTime() < dayStart.getTime()
       ? "継続中"
       : timeFormatter.format(startsAt)
-    return \`・\${timeLabel} \${event.title}\`
+    return `・${timeLabel} ${event.title}`
   })
   if (events.results.length > lines.length) {
-    lines.push(\`・ほか\${events.results.length - lines.length}件\`)
+    lines.push(`・ほか${events.results.length - lines.length}件`)
   }
 
   await createNotificationsForUsers(env, {
     recipientUserIds: recipients,
     eventKey: "calendar.daily_schedule_reminder",
     category: "calendar",
-    title: \`今日の予定（\${dateKey}）\`,
+    title: `今日の予定（${dateKey}）`,
     body: lines.join("\n"),
-    targetUrl: \`/calendar?date=\${dateKey}\`,
+    targetUrl: `/calendar?date=${dateKey}`,
     requiredPermission: "schedule.view",
     entityType: "calendar_daily_schedule",
     entityId: dateKey,

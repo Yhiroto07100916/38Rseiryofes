@@ -372,7 +372,7 @@ export async function processDueTaskNotifications(env: Env): Promise<void> {
       const eventKey = "task.deadline_reminder_" + option.key
       reminders.push({
         eventKey,
-        title: \`タスクの期限まで\${option.label}です\`,
+        title: `タスクの期限まで${option.label}です`,
         dedupeKey: eventKey + ":" + task.id + ":" + task.due_at,
       })
     }
