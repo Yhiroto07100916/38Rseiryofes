@@ -6,6 +6,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const userIds: string[] = [];
 const sessionIds: string[] = [];
 let newsId = "";
+let mainUser: { id: string; sessionId: string };
+let statsOnlyUser: { id: string; sessionId: string };
+let unreadOnlyUser: { id: string; sessionId: string };
 
 async function createUser(prefix: string, permissions: string[]) {
   const id = crypto.randomUUID();
@@ -41,29 +44,26 @@ function request(sessionId: string, path: string, method = "GET") {
 beforeAll(async () => {
   await applyD1Migrations(env.DB, JSON.parse(__D1_MIGRATIONS__));
 
-  const main = await createUser("既読管理者", [
+  mainUser = await createUser("既読管理者", [
     "news.view",
     "news.read_stats.view",
     "news.unread_users.view",
   ]);
   const reader = await createUser("既読ユーザー", ["news.view"]);
   await createUser("未読ユーザー", ["news.view"]);
-  const statsOnly = await createUser("既読数閲覧のみ", ["news.read_stats.view"]);
-  const unreadOnly = await createUser("未読者閲覧のみ", ["news.unread_users.view"]);
+  statsOnlyUser = await createUser("既読数閲覧のみ", ["news.read_stats.view"]);
+  unreadOnlyUser = await createUser("未読者閲覧のみ", ["news.unread_users.view"]);
 
   newsId = crypto.randomUUID();
   await env.DB.prepare(
     "INSERT INTO news (id, title, detail, author, created_by) VALUES (?, ?, ?, ?, ?)",
-  ).bind(newsId, "既読機能テスト", "本文", "テスト", main.id).run();
+  ).bind(newsId, "既読機能テスト", "本文", "テスト", mainUser.id).run();
 
   // 読者の既読状態はDBに直接作り、APIによる本人の既読記録と分けて検証する。
   await env.DB.prepare(
     "INSERT INTO news_read_receipts (news_id, user_id) VALUES (?, ?)",
   ).bind(newsId, reader.id).run();
 
-  Object.assign(globalThis, {
-    __newsReadTestSessions: { main, reader, statsOnly, unreadOnly },
-  });
 });
 
 afterAll(async () => {
@@ -80,30 +80,23 @@ afterAll(async () => {
 
 describe("News read tracking", () => {
   it("records a reader once when they open the news detail", async () => {
-    const sessions = (globalThis as typeof globalThis & {
-      __newsReadTestSessions: { main: { id: string; sessionId: string } };
-    }).__newsReadTestSessions;
-
-    const first = await request(sessions.main.sessionId, `/api/news/${newsId}/read`, "POST");
+    const first = await request(mainUser.sessionId, `/api/news/${newsId}/read`, "POST");
     expect(first.status).toBe(200);
     const firstBody = await first.json() as { success: boolean; read_at: string };
     expect(firstBody.success).toBe(true);
     expect(firstBody.read_at).toBeTruthy();
 
-    const second = await request(sessions.main.sessionId, `/api/news/${newsId}/read`, "POST");
+    const second = await request(mainUser.sessionId, `/api/news/${newsId}/read`, "POST");
     expect(second.status).toBe(200);
 
     const receipts = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM news_read_receipts WHERE news_id = ? AND user_id = ?",
-    ).bind(newsId, sessions.main.id).first<{ count: number }>();
+    ).bind(newsId, mainUser.id).first<{ count: number }>();
     expect(receipts?.count).toBe(1);
   });
 
   it("returns read and unread counts for users who can view news", async () => {
-    const sessions = (globalThis as typeof globalThis & {
-      __newsReadTestSessions: { main: { sessionId: string } };
-    }).__newsReadTestSessions;
-    const response = await request(sessions.main.sessionId, `/api/news/${newsId}/read-stats`);
+    const response = await request(mainUser.sessionId, `/api/news/${newsId}/read-stats`);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       read_count: 2,
@@ -113,10 +106,7 @@ describe("News read tracking", () => {
   });
 
   it("returns only users with news.view who have not read the news", async () => {
-    const sessions = (globalThis as typeof globalThis & {
-      __newsReadTestSessions: { main: { sessionId: string } };
-    }).__newsReadTestSessions;
-    const response = await request(sessions.main.sessionId, `/api/news/${newsId}/unread-users`);
+    const response = await request(mainUser.sessionId, `/api/news/${newsId}/unread-users`);
     expect(response.status).toBe(200);
     const body = await response.json() as {
       users: Array<{ name: string; student_number: string }>;
@@ -126,17 +116,10 @@ describe("News read tracking", () => {
   });
 
   it("enforces read-count and unread-user permissions independently", async () => {
-    const sessions = (globalThis as typeof globalThis & {
-      __newsReadTestSessions: {
-        statsOnly: { sessionId: string };
-        unreadOnly: { sessionId: string };
-      };
-    }).__newsReadTestSessions;
-
-    const statsAllowed = await request(sessions.statsOnly.sessionId, `/api/news/${newsId}/read-stats`);
-    const statsDenied = await request(sessions.unreadOnly.sessionId, `/api/news/${newsId}/read-stats`);
+    const statsAllowed = await request(statsOnlyUser.sessionId, `/api/news/${newsId}/read-stats`);
+    const statsDenied = await request(unreadOnlyUser.sessionId, `/api/news/${newsId}/read-stats`);
     const unreadAllowed = await request(sessions.unreadOnly.sessionId, `/api/news/${newsId}/unread-users`);
-    const unreadDenied = await request(sessions.statsOnly.sessionId, `/api/news/${newsId}/unread-users`);
+    const unreadDenied = await request(statsOnlyUser.sessionId, `/api/news/${newsId}/unread-users`);
 
     expect(statsAllowed.status).toBe(200);
     expect(statsDenied.status).toBe(403);
