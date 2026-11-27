@@ -27,7 +27,7 @@
         </h1>
 
         <div class="hero-actions">
-          <NuxtLink to="/script" class="primary-button">
+          <NuxtLink to="/scripts" class="primary-button">
             台本を見る <span>→</span>
           </NuxtLink>
 
@@ -46,7 +46,7 @@
 
         <div class="quick-grid">
 
-          <NuxtLink to="/script" class="quick-card">
+          <NuxtLink to="/scripts" class="quick-card">
   <span class="card-icon">
     <BookOpen :size="24" :stroke-width="1.8" />
   </span>
@@ -68,7 +68,7 @@
   </span>
 </NuxtLink>
 
-<NuxtLink to="/vote" class="quick-card">
+<NuxtLink to="/surveys" class="quick-card">
   <span class="card-icon">
     <Vote :size="24" :stroke-width="1.8" />
   </span>
