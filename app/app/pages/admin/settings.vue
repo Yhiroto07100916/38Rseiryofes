@@ -43,6 +43,8 @@ interface SiteSettings {
     enabled: boolean
     categories: Record<string, boolean>
     return_due_all_users: true
+    deadline_reminders: { tasks: number[]; submissions: number[] }
+    daily_schedule: { enabled: boolean; time: string }
   }
   operation_settings: {
     calendar_default_view: 'month' | 'list'
@@ -94,6 +96,17 @@ const featureOptions = [
   { key: 'wishlist', title: 'ほしい物リスト' },
   { key: 'milk_collection', title: '牛乳パック回収' },
   { key: 'members', title: 'メンバー管理' },
+]
+const deadlineReminderOptions = [
+  { minutes: 10080, title: '7日前' },
+  { minutes: 4320, title: '3日前' },
+  { minutes: 1440, title: '24時間前' },
+  { minutes: 720, title: '12時間前' },
+  { minutes: 180, title: '3時間前' },
+  { minutes: 30, title: '30分前' },
+  { minutes: 15, title: '15分前' },
+  { minutes: 10, title: '10分前' },
+  { minutes: 5, title: '5分前' },
 ]
 const notificationOptions = [
   { key: 'news', title: 'お知らせ' },
@@ -151,6 +164,11 @@ const defaultSettings = (): SiteSettings => ({
     enabled: true,
     categories: Object.fromEntries(notificationOptions.map(({ key }) => [key, true])),
     return_due_all_users: true,
+    deadline_reminders: {
+      tasks: [4320, 1440, 180, 30],
+      submissions: [10080, 4320, 1440, 180, 30],
+    },
+    daily_schedule: { enabled: false, time: '08:00' },
   },
   operation_settings: {
     calendar_default_view: 'month',
@@ -225,12 +243,23 @@ async function loadSettings() {
         },
       ]),
     )
+    const defaultNotificationSettings = defaultSettings().notification_settings
     settings.notification_settings = {
-      ...defaultSettings().notification_settings,
+      ...defaultNotificationSettings,
       ...(response.settings.notification_settings ?? {}),
       categories: {
-        ...defaultSettings().notification_settings.categories,
+        ...defaultNotificationSettings.categories,
         ...(response.settings.notification_settings?.categories ?? {}),
+      },
+      deadline_reminders: {
+        tasks: response.settings.notification_settings?.deadline_reminders?.tasks ??
+          defaultNotificationSettings.deadline_reminders.tasks,
+        submissions: response.settings.notification_settings?.deadline_reminders?.submissions ??
+          defaultNotificationSettings.deadline_reminders.submissions,
+      },
+      daily_schedule: {
+        ...defaultNotificationSettings.daily_schedule,
+        ...(response.settings.notification_settings?.daily_schedule ?? {}),
       },
       return_due_all_users: true,
     }
@@ -618,6 +647,60 @@ onBeforeUnmount(() => {
           <v-alert type="info" variant="tonal" density="compact" class="mt-3">
             返却期限通知の送信対象は全員です。この設定から個人単位の対象へ変更することはできません。
           </v-alert>
+
+          <v-divider class="my-5" />
+          <div class="text-subtitle-1 font-weight-bold mb-1">締め切り通知タイミング</div>
+          <div class="text-body-2 text-medium-emphasis mb-3">
+            タスク・提出物ごとに複数のタイミングを選択できます。選択をすべて外すと、締め切り前通知は送信されません。
+          </div>
+          <v-row>
+            <v-col cols="12" md="6">
+              <div class="font-weight-medium mb-2">タスク</div>
+              <v-checkbox
+                v-for="item in deadlineReminderOptions"
+                :key="'task-' + item.minutes"
+                v-model="settings.notification_settings.deadline_reminders.tasks"
+                :value="item.minutes"
+                :label="item.title"
+                density="compact"
+                hide-details
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <div class="font-weight-medium mb-2">提出物</div>
+              <v-checkbox
+                v-for="item in deadlineReminderOptions"
+                :key="'submission-' + item.minutes"
+                v-model="settings.notification_settings.deadline_reminders.submissions"
+                :value="item.minutes"
+                :label="item.title"
+                density="compact"
+                hide-details
+              />
+            </v-col>
+          </v-row>
+
+          <v-divider class="my-5" />
+          <div class="text-subtitle-1 font-weight-bold mb-1">毎日の予定通知</div>
+          <div class="text-body-2 text-medium-emphasis mb-3">
+            カレンダー閲覧権限を持つユーザーに、その日の予定をまとめて通知します。予定がない日は通知しません。
+          </div>
+          <v-switch
+            v-model="settings.notification_settings.daily_schedule.enabled"
+            color="primary"
+            label="毎日の予定通知を有効にする"
+            hide-details
+          />
+          <v-text-field
+            v-model="settings.notification_settings.daily_schedule.time"
+            type="time"
+            label="通知時刻（日本時間）"
+            hint="初期設定は毎日 08:00 です。"
+            persistent-hint
+            :disabled="!settings.notification_settings.daily_schedule.enabled"
+            class="mt-3"
+            max-width="240"
+          />
         </v-card-text>
       </v-card>
 
