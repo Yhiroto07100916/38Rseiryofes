@@ -3,6 +3,12 @@ import { hasPermission, requireAuth } from "../lib/authz"
 import { getSiteSetting } from "../lib/site-settings"
 import { createNotificationsForUsers } from "../lib/notifications"
 import { notifyFileLinked } from "../lib/file-notifications"
+import {
+  DEFAULT_TASK_DEADLINE_REMINDERS,
+  getDeadlineReminderOption,
+  isDeadlineReminderDue,
+  normalizeDeadlineReminderOffsets,
+} from "../lib/deadline-reminders"
 
 export interface Task {
   id: string
@@ -342,32 +348,36 @@ export async function processDueTaskNotifications(env: Env): Promise<void> {
     "WHERE due_at IS NOT NULL AND status != 'done'",
   ).all<{ id: string; title: string; due_at: string; status: Task["status"]; scope: Task["scope"] }>()
 
+  const notificationSettings = await getSiteSetting<{ deadline_reminders?: { tasks?: unknown } }>(
+    env, "notification_settings", {},
+  )
+  const reminderOffsets = normalizeDeadlineReminderOffsets(
+    notificationSettings.deadline_reminders?.tasks,
+    DEFAULT_TASK_DEADLINE_REMINDERS,
+  )
   const now = Date.now()
   const localDay = new Date(now + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
   for (const task of result.results) {
     const dueAt = Date.parse(task.due_at)
     if (!Number.isFinite(dueAt)) continue
-    const hoursRemaining = (dueAt - now) / 3_600_000
     const recipients = await getTaskNotificationRecipientIds(env, task.id)
     if (recipients.length === 0) continue
 
     const reminders: Array<{ eventKey: string; title: string; dedupeKey: string }> = []
-    if (hoursRemaining <= 24 && hoursRemaining > 23) {
+    for (const offsetMinutes of reminderOffsets) {
+      if (!isDeadlineReminderDue(dueAt, now, offsetMinutes)) continue
+      const option = getDeadlineReminderOption(offsetMinutes)
+      if (!option) continue
+      const eventKey = "task.deadline_reminder_" + option.key
       reminders.push({
-        eventKey: "task.deadline_reminder_24h",
-        title: "タスクの期限まで24時間です",
-        dedupeKey: "task.deadline_reminder_24h:" + task.id + ":" + task.due_at,
+        eventKey,
+        title: \`タスクの期限まで\${option.label}です\`,
+        dedupeKey: eventKey + ":" + task.id + ":" + task.due_at,
       })
     }
-    if (hoursRemaining <= 1 && hoursRemaining > 0) {
-      reminders.push({
-        eventKey: "task.deadline_reminder_1h",
-        title: "タスクの期限まで1時間です",
-        dedupeKey: "task.deadline_reminder_1h:" + task.id + ":" + task.due_at,
-      })
-    }
-    if (hoursRemaining <= 0) {
+
+    if (dueAt <= now) {
       reminders.push({
         eventKey: "task.deadline_overdue_daily",
         title: "タスクの期限を過ぎています",

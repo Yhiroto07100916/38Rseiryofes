@@ -1,5 +1,6 @@
 import { hasPermission } from "../lib/authz"
 import { createNotificationsForUsers } from "../lib/notifications"
+import { getSiteSetting } from "../lib/site-settings"
 
 interface ReminderEvent {
   id: string
@@ -69,6 +70,10 @@ export async function processDueCalendarNotifications(env: Env): Promise<void> {
   const nowMinute = minuteKey(now)
   const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000)
   const windowEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000 + 5 * 60_000)
+  const notificationSettings = await getSiteSetting<{ daily_schedule?: { enabled?: boolean; time?: string } }>(
+    env, "notification_settings", {},
+  )
+  const dailyScheduleEnabled = notificationSettings.daily_schedule?.enabled === true
   const events = await env.DB.prepare(
     "SELECT id, title, starts_at, is_all_day, created_by FROM calendar_events " +
     "WHERE datetime(starts_at) >= datetime(?) AND datetime(starts_at) <= datetime(?) ORDER BY starts_at ASC",
@@ -112,7 +117,7 @@ export async function processDueCalendarNotifications(env: Env): Promise<void> {
         await notify(env, event, "calendar.all_day_reminder_previous_18",
           "明日の終日予定のお知らせ", recipients, "previous-18")
       }
-      if (isDueAtMinute(sameDay, nowMinute)) {
+      if (isDueAtMinute(sameDay, nowMinute) && !dailyScheduleEnabled) {
         await notify(env, event, "calendar.all_day_reminder_same_day_08",
           "本日の終日予定のお知らせ", recipients, "same-day-08")
       }
@@ -136,4 +141,82 @@ export async function processDueCalendarNotifications(env: Env): Promise<void> {
         "予定の出欠を回答してください（1時間前）", nonResponders, "attendance-1h")
     }
   }
+}
+
+
+export async function processDailyScheduleNotifications(env: Env): Promise<void> {
+  const notificationSettings = await getSiteSetting<{ daily_schedule?: { enabled?: boolean; time?: string } }>(
+    env, "notification_settings", {},
+  )
+  const dailySchedule = notificationSettings.daily_schedule
+  if (dailySchedule?.enabled !== true || !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(dailySchedule.time ?? "")) {
+    return
+  }
+
+  const now = new Date()
+  const clock = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Tokyo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(now)
+  const [scheduledHour, scheduledMinute] = dailySchedule.time.split(":").map(Number)
+  const [currentHour, currentMinute] = clock.split(":").map(Number)
+  const minutesSinceSchedule = currentHour! * 60 + currentMinute! - (scheduledHour! * 60 + scheduledMinute!)
+  // A short catch-up window tolerates Cron delays; the daily dedupe key prevents repeats.
+  if (minutesSinceSchedule < 0 || minutesSinceSchedule >= 5) return
+
+  const { year, month, day } = jstParts(now)
+  const dateKey = \`\${year}-\${String(month).padStart(2, "0")}-\${String(day).padStart(2, "0")}\`
+  const dayStart = new Date(Date.UTC(year, month - 1, day, -9))
+  const nextDayStart = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
+  const events = await env.DB.prepare(
+    "SELECT id, title, starts_at, ends_at, is_all_day FROM calendar_events " +
+    "WHERE datetime(starts_at) < datetime(?) " +
+    "AND ((ends_at IS NULL AND datetime(starts_at) >= datetime(?)) " +
+    "OR (ends_at IS NOT NULL AND datetime(ends_at) >= datetime(?))) " +
+    "ORDER BY starts_at ASC",
+  ).bind(nextDayStart.toISOString(), dayStart.toISOString(), dayStart.toISOString()).all<{
+    id: string
+    title: string
+    starts_at: string
+    ends_at: string | null
+    is_all_day: number
+  }>()
+
+  if (events.results.length === 0) return
+
+  const recipients = await usersWithPermission(env, "schedule.view")
+  if (recipients.length === 0) return
+
+  const timeFormatter = new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  })
+  const lines = events.results.slice(0, 10).map(event => {
+    if (event.is_all_day === 1) return \`・終日 \${event.title}\`
+    const startsAt = new Date(event.starts_at)
+    const timeLabel = startsAt.getTime() < dayStart.getTime()
+      ? "継続中"
+      : timeFormatter.format(startsAt)
+    return \`・\${timeLabel} \${event.title}\`
+  })
+  if (events.results.length > lines.length) {
+    lines.push(\`・ほか\${events.results.length - lines.length}件\`)
+  }
+
+  await createNotificationsForUsers(env, {
+    recipientUserIds: recipients,
+    eventKey: "calendar.daily_schedule_reminder",
+    category: "calendar",
+    title: \`今日の予定（\${dateKey}）\`,
+    body: lines.join("\n"),
+    targetUrl: \`/calendar?date=\${dateKey}\`,
+    requiredPermission: "schedule.view",
+    entityType: "calendar_daily_schedule",
+    entityId: dateKey,
+    dedupeKey: "calendar.daily_schedule_reminder:" + dateKey,
+  })
 }
