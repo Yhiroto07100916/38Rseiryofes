@@ -1,115 +1,49 @@
+
 <template>
   <div class="rabbit-layer" aria-hidden="true">
     <svg
-      ref="svgRef"
-      class="rabbit-svg"
-      viewBox="0 0 1000 2400"
-      preserveAspectRatio="none"
-    >
-      <!-- うさぎが走る赤い導線 -->
+  class="rabbit-svg background-line rellax"
+  data-rellax-speed="-10"
+  viewBox="0 0 1000 2400"
+  preserveAspectRatio="none"
+>
+      <!-- 背景の曲線：丸が追従する経路 -->
       <path
         ref="pathRef"
         class="rabbit-track"
         d="
-          M 80 60
-          C 500 60, 620 170, 620 380
-          C 620 600, 420 700, 80 700
-          C -80 700, -60 920, 160 1080
-          C 400 1260, 850 1140, 920 960
-          C 1000 780, 850 650, 900 520
-          C 980 300, 1120 350, 1120 550
-          C 1120 850, 850 900, 780 1120
-          C 680 1400, 850 1650, 1080 1700
-          C 1280 1750, 1220 2050, 950 2180
-          C 750 2280, 400 2300, 80 2350
+          M -100 100
+          C 400 100, 600 500, 1300 500
+          C 1000 800, 300 1100, -300 800
+          C -100 900, -100 1500, 1500 1300
+          <!-- C 600 1800, 1100 1600, 1100 1600
+          C 1100 1900, 600 2500, 1100 2300 -->
         "
       />
+    </svg>
 
-      <!-- 走るうさぎ -->
-      <g
-        ref="rabbitRef"
-        :transform="rabbitTransform"
-        class="rabbit-character"
-        :class="{ running: isRunning }"
-      >
-        <!-- 体 -->
-        <ellipse
+    <svg
+      class="rabbit-svg marker-line rellax"
+      data-rellax-speed="-10"
+      viewBox="0 0 1000 2400"
+      preserveAspectRatio="none"
+    >
+      <!-- 移動する丸 -->
+      <g :transform="rabbitTransform">
+        <circle
           cx="0"
           cy="0"
-          rx="19"
-          ry="12"
-          fill="#17364D"
+          r="17"
+          fill="var(--color-accent-light)"
         />
-
-        <!-- 頭 -->
         <circle
-          cx="16"
-          cy="-9"
-          r="9"
-          fill="#17364D"
+          cx="0"
+          cy="0"
+          r="10"
+          fill="var(--color-accent)"
+          stroke="#ffffff"
+          stroke-width="3"
         />
-
-        <!-- 耳 -->
-        <ellipse
-          cx="12"
-          cy="-23"
-          rx="3.5"
-          ry="12"
-          transform="rotate(-15 12 -23)"
-          fill="#17364D"
-        />
-        <ellipse
-          cx="20"
-          cy="-23"
-          rx="3.5"
-          ry="11"
-          transform="rotate(15 20 -23)"
-          fill="#17364D"
-        />
-
-        <!-- 耳の内側 -->
-        <ellipse
-          cx="12"
-          cy="-23"
-          rx="1.4"
-          ry="7"
-          transform="rotate(-15 12 -23)"
-          fill="#F2A0A4"
-        />
-
-        <!-- しっぽ -->
-        <circle
-          cx="-20"
-          cy="-5"
-          r="5"
-          fill="#17364D"
-        />
-
-        <!-- 目 -->
-        <circle
-          cx="19"
-          cy="-11"
-          r="1.4"
-          fill="white"
-        />
-
-        <!-- 足 -->
-        <g class="rabbit-legs">
-          <path
-            d="M -8 8 L -13 17 L -3 17"
-            fill="none"
-            stroke="#17364D"
-            stroke-width="4"
-            stroke-linecap="round"
-          />
-          <path
-            d="M 9 8 L 5 17 L 15 17"
-            fill="none"
-            stroke="#17364D"
-            stroke-width="4"
-            stroke-linecap="round"
-          />
-        </g>
       </g>
     </svg>
   </div>
@@ -118,16 +52,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 
-const svgRef = ref<SVGSVGElement | null>(null)
 const pathRef = ref<SVGPathElement | null>(null)
-const rabbitRef = ref<SVGGElement | null>(null)
 
-const rabbitTransform = ref('translate(80 60)')
-const isRunning = ref(false)
+const rabbitTransform = ref('translate(0 0)')
 
 let animationFrame = 0
-let stopTimer: ReturnType<typeof setTimeout> | undefined
-let lastScrollY = 0
 
 const updateRabbit = () => {
   if (!pathRef.value) return
@@ -135,7 +64,6 @@ const updateRabbit = () => {
   const path = pathRef.value
   const totalLength = path.getTotalLength()
 
-  // ページ全体のスクロール進行度
   const maxScroll =
     document.documentElement.scrollHeight - window.innerHeight
 
@@ -144,39 +72,16 @@ const updateRabbit = () => {
       ? Math.min(1, Math.max(0, window.scrollY / maxScroll))
       : 0
 
-  // 曲線上の現在位置
-  const distance = totalLength * progress
-
-  const point = path.getPointAtLength(distance)
-
-  // 接線から進行方向を計算
-  const nextPoint = path.getPointAtLength(
-    Math.min(distance + 1, totalLength)
+  const point = path.getPointAtLength(
+    totalLength * progress
   )
 
-  const angle =
-    Math.atan2(
-      nextPoint.y - point.y,
-      nextPoint.x - point.x
-    ) * (180 / Math.PI)
-
   rabbitTransform.value =
-    `translate(${point.x} ${point.y}) rotate(${angle})`
+    `translate(${point.x} ${point.y})`
 }
 
 const handleScroll = () => {
-  // スクロールが発生したら走る
-  isRunning.value = true
-
-  if (stopTimer) clearTimeout(stopTimer)
-
-  stopTimer = setTimeout(() => {
-    isRunning.value = false
-  }, 150)
-
-  // 1フレームにまとめて座標を更新
   cancelAnimationFrame(animationFrame)
-
   animationFrame = requestAnimationFrame(updateRabbit)
 }
 
@@ -200,8 +105,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
 
   cancelAnimationFrame(animationFrame)
-
-  if (stopTimer) clearTimeout(stopTimer)
 })
 </script>
 
@@ -217,55 +120,24 @@ onBeforeUnmount(() => {
 }
 
 .rabbit-svg {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   display: block;
   overflow: visible;
 }
 
-.rabbit-track {
+.background-line {
+  z-index: 0;
+}
+
+.background-line path {
   fill: none;
-  stroke: #ef4b55;
+  stroke: var(--color-primary);
   stroke-width: 4;
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.85;
+  opacity: 0.35;
 }
-
-.rabbit-character {
-  transform-box: view-box;
-  transform-origin: center;
-}
-
-.rabbit-legs {
-  transform-origin: center;
-}
-
-.rabbit-character.running .rabbit-legs {
-  animation: rabbit-run 0.2s infinite alternate;
-}
-
-@keyframes rabbit-run {
-  from {
-    transform: translateY(-2px);
-  }
-
-  to {
-    transform: translateY(3px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rabbit-character.running .rabbit-legs {
-    animation: none;
-  }
-}
-</style>
-
-<script setup lang="ts">
-// RabbitPathのscript
-</script>
-
-<style scoped>
-/* RabbitPathのstyle */
 </style>

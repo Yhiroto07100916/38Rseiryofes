@@ -1,1155 +1,784 @@
+
 <template>
+  <main class="home-page">
 
- 
-    <main class="home-intro">
-      <v-img
-        v-if="siteStatus?.logo_url"
-        :src="siteStatus.logo_url"
-        alt="サイトロゴ"
-        max-width="120"
-        max-height="80"
-        contain
-        class="mb-5"
-      />
-      <p class="home-event">
-        {{ siteStatus ? `${siteStatus.event_year}年度 ${siteStatus.event_name}` : "38R 星陵祭準備" }}
-      </p>
-      <h1>{{ siteStatus?.site_name || "38R 星陵祭準備サイト" }}</h1>
-      <p class="home-description">
-        {{ siteStatus?.site_description || "38Rの星陵祭準備を管理するサイトです。" }}
-      </p>
-    </main>
 
+
+    <!-- うさぎの導線・アニメーション -->
+    <RabbitPath />
+
+    <div class="content-layer">
+
+      <!-- ヘッダー -->
+      <header class="site-header">
+        <!-- <NuxtLink to="/" class="logo">
+          38R
+          <span>CLASS PROJECT</span>
+        </NuxtLink> -->
+      </header>
+
+      <!-- メインビジュアル -->
+      <section class="hero">
+        <p class="eyebrow">2027年度 星陵祭</p>
+
+        <h1>
+          38Rの<br>
+          <span>星陵祭準備サイト</span>
+        </h1>
+
+        <div class="hero-actions">
+          <NuxtLink to="/script" class="primary-button">
+            台本を見る <span>→</span>
+          </NuxtLink>
+
+          <NuxtLink to="/calendar" class="secondary-button">
+            予定を確認
+          </NuxtLink>
+        </div>
+      </section>
+
+      <!-- クイックアクセス -->
+      <section class="quick-section">
+        <div class="section-heading">
+          <p class="section-label">MENU</p>
+          <h2>何をする？</h2>
+        </div>
+
+        <div class="quick-grid">
+
+          <NuxtLink to="/script" class="quick-card">
+  <span class="card-icon">
+    <BookOpen :size="24" :stroke-width="1.8" />
+  </span>
+  <h3>台本</h3>
+  <p>最新の台本を確認する</p>
+  <span class="card-arrow">
+    <ArrowRight :size="18" />
+  </span>
+</NuxtLink>
+
+<NuxtLink to="/calendar" class="quick-card">
+  <span class="card-icon">
+    <CalendarDays :size="24" :stroke-width="1.8" />
+  </span>
+  <h3>カレンダー</h3>
+  <p>練習・イベントの予定</p>
+  <span class="card-arrow">
+    <ArrowRight :size="18" />
+  </span>
+</NuxtLink>
+
+<NuxtLink to="/vote" class="quick-card">
+  <span class="card-icon">
+    <Vote :size="24" :stroke-width="1.8" />
+  </span>
+  <h3>投票</h3>
+  <p>クラスの意見を集める</p>
+  <span class="card-arrow">
+    <ArrowRight :size="18" />
+  </span>
+</NuxtLink>
+
+<NuxtLink to="/tasks" class="quick-card">
+  <span class="card-icon">
+    <CheckSquare :size="24" :stroke-width="1.8" />
+  </span>
+  <h3>タスク</h3>
+  <p>自分のやることを確認</p>
+  <span class="card-arrow">
+    <ArrowRight :size="18" />
+  </span>
+</NuxtLink>
+        </div>
+      </section>
+
+      <!-- お知らせ -->
+      <section class="news-section">
+        <div class="section-heading">
+          <p class="section-label">INFORMATION</p>
+          <h2>お知らせ</h2>
+        </div>
+
+        <div class="news-list">
+
+          <article class="news-item">
+            <span class="news-label new">NEW</span>
+            <div class="news-content">
+              <h3></h3>
+              <p></p>
+            </div>
+            <span class="card-arrow">
+              <ArrowRight :size="18" />
+            </span>
+          </article>
+
+          <article class="news-item">
+            <span class="news-label info">INFO</span>
+            <div class="news-content">
+              <h3></h3>
+              <p></p>
+            </div>
+            <span class="card-arrow">
+              <ArrowRight :size="18" />
+            </span>
+          </article>
+
+          <article class="news-item">
+            <span class="news-label info">INFO</span>
+            <div class="news-content">
+              <h3></h3>
+              <p></p>
+            </div>
+            <span class="card-arrow">
+              <ArrowRight :size="18" />
+            </span>
+          </article>
+
+        </div>
+      </section>
+
+      <!-- 公演準備の進捗 -->
+      <section class="progress-section">
+        <div class="section-heading">
+          <p class="section-label">OUR PROJECT</p>
+          <h2>本番に向けて</h2>
+        </div>
+
+        <div class="progress-card">
+          <div class="progress-top">
+            <div>
+              <p>星陵祭まで</p>
+              <h3>あと ○○日</h3>
+            </div>
+            <span class="progress-icon">
+              <Rabbit :size="24" />
+            </span>
+          </div>
+
+          <div class="progress-info">
+            <span>準備の進捗</span>
+            <strong>??%</strong>
+          </div>
+
+          <div class="progress-bar">
+            <div class="progress-value"></div>
+          </div>
+
+          <p class="progress-message">
+          </p>
+        </div>
+      </section>
+
+    </div>
+  </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import RabbitPath from '~/components/RabbitPath.vue'
+import { Rabbit, ArrowRight, BookOpen, CalendarDays, CheckSquare, Vote } from 'lucide-vue-next'
 
-const siteStatus = useSiteStatus()
-
-definePageMeta({
-  middleware: 'auth',
-})
-
-/*
- * 星陵祭の日付
- * 実際の日程が確定したらここだけ変更すればOK
- */
-const festivalDate = new Date('2027-09-11T09:00:00+09:00')
-
-const now = ref(new Date())
-
-let timer: ReturnType<typeof setInterval> | null = null
+const { $initRellax, $destroyRellax } = useNuxtApp()
 
 onMounted(() => {
-  timer = setInterval(() => {
-    now.value = new Date()
-  }, 60 * 1000)
+  $initRellax()
 })
 
-onUnmounted(() => {
-  if (timer) {
-    clearInterval(timer)
-  }
+onBeforeUnmount(() => {
+  $destroyRellax()
 })
 
-const countdownDays = computed(() => {
-  const diff = festivalDate.getTime() - now.value.getTime()
-
-  if (diff <= 0) return 0
-
-  return Math.ceil(diff / (1000 * 60 * 60 * 24))
+useHead({
+  title: '38R 星陵祭準備サイト',
+  meta: [
+    {
+      name: 'description',
+      content: '38Rの星陵祭準備を管理するサイト'
+    },
+    {
+      name: 'theme-color',
+      content: '#ffffff'
+    }
+  ]
 })
-
-const todayText = computed(() => {
-  return new Intl.DateTimeFormat('ja-JP', {
-    timeZone: siteStatus.value?.timezone || 'Asia/Tokyo',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'short',
-  }).format(now.value)
-})
-
-const todaySchedule = [
-  {
-    time: '16:00',
-    title: 'クラスミーティング',
-    place: '38R',
-  },
-  {
-    time: '17:00',
-    title: '劇準備',
-    place: '放課後',
-  },
-  {
-    time: '18:00',
-    title: '委員会活動',
-    place: '各担当場所',
-  },
-]
-
-const todayMessage = '準備は、できるところから。'
-
-const phases = [
-  {
-    icon: '🌱',
-    title: '準備開始',
-  },
-  {
-    icon: '🌿',
-    title: '企画決定',
-  },
-  {
-    icon: '🌳',
-    title: '練習開始',
-  },
-  {
-    icon: '🔥',
-    title: '本番直前',
-  },
-  {
-    icon: '⭐',
-    title: '星陵祭',
-  },
-]
-
-const currentPhase = 0
-
-const progressPercent = computed(() => {
-  return ((currentPhase + 1) / phases.length) * 100
-})
-
-const news = [
-  {
-    date: '09.30',
-    tag: 'INFO',
-    title: '38R星陵祭準備サイトがスタートしました',
-  },
-  {
-    date: '09.29',
-    tag: 'PLAY',
-    title: 'クラス劇の準備が始まりました',
-  },
-  {
-    date: '09.25',
-    tag: '38R',
-    title: '今年の星陵祭に向けて動き始めています',
-  },
-]
-
-const activities = [
-  {
-    icon: '🎭',
-    title: 'クラス劇',
-    description: '劇づくりに向けて準備中',
-  },
-  {
-    icon: '📅',
-    title: 'スケジュール',
-    description: 'これから予定を追加していきます',
-  },
-  {
-    icon: '💬',
-    title: '38Rの活動',
-    description: 'みんなの活動を記録していきます',
-  },
-]
-
-const menuItems = [
-  {
-    icon: '🎭',
-    title: '台本',
-    description: 'クラス劇の台本を見る',
-    to: '/scripts',
-  },
-  {
-    icon: '📅',
-    title: 'カレンダー',
-    description: '38Rの予定を見る',
-    to: '/calendar',
-  },
-  {
-    icon: '✓',
-    title: 'タスク',
-    description: 'やることを確認する',
-    to: '/tasks',
-  },
-  {
-    icon: '📦',
-    title: '備品',
-    description: '必要なものを確認する',
-    to: '/supplies',
-  },
-  {
-    icon: '👤',
-    title: 'マイページ',
-    description: '自分の活動を見る',
-    to: '/mypage',
-  },
-]
 </script>
 
 <style scoped>
-.home-intro {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 72px 24px;
-}
 
-.home-event {
-  margin: 0 0 12px;
-  color: #245b7a;
-  font-size: 0.85rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
+/* ========================================
+   1. 全体設定
+======================================== */
 
-.home-intro h1 {
-  margin: 0;
-  color: #102b43;
-  font-size: clamp(2rem, 6vw, 3.5rem);
-  font-weight: 900;
-  line-height: 1.15;
-}
-
-.home-description {
-  margin-top: 18px;
-  color: #71808a;
-  font-size: 1rem;
-  line-height: 1.8;
-}
-.seiryo-home {
-  --navy: #102b43;
-  --blue: #245b7a;
-  --sky: #dfeef4;
-  --cream: #f6f4ee;
-  --paper: #fbfaf7;
-  --text: #17232d;
-  --muted: #71808a;
-  --line: #dce2e5;
-
-  min-height: 100%;
-  background: var(--paper);
-  color: var(--text);
+.home-page {
+  position: relative;
+  isolation: isolate;
   overflow: hidden;
+  background: #ffffff;
+  min-height: 2400px;
 }
 
-/* =========================
-   HERO
-========================= */
-
-.hero {
-  position: relative;
-  min-height: 610px;
-  padding: 44px clamp(24px, 6vw, 90px) 70px;
-  background:
-    radial-gradient(circle at 78% 25%, rgba(255, 255, 255, 0.8), transparent 24%),
-    linear-gradient(135deg, #e8f2f5 0%, #f5f4ee 58%, #e8edf0 100%);
-  display: flex;
-  flex-direction: column;
-}
-
-.hero::after {
-  content: '38R';
-  position: absolute;
-  right: -4vw;
-  bottom: -6vw;
-  font-size: clamp(180px, 28vw, 440px);
-  font-weight: 900;
-  line-height: 0.8;
-  letter-spacing: -0.08em;
-  color: rgba(16, 43, 67, 0.045);
-  pointer-events: none;
-}
-
-.hero-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  position: relative;
-  z-index: 1;
-}
-
-.eyebrow {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  color: var(--navy);
-}
-
-.hero-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-  color: var(--muted);
-}
-
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #5c9b73;
-}
-
-.hero-main {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 60px;
-  width: min(1180px, 100%);
-  margin: auto auto 40px;
-}
-
-.hero-kicker {
-  margin: 0 0 20px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  color: var(--blue);
-}
-
-.hero h1 {
-  margin: 0;
-  font-size: clamp(48px, 7vw, 96px);
-  line-height: 1.02;
-  letter-spacing: -0.07em;
-  font-weight: 900;
-  color: var(--navy);
-}
-
-.hero h1 span {
-  color: var(--blue);
-}
-
-.hero-description {
-  margin: 28px 0 0;
-  font-size: 15px;
-  color: var(--muted);
-  letter-spacing: 0.04em;
-}
-
-.countdown {
-  min-width: 245px;
-  padding: 28px 30px;
-  border-left: 1px solid rgba(16, 43, 67, 0.18);
-}
-
-.countdown-label {
-  margin: 0 0 8px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-  color: var(--muted);
-}
-
-.countdown-number {
-  font-size: clamp(58px, 8vw, 88px);
-  line-height: 0.9;
-  font-weight: 900;
-  letter-spacing: -0.07em;
-  color: var(--navy);
-}
-
-.countdown-number span {
-  margin-left: 7px;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-}
-
-.countdown-date {
-  margin: 14px 0 0;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: var(--muted);
-}
-
-.hero-scroll {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: min(1180px, 100%);
-  margin: 0 auto;
-}
-
-.hero-scroll span {
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  color: var(--muted);
-}
-
-.scroll-line {
-  width: 45px;
-  height: 1px;
-  background: var(--muted);
-}
-
-/* =========================
-   COMMON
-========================= */
-
-.section {
-  width: min(1180px, calc(100% - 48px));
-  margin: 0 auto;
-  padding: 100px 0;
-}
-
-.section-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 34px;
-}
-
-.section-label {
-  display: block;
-  margin-bottom: 9px;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.2em;
-  color: var(--blue);
-}
-
-.section-heading h2 {
-  margin: 0;
-  font-size: clamp(28px, 4vw, 42px);
-  line-height: 1;
-  letter-spacing: -0.06em;
-  color: var(--navy);
-}
-
-.section-date {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--muted);
-}
-
-.text-link {
-  color: var(--navy);
-  font-size: 12px;
-  font-weight: 800;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.text-link:hover {
-  color: var(--blue);
-}
-
-/* =========================
-   TODAY
-========================= */
-
-.today-section {
-  padding-top: 90px;
-}
-
-.today-grid {
-  display: grid;
-  grid-template-columns: 1.5fr 1fr;
-  gap: 18px;
-}
-
-.today-card {
-  min-height: 300px;
-  border-radius: 4px;
-}
-
-.schedule-card {
-  padding: 30px;
-  background: white;
-  border: 1px solid var(--line);
-}
-
-.card-top {
-  display: flex;
-  justify-content: space-between;
-}
-
-.card-label {
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.18em;
-  color: var(--muted);
-}
-
-.card-icon {
-  color: var(--muted);
-}
-
-.schedule-list {
-  margin-top: 40px;
-}
-
-.schedule-item {
-  display: flex;
-  gap: 25px;
-  padding: 19px 0;
-  border-top: 1px solid var(--line);
-}
-
-.schedule-time {
-  width: 48px;
-  flex-shrink: 0;
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--blue);
-}
-
-.schedule-content {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.schedule-content strong {
-  font-size: 15px;
-}
-
-.schedule-content span {
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.message-card {
-  position: relative;
-  overflow: hidden;
-  padding: 30px;
-  background: var(--navy);
-  color: white;
-}
-
-.message-card .card-label {
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.message-mark {
-  position: absolute;
-  right: 20px;
-  top: 25px;
-  font-family: Georgia, serif;
-  font-size: 110px;
-  line-height: 1;
-  color: rgba(255, 255, 255, 0.08);
-}
-
-.message-card p {
-  position: relative;
-  margin: 85px 0 24px;
-  max-width: 280px;
-  font-size: clamp(25px, 3vw, 34px);
-  font-weight: 800;
-  line-height: 1.35;
-  letter-spacing: -0.05em;
-}
-
-.message-note {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-/* =========================
-   PLAY
-========================= */
-
-.play-section {
-  padding-top: 70px;
-}
-
-.play-card {
-  display: grid;
-  grid-template-columns: 0.85fr 1.15fr;
-  min-height: 450px;
-  background: #eeeae1;
-  color: var(--text);
-  text-decoration: none;
-  overflow: hidden;
-}
-
-.play-poster {
-  position: relative;
-  min-height: 450px;
-  overflow: hidden;
-  background: #203b4c;
-}
-
-.poster-background {
+/* 背景レイヤー */
+.parallax-background {
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(145deg, transparent 35%, rgba(255, 255, 255, 0.08) 35%),
-    linear-gradient(40deg, transparent 55%, rgba(255, 255, 255, 0.05) 55%),
-    #203b4c;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
 }
 
-.poster-content {
+.background-curve {
   position: absolute;
-  inset: 50px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  color: white;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
 }
 
-.poster-small {
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.2em;
-  opacity: 0.65;
-}
-
-.poster-content h3 {
-  margin: auto 0;
-  font-size: clamp(48px, 7vw, 84px);
-  line-height: 0.84;
-  letter-spacing: -0.07em;
-}
-
-.poster-year {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-  opacity: 0.65;
-}
-
-.poster-corner {
-  position: absolute;
-  right: 22px;
-  top: 22px;
-  font-size: 12px;
-  font-weight: 900;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.play-info {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: clamp(35px, 6vw, 80px);
-}
-
-.play-status {
-  margin-bottom: 22px;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.18em;
-  color: var(--blue);
-}
-
-.play-info h3 {
-  margin: 0;
-  font-size: clamp(34px, 5vw, 62px);
-  line-height: 1;
-  letter-spacing: -0.07em;
-  color: var(--navy);
-}
-
-.play-info p {
-  margin: 25px 0 0;
-  max-width: 380px;
-  font-size: 13px;
-  line-height: 1.9;
-  color: var(--muted);
-}
-
-.play-arrow {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 55px;
-  padding-top: 17px;
-  border-top: 1px solid rgba(16, 43, 67, 0.18);
-  font-size: 11px;
-  font-weight: 800;
-}
-
-/* =========================
-   NOW
-========================= */
-
-.now-section {
-  padding-bottom: 80px;
-}
-
-.progress-card {
-  padding: 35px;
-  background: white;
-  border: 1px solid var(--line);
-}
-
-.progress-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  margin-bottom: 45px;
-}
-
-.progress-small {
-  display: block;
-  margin-bottom: 7px;
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.18em;
-  color: var(--muted);
-}
-
-.progress-header strong {
-  font-size: 28px;
-  letter-spacing: -0.05em;
-}
-
-.progress-percent {
-  font-size: 12px;
-  font-weight: 900;
-  color: var(--blue);
-}
-
-.timeline {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 0;
-}
-
-.timeline-item {
-  position: relative;
-}
-
-.timeline-point {
-  position: relative;
-  width: 13px;
-  height: 13px;
-  margin-bottom: 17px;
-  border: 2px solid #cbd4d9;
-  border-radius: 50%;
-  background: white;
-  z-index: 1;
-}
-
-.timeline-item:not(:last-child)::after {
+/* ドット背景 */
+.home-page::before {
   content: '';
   position: absolute;
-  top: 5px;
-  left: 13px;
-  width: calc(100% - 13px);
-  height: 2px;
-  background: #dce2e5;
-}
-
-.timeline-item.active .timeline-point {
-  border-color: var(--blue);
-  background: var(--blue);
-}
-
-.timeline-item.active:not(:last-child)::after {
-  background: var(--blue);
-}
-
-.timeline-text {
-  display: flex;
-  gap: 7px;
-  align-items: center;
-}
-
-.timeline-text span {
-  font-size: 14px;
-}
-
-.timeline-text strong {
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.timeline-item.active .timeline-text strong {
-  color: var(--navy);
-}
-
-.progress-bar {
-  height: 3px;
-  margin-top: 38px;
-  background: #e6eaec;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--blue);
-  transition: width 0.4s ease;
-}
-
-/* =========================
-   NEWS
-========================= */
-
-.news-section {
-  padding-top: 60px;
-}
-
-.news-list {
-  border-top: 1px solid var(--line);
-}
-
-.news-item {
-  display: grid;
-  grid-template-columns: 90px 1fr 25px;
-  align-items: center;
-  gap: 20px;
-  padding: 22px 4px;
-  border-bottom: 1px solid var(--line);
-  color: var(--text);
-  text-decoration: none;
-  transition: padding 0.2s ease;
-}
-
-.news-item:hover {
-  padding-left: 12px;
-  padding-right: 12px;
-}
-
-.news-date {
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--muted);
-}
-
-.news-main {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-}
-
-.news-main strong {
-  font-size: 14px;
-}
-
-.news-tag {
-  padding: 4px 7px;
-  background: #e8f0f3;
-  color: var(--blue);
-  font-size: 8px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-}
-
-.news-arrow {
-  color: var(--muted);
-}
-
-/* =========================
-   ACTIVITY
-========================= */
-
-.activity-section {
-  padding-top: 60px;
-}
-
-.activity-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-}
-
-.activity-card {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  min-height: 120px;
-  padding: 24px;
-  background: #eef2f3;
-}
-
-.activity-icon {
-  font-size: 25px;
-}
-
-.activity-card div {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.activity-card strong {
-  font-size: 14px;
-}
-
-.activity-card span:last-child {
-  font-size: 10px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-/* =========================
-   MENU
-========================= */
-
-.menu-section {
-  padding-top: 60px;
-}
-
-.menu-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  border-top: 1px solid var(--line);
-  border-left: 1px solid var(--line);
-}
-
-.menu-item {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  min-height: 190px;
-  padding: 23px;
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  color: var(--text);
-  text-decoration: none;
-  transition:
-    background 0.2s ease,
-    transform 0.2s ease;
-}
-
-.menu-item:hover {
-  background: white;
-  transform: translateY(-3px);
-}
-
-.menu-icon {
-  font-size: 22px;
-  margin-bottom: auto;
-}
-
-.menu-item div {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.menu-item strong {
-  font-size: 14px;
-}
-
-.menu-item div span {
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.menu-arrow {
-  position: absolute;
-  right: 18px;
-  top: 18px;
-  font-size: 14px;
-  color: var(--muted);
-}
-
-/* =========================
-   FOOTER
-========================= */
-
-.home-footer {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 30px;
-  padding: 70px clamp(24px, 6vw, 90px) 100px;
-  background: var(--navy);
-  color: white;
-}
-
-.footer-logo {
-  display: flex;
-  flex-direction: column;
-}
-
-.footer-logo span {
-  font-size: 58px;
-  line-height: 0.9;
-  font-weight: 900;
-  letter-spacing: -0.08em;
-}
-
-.footer-logo small {
-  margin-top: 10px;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.2em;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: radial-gradient(
+    circle,
+    #dce3e8 2px,
+    transparent 2.5px
+  );
+  background-size: 44px 44px;
   opacity: 0.5;
 }
 
-.home-footer p {
-  margin: 0;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.55);
+/* ========================================
+   2. Rellax 背景装飾
+======================================== */
+
+.background-circle {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(4px);
+  opacity: 0.25;
 }
 
-/* =========================
-   MOBILE
-========================= */
+.circle-one {
+  width: 280px;
+  height: 280px;
+  background: #29c64b;
+  top: 300px;
+  left: -100px;
+}
 
-@media (max-width: 800px) {
-  .hero {
-    min-height: 650px;
-    padding: 28px 22px 45px;
+.circle-two {
+  width: 350px;
+  height: 350px;
+  background: #06a0d8;
+  top: 1000px;
+  right: -130px;
+}
+
+.circle-three {
+  width: 220px;
+  height: 220px;
+  background: #ff0033;
+  top: 1750px;
+  left: -100px;
+}
+
+/* ========================================
+   3. コンテンツ共通
+======================================== */
+
+.content-layer {
+  position: relative;
+  z-index: 2;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 40px;
+}
+
+/* ========================================
+   4. ヘッダー
+======================================== */
+
+
+.pc-nav {
+  display: flex;
+  gap: 36px;
+}
+
+.pc-nav a {
+  color: #17364d;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.pc-nav a:hover {
+  color: #ef4b55;
+}
+
+.menu-button {
+  display: none;
+}
+
+/* ========================================
+   5. メインビジュアル
+======================================== */
+
+.hero {
+  min-height: 520px;
+  padding: 100px 0 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.eyebrow {
+  color: #52758a;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+.hero h1 {
+  margin: 15px 0;
+  font-size: clamp(38px, 6vw, 68px);
+  line-height: 1.35;
+  letter-spacing: -2px;
+  font-weight: 900;
+}
+
+.hero h1 span {
+  color: var(--color-primary);
+}
+
+.hero-description {
+  color: #71818b;
+  font-size: 17px;
+  line-height: 2;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 14px;
+  margin-top: 30px;
+}
+
+.primary-button,
+.secondary-button {
+  padding: 15px 24px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: 0.2s;
+}
+
+.primary-button {
+  color: white;
+  background: #17364d;
+}
+
+.primary-button:hover {
+  background: #284e69;
+}
+
+.primary-button span {
+  margin-left: 15px;
+}
+
+.secondary-button {
+  color: #17364d;
+  background: white;
+  border: 1px solid #cbd5dc;
+}
+
+.secondary-button:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+/* ========================================
+   6. セクション見出し
+======================================== */
+
+.section-heading {
+  margin-bottom: 25px;
+}
+
+.section-label {
+  margin-bottom: 5px;
+  color: #ef4b55;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.section-heading h2 {
+  font-size: 23px;
+  font-weight: 800;
+}
+
+/* ========================================
+   7. クイックアクセス
+======================================== */
+
+.quick-section {
+  padding: 50px 0;
+}
+
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.quick-card {
+  display: block;
+  position: relative;
+  padding: 30px;
+  color: #17364d;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #e2e8ed;
+  border-radius: 16px;
+  text-decoration: none;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.quick-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 30px rgba(23, 54, 77, 0.07);
+}
+
+.card-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary);
+  background: rgba(23, 54, 77, 0.05);
+  border-radius: 14px;
+}
+
+.quick-card h3 {
+  margin: 14px 0 8px;
+  font-size: 18px;
+}
+
+.quick-card p {
+  color: #71818b;
+  font-size: 13px;
+}
+
+.card-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #17364d;
+}
+
+/* ========================================
+   8. お知らせ
+======================================== */
+
+.news-section {
+  padding: 70px 0;
+}
+
+.news-list {
+  padding: 10px 25px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #e2e8ed;
+  border-radius: 16px;
+}
+
+.news-item {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 22px 5px;
+  border-bottom: 1px solid #e5eaee;
+}
+
+.news-item:last-child {
+  border-bottom: none;
+}
+
+.news-label {
+  padding: 6px 10px;
+  color: var(--color-primary);
+  background: rgba(203, 3, 150, 0.05);
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.news-label.info {
+  color: #52758a;
+  background: #eaf0f4;
+}
+
+.news-content {
+  flex: 1;
+}
+
+.news-item h3 {
+  font-size: 14px;
+}
+
+.news-item p {
+  margin-top: 6px;
+  color: #9aa7af;
+  font-size: 11px;
+}
+
+/* ========================================
+   9. 進捗
+======================================== */
+
+.progress-section {
+  padding: 50px 0;
+}
+
+.progress-card {
+  padding: 30px;
+  background: #fcebec;
+  border-radius: 18px;
+}
+
+.progress-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.progress-top p {
+  color: #71818b;
+  font-size: 13px;
+}
+
+.progress-top h3 {
+  margin-top: 5px;
+  font-size: 28px;
+}
+
+.progress-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary);
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 30px;
+  font-size: 13px;
+}
+
+.progress-bar {
+  height: 9px;
+  margin-top: 10px;
+  overflow: hidden;
+  background: white;
+  border-radius: 20px;
+}
+
+.progress-value {
+  width: 65%;
+  height: 100%;
+  background: #ef4b55;
+  border-radius: 20px;
+}
+
+.progress-message {
+  margin-top: 15px;
+  color: #71818b;
+  font-size: 12px;
+}
+
+/* ========================================
+   10. フッター
+======================================== */
+
+.site-footer {
+  padding: 80px 0 40px;
+  color: #9aa7af;
+  font-size: 12px;
+  text-align: center;
+}
+
+.site-footer h2 {
+  margin-bottom: 5px;
+  color: #17364d;
+  font-size: 28px;
+}
+
+/* ========================================
+   11. スマホ用ナビ
+======================================== */
+
+.bottom-nav {
+  display: none;
+}
+
+/* ========================================
+   12. スマホ対応
+======================================== */
+
+@media (max-width: 640px) {
+  .home-page {
+    padding-bottom: 100px;
   }
 
-  .hero-main {
+  .content-layer {
+    padding: 0 24px;
+  }
+
+  .site-header {
+    height: 75px;
+  }
+
+  .logo {
+    font-size: 22px;
+  }
+
+  .pc-nav {
+    display: none;
+  }
+
+  .menu-button {
+    display: flex;
     flex-direction: column;
-    align-items: flex-start;
-    gap: 45px;
+    gap: 5px;
+    padding: 10px;
+    border: none;
+    background: transparent;
+  }
+
+  .menu-button span {
+    width: 25px;
+    height: 3px;
+    display: block;
+    background: #17364d;
+    border-radius: 3px;
+  }
+
+  .hero {
+    min-height: 470px;
+    padding: 65px 0;
   }
 
   .hero h1 {
-    font-size: clamp(45px, 14vw, 70px);
+    font-size: 38px;
   }
 
   .hero-description {
-    font-size: 13px;
+    font-size: 14px;
   }
 
-  .countdown {
-    width: 100%;
-    min-width: 0;
-    padding: 22px 0 0;
-    border-left: 0;
-    border-top: 1px solid rgba(16, 43, 67, 0.18);
+  .hero-actions {
+    flex-wrap: wrap;
   }
 
-  .countdown-number {
-    font-size: 65px;
+  .quick-section {
+    padding: 35px 0;
   }
 
-  .section {
-    width: calc(100% - 36px);
-    padding: 70px 0;
-  }
-
-  .section-heading {
-    align-items: flex-start;
-    flex-direction: column;
-    margin-bottom: 25px;
-  }
-
-  .section-heading h2 {
-    font-size: 31px;
-  }
-
-  .today-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .today-card {
-    min-height: auto;
-  }
-
-  .message-card {
-    min-height: 260px;
-  }
-
-  .play-card {
-    grid-template-columns: 1fr;
-  }
-
-  .play-poster {
-    min-height: 390px;
-  }
-
-  .play-info {
-    min-height: 350px;
-    padding: 35px 28px;
-  }
-
-  .progress-card {
-    padding: 25px 20px;
-    overflow-x: auto;
-  }
-
-  .timeline {
-    min-width: 620px;
-  }
-
-  .progress-bar {
-    min-width: 620px;
-  }
-
-  .news-item {
-    grid-template-columns: 55px 1fr 15px;
-    gap: 10px;
-  }
-
-  .news-main {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 5px;
-  }
-
-  .news-main strong {
-    font-size: 13px;
-    line-height: 1.5;
-  }
-
-  .activity-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .activity-card {
-    min-height: 95px;
-  }
-
-  .menu-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .menu-item {
-    min-height: 160px;
-    padding: 18px;
-  }
-
-  .home-footer {
-    align-items: flex-start;
-    flex-direction: column;
-    padding: 60px 24px 90px;
-  }
-}
-
-@media (max-width: 430px) {
-  .hero-top {
-    align-items: flex-start;
-    flex-direction: column;
+  .quick-grid {
     gap: 12px;
   }
 
-  .hero {
-    min-height: 610px;
+  .quick-card {
+    padding: 20px 16px;
   }
 
-  .hero h1 {
-    font-size: 46px;
+  .quick-card h3 {
+    font-size: 15px;
   }
 
-  .schedule-item {
-    gap: 15px;
+  .quick-card p {
+    font-size: 11px;
   }
 
-  .schedule-time {
-    width: 42px;
+  .news-section {
+    padding: 45px 0;
   }
 
-  .menu-grid {
-    grid-template-columns: 1fr 1fr;
+  .news-list {
+    padding: 5px 12px;
   }
 
-  .menu-item {
-    min-height: 145px;
+  .news-item {
+    gap: 10px;
   }
 
-  .menu-icon {
-    font-size: 19px;
+  .news-item h3 {
+    font-size: 12px;
+  }
+
+  .progress-card {
+    padding: 22px;
+  }
+
+  .bottom-nav {
+    position: fixed;
+    z-index: 20;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: rgba(255, 255, 255, 0.97);
+    border-top: 1px solid #e5eaee;
+  }
+
+  .bottom-nav a {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: #71818b;
+    text-decoration: none;
+  }
+
+  .bottom-nav a span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .bottom-nav a small {
+    font-size: 10px;
+  }
+
+  .bottom-nav a.active {
+    color: #17364d;
+    background: #eaf0f4;
   }
 }
+
+/* ========================================
+   13. アクセシビリティ
+======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
 </style>

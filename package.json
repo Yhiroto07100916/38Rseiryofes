@@ -14,5 +14,15 @@
     "db:migrate:local": "npm --prefix worker run db:migrate:local",
     "dev": "concurrently -k -n APP,API -c blue,green \"npm run dev:app\" \"npm run dev:worker\"",
     "dev:setup": "npm run setup:deps && npm run db:migrate:local && npm run dev"
+  },
+  "dependencies": {
+    "@tiptap/extension-placeholder": "^3.35.0",
+    "@tiptap/extension-task-item": "^3.35.0",
+    "@tiptap/extension-task-list": "^3.35.0",
+    "@tiptap/starter-kit": "^3.35.0",
+    "@tiptap/vue-3": "^3.35.0",
+    "lenis": "^1.3.28",
+    "lucide-vue-next": "^1.0.0",
+    "rellax": "^1.12.1"
   }
 }

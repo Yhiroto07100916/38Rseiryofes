@@ -23,18 +23,33 @@ export interface SiteStatus {
   is_important_settings_admin: boolean
 }
 
+export interface RefreshSiteStatusOptions {
+  apiBaseUrl?: string
+  state?: ReturnType<typeof useSiteStatus>
+  headers?: Record<string, string>
+}
+
 export function useSiteStatus() {
   return useState<SiteStatus | null>("site-status", () => null)
 }
 
-export async function refreshSiteStatus() {
-  const config = useRuntimeConfig()
-  const apiBaseUrl = String(config.public.apiBaseUrl).replace(/\/$/, "")
-  const status = await $fetch<SiteStatus>(`${apiBaseUrl}/api/site-status`, {
-    credentials: "include",
-    headers: import.meta.server ? useRequestHeaders(["cookie"]) : undefined,
-  })
+export async function refreshSiteStatus(options: RefreshSiteStatusOptions = {}) {
+  const nuxtApp = useNuxtApp()
 
-  useSiteStatus().value = status
-  return status
+  return await nuxtApp.runWithContext(async () => {
+    const resolvedApiBaseUrl =
+      options.apiBaseUrl ?? String(useRuntimeConfig().public.apiBaseUrl)
+    const apiBaseUrl = resolvedApiBaseUrl.replace(/\/$/, "")
+    const headers =
+      options.headers ?? (import.meta.server ? useRequestHeaders(["cookie"]) : undefined)
+
+    const status = await $fetch<SiteStatus>(`${apiBaseUrl}/api/site-status`, {
+      credentials: "include",
+      headers,
+    })
+
+    const state = options.state ?? useSiteStatus()
+    state.value = status
+    return status
+  })
 }
