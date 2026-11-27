@@ -148,6 +148,7 @@ export const useNotifications = () => {
     category: string
     target_url: string | null
     is_read: number
+    is_personal?: number
     created_at: string
   }): AppNotification => ({
     id: item.id,
