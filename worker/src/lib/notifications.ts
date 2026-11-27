@@ -40,10 +40,16 @@ export async function createNotificationsForUsers(
 
   // 閲覧権限を持つユーザーには活動記録も残す。権限が取得できない場合でも
   // 個人宛て通知の作成は継続し、Push対象を誤って広げない。
-  const permissionKeys = input.activityPermission
-    ? [input.activityPermission]
-    : (ACTIVITY_PERMISSIONS_BY_CATEGORY[input.category] ?? [])
-  const activityRecipientIds = new Set<string>((input.activityRecipientUserIds ?? []).filter(Boolean))
+  // 期限リマインダー等のシステム通知は、行動履歴ではないため対象者だけに残す。
+  const isActivityEvent = !/(?:reminder|deadline|due_soon|timer_end|overdue)/i.test(input.eventKey)
+  const permissionKeys = !isActivityEvent
+    ? []
+    : input.activityPermission
+      ? [input.activityPermission]
+      : (ACTIVITY_PERMISSIONS_BY_CATEGORY[input.category] ?? [])
+  const activityRecipientIds = new Set<string>(
+    isActivityEvent ? (input.activityRecipientUserIds ?? []).filter(Boolean) : [],
+  )
 
   for (const permission of permissionKeys) {
     try {
