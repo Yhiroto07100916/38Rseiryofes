@@ -622,6 +622,7 @@ describe("Files access permissions", () => {
     fixture.objectKeys.push(uploaded.object_key);
 
     await grantPermissions(fixture.userId, ["tasks.view"]);
+    await grantPermissions(fixture.userId, ["tasks.view"]);
     await grantPermissions(fixture.recipientUserId, ["tasks.view"]);
     await env.DB.prepare(
       "INSERT INTO task_files (task_id, file_id) VALUES (?, ?)",
