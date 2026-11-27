@@ -521,13 +521,17 @@ export async function handleNews(
       return Response.json({ read_count: 0, unread_count: 0, total_count: 0 })
     }
 
-    const placeholders = eligibleUserIds.map(() => "?").join(", ")
-    const readResult = await env.DB.prepare(
-      "SELECT COUNT(DISTINCT user_id) AS count FROM news_read_receipts " +
-      "WHERE news_id = ? AND user_id IN (" + placeholders + ")",
-    ).bind(newsId, ...eligibleUserIds).first<{ count: number }>()
+    let readCount = 0
+    for (let offset = 0; offset < eligibleUserIds.length; offset += 90) {
+      const batchUserIds = eligibleUserIds.slice(offset, offset + 90)
+      const placeholders = batchUserIds.map(() => "?").join(", ")
+      const readResult = await env.DB.prepare(
+        "SELECT COUNT(DISTINCT user_id) AS count FROM news_read_receipts " +
+        "WHERE news_id = ? AND user_id IN (" + placeholders + ")",
+      ).bind(newsId, ...batchUserIds).first<{ count: number }>()
+      readCount += readResult?.count ?? 0
+    }
 
-    const readCount = readResult?.count ?? 0
     const totalCount = eligibleUserIds.length
 
     return Response.json({
@@ -563,23 +567,39 @@ export async function handleNews(
       return Response.json({ users: [] })
     }
 
-    const placeholders = eligibleUserIds.map(() => "?").join(", ")
-    const result = await env.DB.prepare(
-      "SELECT u.id, u.student_number, u.name, u.nickname " +
-      "FROM users u " +
-      "WHERE u.id IN (" + placeholders + ") " +
-      "AND NOT EXISTS (" +
-      "SELECT 1 FROM news_read_receipts r " +
-      "WHERE r.news_id = ? AND r.user_id = u.id" +
-      ") ORDER BY u.student_number ASC, u.name ASC",
-    ).bind(...eligibleUserIds, newsId).all<{
+    const unreadUsers: Array<{
       id: string
       student_number: string
       name: string
       nickname: string | null
-    }>()
+    }> = []
 
-    return Response.json({ users: result.results })
+    for (let offset = 0; offset < eligibleUserIds.length; offset += 90) {
+      const batchUserIds = eligibleUserIds.slice(offset, offset + 90)
+      const placeholders = batchUserIds.map(() => "?").join(", ")
+      const result = await env.DB.prepare(
+        "SELECT u.id, u.student_number, u.name, u.nickname " +
+        "FROM users u " +
+        "WHERE u.id IN (" + placeholders + ") " +
+        "AND NOT EXISTS (" +
+        "SELECT 1 FROM news_read_receipts r " +
+        "WHERE r.news_id = ? AND r.user_id = u.id" +
+        ") ORDER BY u.student_number ASC, u.name ASC",
+      ).bind(...batchUserIds, newsId).all<{
+        id: string
+        student_number: string
+        name: string
+        nickname: string | null
+      }>()
+      unreadUsers.push(...result.results)
+    }
+
+    unreadUsers.sort((a, b) =>
+      a.student_number.localeCompare(b.student_number, "ja") ||
+      a.name.localeCompare(b.name, "ja"),
+    )
+
+    return Response.json({ users: unreadUsers })
   }
 
   if (
