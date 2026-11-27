@@ -6,6 +6,7 @@ export interface CachedNotification {
   target_url: string | null
   is_read: number
   is_personal?: number
+  actor_name?: string | null
   created_at: string
 }
 
@@ -84,6 +85,7 @@ function validNotification(value: unknown): value is CachedNotification {
     (typeof item.target_url === "string" || item.target_url === null) &&
     (item.is_read === 0 || item.is_read === 1) &&
     (item.is_personal === undefined || item.is_personal === 0 || item.is_personal === 1) &&
+    (item.actor_name === undefined || item.actor_name === null || typeof item.actor_name === "string") &&
     typeof item.created_at === "string" &&
     Number.isFinite(Date.parse(item.created_at))
   )
@@ -173,6 +175,7 @@ export async function saveNotificationCache(
     target_url: string | null
     is_read: number
     is_personal?: number
+    actor_name?: string | null
     created_at: string
   }>,
   unreadCount: number,
@@ -210,6 +213,7 @@ export async function saveNotificationCache(
         target_url: item.target_url,
         is_read: item.is_read ? 1 : 0,
         is_personal: item.is_personal === 0 ? 0 : 1,
+        actor_name: item.actor_name ?? null,
         created_at: item.created_at,
       }))
 
