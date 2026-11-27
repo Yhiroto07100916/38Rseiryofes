@@ -118,7 +118,7 @@ describe("News read tracking", () => {
   it("enforces read-count and unread-user permissions independently", async () => {
     const statsAllowed = await request(statsOnlyUser.sessionId, `/api/news/${newsId}/read-stats`);
     const statsDenied = await request(unreadOnlyUser.sessionId, `/api/news/${newsId}/read-stats`);
-    const unreadAllowed = await request(sessions.unreadOnly.sessionId, `/api/news/${newsId}/unread-users`);
+    const unreadAllowed = await request(unreadOnlyUser.sessionId, `/api/news/${newsId}/unread-users`);
     const unreadDenied = await request(statsOnlyUser.sessionId, `/api/news/${newsId}/unread-users`);
 
     expect(statsAllowed.status).toBe(200);
