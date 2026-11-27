@@ -125,11 +125,12 @@ async function createNews(): Promise<string> {
 
 async function getDelivery(newsId: string) {
   return env.DB.prepare(`
-    SELECT id, status, attempt_count, next_attempt_at, last_error
+    SELECT id, recipient_user_id, status, attempt_count, next_attempt_at, last_error
     FROM push_notification_deliveries
     WHERE news_id = ?
   `).bind(newsId).first<{
     id: string;
+    recipient_user_id: string;
     status: string;
     attempt_count: number;
     next_attempt_at: string;
