@@ -1,5 +1,12 @@
 import { getUsersWithPermission, hasPermission, requireAuth } from "../lib/authz"
 import { createNotificationsForUsers } from "../lib/notifications"
+import { getSiteSetting } from "../lib/site-settings"
+import {
+  DEFAULT_SUBMISSION_DEADLINE_REMINDERS,
+  getDeadlineReminderOption,
+  isDeadlineReminderDue,
+  normalizeDeadlineReminderOffsets,
+} from "../lib/deadline-reminders"
 import { notifyFileLinked } from "../lib/file-notifications"
 
 type Env = {
@@ -209,7 +216,7 @@ export async function processDueSubmissionNotifications(env: Env): Promise<void>
   const result = await env.DB.prepare(
     "SELECT id, title, due_at, assigned_role_id, status " +
     "FROM submissions WHERE due_at IS NOT NULL " +
-    "AND status NOT IN ('completed', 'cancelled')",
+    "AND status IN ('preparing', 'ready_to_submit', 'changes_requested')",
   ).all<{
     id: string
     title: string
@@ -218,37 +225,36 @@ export async function processDueSubmissionNotifications(env: Env): Promise<void>
     status: SubmissionStatus
   }>()
 
+  const notificationSettings = await getSiteSetting<{ deadline_reminders?: { submissions?: unknown } }>(
+    env, "notification_settings", {},
+  )
+  const reminderOffsets = normalizeDeadlineReminderOffsets(
+    notificationSettings.deadline_reminders?.submissions,
+    DEFAULT_SUBMISSION_DEADLINE_REMINDERS,
+  )
   const now = Date.now()
   const localDay = new Date(now + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
   for (const submission of result.results) {
     const dueAt = Date.parse(submission.due_at)
     if (!Number.isFinite(dueAt)) continue
-    const hoursRemaining = (dueAt - now) / 3_600_000
     const recipients = await getSubmissionRoleMemberIds(env, submission.assigned_role_id)
     if (recipients.length === 0) continue
 
-    const reminders: Array<{
-      eventKey: string
-      title: string
-      dedupeKey: string
-    }> = []
+    const reminders: Array<{ eventKey: string; title: string; dedupeKey: string }> = []
+    for (const offsetMinutes of reminderOffsets) {
+      if (!isDeadlineReminderDue(dueAt, now, offsetMinutes)) continue
+      const option = getDeadlineReminderOption(offsetMinutes)
+      if (!option) continue
+      const eventKey = "submissions.deadline_reminder_" + option.key
+      reminders.push({
+        eventKey,
+        title: `提出物の期限まで${option.label}です`,
+        dedupeKey: eventKey + ":" + submission.id + ":" + submission.due_at,
+      })
+    }
 
-    if (hoursRemaining <= 24 && hoursRemaining > 23) {
-      reminders.push({
-        eventKey: "submissions.deadline_reminder_24h",
-        title: "提出物の期限まで24時間です",
-        dedupeKey: "submissions.deadline_reminder_24h:" + submission.id + ":" + submission.due_at,
-      })
-    }
-    if (hoursRemaining <= 1 && hoursRemaining > 0) {
-      reminders.push({
-        eventKey: "submissions.deadline_reminder_1h",
-        title: "提出物の期限まで1時間です",
-        dedupeKey: "submissions.deadline_reminder_1h:" + submission.id + ":" + submission.due_at,
-      })
-    }
-    if (hoursRemaining <= 0) {
+    if (dueAt <= now) {
       reminders.push({
         eventKey: "submissions.deadline_overdue_daily",
         title: "提出物の期限を過ぎています",

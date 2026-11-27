@@ -109,7 +109,29 @@ function isValidSettingValue(key: string, value: unknown): boolean {
     const settings = value as Record<string, unknown>
     if (typeof settings.enabled !== "boolean" || settings.return_due_all_users !== true) return false
     if (!settings.categories || typeof settings.categories !== "object" || Array.isArray(settings.categories)) return false
-    return Object.values(settings.categories as Record<string, unknown>).every(item => typeof item === "boolean")
+    if (!Object.values(settings.categories as Record<string, unknown>).every(item => typeof item === "boolean")) return false
+
+    const allowedOffsets = new Set([10080, 4320, 1440, 720, 180, 30, 15, 10, 5])
+    const reminders = settings.deadline_reminders
+    if (reminders !== undefined) {
+      if (!reminders || typeof reminders !== "object" || Array.isArray(reminders)) return false
+      const values = reminders as Record<string, unknown>
+      for (const key of ["tasks", "submissions"]) {
+        const offsets = values[key]
+        if (!Array.isArray(offsets) || !offsets.every(
+          item => typeof item === "number" && Number.isInteger(item) && allowedOffsets.has(item),
+        ) || new Set(offsets).size !== offsets.length) return false
+      }
+    }
+
+    const dailySchedule = settings.daily_schedule
+    if (dailySchedule !== undefined) {
+      if (!dailySchedule || typeof dailySchedule !== "object" || Array.isArray(dailySchedule)) return false
+      const daily = dailySchedule as Record<string, unknown>
+      if (typeof daily.enabled !== "boolean" || typeof daily.time !== "string" ||
+        !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(daily.time)) return false
+    }
+    return true
   }
   if (key === "operation_settings") {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false

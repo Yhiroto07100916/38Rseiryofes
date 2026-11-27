@@ -26,7 +26,7 @@ import { handleMilkCollection } from "./routes/milk-collection"
 import { handleAvatarImage, handleAvatarMutation, processQueuedAvatarDeletions } from "./routes/avatars"
 import { handleSubmissions, processDueSubmissionNotifications } from "./routes/submissions"
 import { handleWishlist } from "./routes/wishlist"
-import { processDueCalendarNotifications } from "./routes/calendar-reminders"
+import { processDailyScheduleNotifications, processDueCalendarNotifications } from "./routes/calendar-reminders"
 import { getSessionUser } from "./lib/session"
 
 
@@ -1258,6 +1258,12 @@ export default {
       await processDueCalendarNotifications(env)
     } catch (error) {
       console.error("Scheduled calendar notification processing failed:", error)
+    }
+
+    try {
+      await processDailyScheduleNotifications(env)
+    } catch (error) {
+      console.error("Scheduled daily schedule notification processing failed:", error)
     }
 
     try {

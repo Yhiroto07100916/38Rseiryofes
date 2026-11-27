@@ -2,7 +2,7 @@ declare const __D1_MIGRATIONS__: string
 
 import { applyD1Migrations, env } from "cloudflare:test"
 import { beforeAll, describe, expect, it, vi } from "vitest"
-import { processDueCalendarNotifications } from "../src/routes/calendar-reminders"
+import { processDailyScheduleNotifications, processDueCalendarNotifications } from "../src/routes/calendar-reminders"
 
 beforeAll(async () => {
   await applyD1Migrations(env.DB, JSON.parse(__D1_MIGRATIONS__))
@@ -125,6 +125,72 @@ describe("Calendar reminder processing", () => {
       await env.DB.prepare("DELETE FROM notifications WHERE entity_id = ?").bind(eventId).run()
       await env.DB.prepare("DELETE FROM calendar_events WHERE id = ?").bind(eventId).run()
       await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId).run()
+    }
+  })
+
+
+  it("sends one daily schedule digest at the configured JST time to schedule viewers only", async () => {
+    const viewer = await createViewer()
+    const unrelatedUser = crypto.randomUUID()
+    await env.DB.prepare(
+      "INSERT INTO users (id, student_number, name, nickname) VALUES (?, ?, ?, NULL)",
+    ).bind(unrelatedUser, "calendar-digest-" + unrelatedUser, "権限なし").run()
+
+    const timedEventId = crypto.randomUUID()
+    const allDayEventId = crypto.randomUUID()
+    const previousSettings = await env.DB.prepare(
+      "SELECT value FROM site_settings WHERE key = 'notification_settings'",
+    ).first<{ value: string }>()
+    await env.DB.prepare(
+      "UPDATE site_settings SET value = ? WHERE key = 'notification_settings'",
+    ).bind(JSON.stringify({
+      enabled: true,
+      categories: { calendar: true },
+      return_due_all_users: true,
+      daily_schedule: { enabled: true, time: "08:00" },
+    })).run()
+
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO calendar_events (id, title, starts_at, is_all_day, created_by) VALUES (?, ?, ?, 0, ?)",
+      ).bind(timedEventId, "朝の準備", "2026-11-28T09:00:00+09:00", viewer),
+      env.DB.prepare(
+        "INSERT INTO calendar_events (id, title, starts_at, is_all_day, created_by) VALUES (?, ?, ?, 1, ?)",
+      ).bind(allDayEventId, "終日作業", "2026-11-28T00:00:00+09:00", viewer),
+    ])
+
+    try {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date("2026-11-27T23:00:00.000Z"))
+      await processDailyScheduleNotifications(env)
+      await processDailyScheduleNotifications(env)
+      await processDueCalendarNotifications(env)
+
+      const rows = await env.DB.prepare(
+        "SELECT recipient_user_id, body FROM notifications WHERE entity_type = 'calendar_daily_schedule' AND entity_id = '2026-11-28'",
+      ).all<{ recipient_user_id: string; body: string }>()
+
+      expect(rows.results).toHaveLength(1)
+      expect(rows.results[0]?.recipient_user_id).toBe(viewer)
+      expect(rows.results[0]?.body).toContain("朝の準備")
+      expect(rows.results[0]?.body).toContain("終日作業")
+
+      const sameDayAllDayReminder = await env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM notifications WHERE entity_id = ? AND event_key = 'calendar.all_day_reminder_same_day_08'",
+      ).bind(allDayEventId).first<{ count: number }>()
+      expect(sameDayAllDayReminder?.count).toBe(0)
+    } finally {
+      vi.useRealTimers()
+      await env.DB.prepare(
+        "DELETE FROM notifications WHERE entity_id IN (?, ?) OR (entity_type = 'calendar_daily_schedule' AND entity_id = '2026-11-28')",
+      ).bind(timedEventId, allDayEventId).run()
+      await env.DB.prepare("DELETE FROM calendar_events WHERE id IN (?, ?)").bind(timedEventId, allDayEventId).run()
+      if (previousSettings?.value) {
+        await env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'notification_settings'")
+          .bind(previousSettings.value).run()
+      }
+      await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(unrelatedUser).run()
+      await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(viewer).run()
     }
   })
 
