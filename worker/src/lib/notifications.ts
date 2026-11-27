@@ -10,6 +10,7 @@ export interface CreateNotificationsInput {
   targetUrl?: string | null
   requiredPermission?: string | null
   activityPermission?: string | null
+  activityRecipientUserIds?: string[]
   actorUserId?: string | null
   entityType?: string | null
   entityId?: string | null
@@ -42,7 +43,7 @@ export async function createNotificationsForUsers(
   const permissionKeys = input.activityPermission
     ? [input.activityPermission]
     : (ACTIVITY_PERMISSIONS_BY_CATEGORY[input.category] ?? [])
-  const activityRecipientIds = new Set<string>()
+  const activityRecipientIds = new Set<string>((input.activityRecipientUserIds ?? []).filter(Boolean))
 
   for (const permission of permissionKeys) {
     try {
