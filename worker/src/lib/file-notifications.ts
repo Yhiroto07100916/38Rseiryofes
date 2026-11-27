@@ -42,7 +42,6 @@ export async function notifyFileLinked(
 
   const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
   const eligible = await Promise.all(users.results.map(async user => {
-    if (user.id === actorUserId) return false
     if (
       allowedUserIds &&
       user.id !== file.uploaded_by &&
