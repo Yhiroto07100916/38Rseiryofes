@@ -150,7 +150,7 @@
         :key="item.id"
         rounded="lg"
         variant="outlined"
-        :class="{ 'notification-unread': !item.is_read }"
+        :class="{ 'notification-unread': !item.is_read, 'notification-activity': !item.is_personal }"
         @click="openNotification(item)"
       >
         <v-card-text class="pa-4">
@@ -167,6 +167,14 @@
                 <div class="font-weight-bold flex-grow-1">
                   {{ item.title }}
                 </div>
+                <v-chip
+                  size="x-small"
+                  :color="item.is_personal ? 'primary' : 'secondary'"
+                  variant="tonal"
+                  class="flex-shrink-0"
+                >
+                  {{ item.is_personal ? 'あなた宛て' : '活動記録' }}
+                </v-chip>
                 <v-icon
                   v-if="!item.is_read"
                   icon="mdi-circle"
@@ -372,6 +380,11 @@ async function handleMarkAllRead() {
 .notification-unread {
   border-color: rgba(var(--v-theme-primary), 0.45);
   background: rgba(var(--v-theme-primary), 0.035);
+}
+
+.notification-activity {
+  border-color: rgba(var(--v-theme-on-surface), 0.18);
+  background: rgba(var(--v-theme-on-surface), 0.025);
 }
 
 .notification-body {
