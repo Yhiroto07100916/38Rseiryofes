@@ -24,7 +24,7 @@ const ACTIVITY_PERMISSIONS_BY_CATEGORY: Record<string, string[]> = {
   surveys: ["surveys.view"],
   decisions: ["decisions.view"],
   equipment: ["equipment.view"],
-  tool_rental: ["tool_rental.view", "tool_rental.checkout", "tool_rental.return", "tool_rental.history", "tool_rental.manage"],
+  tool_rental: ["tool_rental.view"],
   accounting: ["accounting.view"],
   milk_collection: ["milk_collection.view"],
   wishlist: ["wishlist.view"],
