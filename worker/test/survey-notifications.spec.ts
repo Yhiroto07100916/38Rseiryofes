@@ -76,7 +76,7 @@ async function insertSurvey(
 
 describe("Survey notification events", () => {
   it("notifies eligible respondents when a survey is published", async () => {
-    const creator = await createUser("作成者", ["surveys.create", "surveys.view"])
+    const creator = await createUser("作成者", ["surveys.create", "surveys.view", "surveys.respond"])
     const respondent = await createUser("回答者", ["surveys.view", "surveys.respond"])
 
     const response = await SELF.fetch("http://example.com/api/surveys", {
@@ -100,8 +100,8 @@ describe("Survey notification events", () => {
 
     const notification = await env.DB.prepare(
       "SELECT event_key, recipient_user_id, title, target_url FROM notifications " +
-      "WHERE entity_type = 'survey' AND entity_id = ?",
-    ).bind(surveyId).first<{
+      "WHERE entity_type = 'survey' AND entity_id = ? AND recipient_user_id = ?",
+    ).bind(surveyId, respondent.userId).first<{
       event_key: string
       recipient_user_id: string
       title: string
@@ -119,7 +119,7 @@ describe("Survey notification events", () => {
       "SELECT id FROM notifications WHERE entity_type = 'survey' " +
       "AND entity_id = ? AND recipient_user_id = ?",
     ).bind(surveyId, creator.userId).first()
-    expect(creatorNotification).toBeNull()
+    expect(creatorNotification).not.toBeNull()
   })
 
   it("opens scheduled surveys and closes overdue surveys", async () => {
