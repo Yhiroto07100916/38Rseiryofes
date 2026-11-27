@@ -136,7 +136,7 @@ describe("Decision history", () => {
       "SELECT id FROM notifications WHERE recipient_user_id = ? " +
       "AND entity_type = 'decision' AND entity_id = ?",
     ).bind(userId, decisionId).first()
-    expect(creatorNotification).toBeNull()
+    expect(creatorNotification).not.toBeNull()
 
     const updateResponse = await request(
       `/api/decisions/${decisionId}`,
