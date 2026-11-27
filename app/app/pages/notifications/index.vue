@@ -187,7 +187,7 @@
               </div>
               <div class="d-flex align-center justify-space-between mt-3 ga-2">
                 <span class="text-caption text-medium-emphasis">
-                  {{ categoryLabel(item.category) }} · {{ formatDate(item.created_at) }}
+                  {{ item.actor_name || 'システム' }} · {{ categoryLabel(item.category) }} · {{ formatDate(item.created_at) }}
                 </span>
                 <v-btn
                   size="x-small"
