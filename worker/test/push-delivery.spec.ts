@@ -278,6 +278,26 @@ describe("Web Push delivery queue", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it("includes the operator in news re-notifications when they can view news", async () => {
+    const subscriptionId = await createSubscription()
+    const newsId = await createNews()
+    const owner = await env.DB.prepare(
+      "SELECT user_id FROM push_subscriptions WHERE id = ?",
+    ).bind(subscriptionId).first<{ user_id: string }>()
+
+    expect(owner?.user_id).toBeTruthy()
+    const result = await reenqueueNewsPushDeliveries(
+      pushEnv,
+      { id: newsId },
+      owner!.user_id,
+    )
+
+    expect(result).toEqual({ configured: true, queued: 1 })
+    const delivery = await getDelivery(newsId)
+    expect(delivery?.recipient_user_id).toBe(owner!.user_id)
+    expect(delivery?.status).toBe("pending")
+  })
+
   it("retries temporary failures after the configured delays and fails after four attempts", async () => {
     await createSubscription();
     const newsId = await createNews();
