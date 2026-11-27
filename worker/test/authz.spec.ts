@@ -303,15 +303,15 @@ describe("getUsersWithPermission", () => {
     expect(recipients).toContain(adminUser);
   });
 
-  it("can exclude the actor without changing other recipients", async () => {
+  it("includes the actor when they have the requested permission", async () => {
     const actorId = await createUser();
     const recipientId = await createUser();
     await assignPermission("user_permissions", "user_id", actorId, "news.view", "allow");
     await assignPermission("user_permissions", "user_id", recipientId, "news.view", "allow");
 
-    const recipients = await getUsersWithPermission(env, "news.view", actorId);
+    const recipients = await getUsersWithPermission(env, "news.view");
 
-    expect(recipients).not.toContain(actorId);
+    expect(recipients).toContain(actorId);
     expect(recipients).toContain(recipientId);
   });
 });
