@@ -321,11 +321,11 @@
           density="compact"
           hide-details
           :disabled="uploading"
-          label="関連機能に添付した際に通知する"
+          label="関連機能に添付した際にプッシュ通知を送る"
           class="mt-2"
         />
         <div v-if="canUploadFiles" class="text-caption text-medium-emphasis">
-          ONにすると、タスク・提出物・意思決定・会計などの関連機能に添付した際、その機能を閲覧できるユーザーへ通知します。関連付けがない間は通知されません。初期設定はOFFです。
+          ONにすると、関連機能を閲覧できるユーザーへプッシュ通知を送ります。OFFでも通知センターには活動記録が残ります。関連付けがないファイルは活動記録・プッシュ通知の対象になりません。初期設定はOFFです。
         </div>
       </v-card-text>
     </v-card>
