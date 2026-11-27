@@ -82,12 +82,14 @@ export async function createNotificationsForUsers(
   )
 
   let createdCount = 0
+  let createdPersonalCount = 0
   for (let index = 0; index < recipientIds.length; index += 1) {
     if ((results[index]?.meta?.changes ?? 0) !== 1) continue
     createdCount += 1
 
     // 活動記録はアプリ内だけに保存し、Push配信キューには入れない。
     if (!personalRecipientIds.has(recipientIds[index]!)) continue
+    createdPersonalCount += 1
 
     const notification = await env.DB.prepare(
       "SELECT id FROM notifications WHERE recipient_user_id = ? AND dedupe_key = ?",
