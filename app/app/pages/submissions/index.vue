@@ -209,13 +209,12 @@
             :items="roleOptions"
             item-title="name"
             item-value="id"
-            label="担当係"
+            label="担当係(任意)"
             variant="outlined"
             clearable
             :loading="loadingRoles"
             :disabled="loadingRoles"
             no-data-text="担当係がありません"
-            hint="担当する係を選択してください（任意）"
             persistent-hint
           />
           <CommonJstDateTimePicker
