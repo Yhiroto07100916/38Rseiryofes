@@ -27,6 +27,7 @@ type NotificationRow = {
   actor_user_id: string | null
   entity_type: string | null
   entity_id: string | null
+  is_personal: number
   is_read: number
   read_updated_at: string
   read_version: number
@@ -122,7 +123,7 @@ export async function handleNotifications(
     }
 
     const rows = await env.DB.prepare(
-      "SELECT id, event_key, category, title, body, target_url, actor_user_id, entity_type, entity_id, is_read, " +
+      "SELECT id, event_key, category, title, body, target_url, actor_user_id, entity_type, entity_id, is_personal, is_read, " +
       "COALESCE(read_updated_at, created_at) AS read_updated_at, read_version, created_at, expires_at " +
       "FROM notifications WHERE " + conditions.join(" AND ") +
       " ORDER BY created_at DESC, id DESC LIMIT ?",
