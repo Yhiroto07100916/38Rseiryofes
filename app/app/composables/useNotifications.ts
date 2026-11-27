@@ -27,6 +27,7 @@ export interface AppNotification {
   body: string
   target_url: string | null
   actor_user_id: string | null
+  actor_name: string | null
   entity_type: string | null
   entity_id: string | null
   is_personal: number
@@ -149,6 +150,7 @@ export const useNotifications = () => {
     target_url: string | null
     is_read: number
     is_personal?: number
+    actor_name?: string | null
     created_at: string
   }): AppNotification => ({
     id: item.id,
@@ -158,6 +160,7 @@ export const useNotifications = () => {
     body: item.body,
     target_url: item.target_url,
     actor_user_id: null,
+    actor_name: item.actor_name ?? null,
     entity_type: null,
     entity_id: null,
     is_personal: item.is_personal ?? 1,
