@@ -22,7 +22,7 @@ export async function notifyFileLinked(
     uploaded_by: string
   }>()
 
-  if (!file || file.notify_on_upload !== 1) return
+  if (!file) return
 
   const allowedUserIds = file.access_scope === 'selected'
     ? new Set((await env.DB.prepare(
@@ -53,8 +53,12 @@ export async function notifyFileLinked(
     return false
   }))
 
+  const eligibleUserIds = users.results.filter((_, index) => eligible[index]).map(user => user.id)
+
   await createNotificationsForUsers(env as Env, {
-    recipientUserIds: users.results.filter((_, index) => eligible[index]).map(user => user.id),
+    // notify_on_upload はPush通知の設定として扱い、活動記録は常に残す。
+    recipientUserIds: file.notify_on_upload === 1 ? eligibleUserIds : [],
+    activityRecipientUserIds: eligibleUserIds,
     eventKey: "files.uploaded",
     category: "files",
     title: "新しいファイルがアップロードされました",
