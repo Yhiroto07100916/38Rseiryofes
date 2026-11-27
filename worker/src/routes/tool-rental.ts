@@ -421,7 +421,6 @@ export async function handleToolRental(
           body: item.tool_name + "（" + item.management_number + "）が貸し出されました。",
           targetUrl: "/tool-rental/loans/current?open=" + encodeURIComponent(String(loanId)),
           actorUserId: auth.user.id,
-          includeActor: true,
           entityType: "tool_loan",
           entityId: String(loanId),
           dedupeKey: "tool_rental.checked_out:" + loanId,
