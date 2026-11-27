@@ -223,7 +223,6 @@ export async function getUserPermissions(
 export async function getUsersWithPermission(
   env: AuthEnv,
   permissionKey: string,
-  excludedUserId?: string,
 ): Promise<string[]> {
   if (!(await isFeaturePermissionEnabled(env, permissionKey))) return []
 
@@ -281,8 +280,7 @@ export async function getUsersWithPermission(
     LEFT JOIN user_effects ue ON ue.user_id = u.id
     LEFT JOIN role_effects re ON re.user_id = u.id
     LEFT JOIN account_role_effects aref ON aref.user_id = u.id
-    WHERE (? IS NULL OR u.id <> ?)
-      AND CASE
+    WHERE CASE
         WHEN au.user_id IS NOT NULL THEN 1
         WHEN ue.effect IS NOT NULL THEN ue.effect = 'allow'
         WHEN re.effect IS NOT NULL THEN re.effect = 'allow'
@@ -290,7 +288,7 @@ export async function getUsersWithPermission(
         ELSE 0
       END = 1
     ORDER BY u.id
-  `).bind(permissionKey, excludedUserId ?? null, excludedUserId ?? null)
+  `).bind(permissionKey)
     .all<{ id: string }>()
 
   return result.results.map(row => row.id)
