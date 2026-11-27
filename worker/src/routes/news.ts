@@ -468,6 +468,122 @@ export async function handleNews(
 
   if (
     request.method === "POST" &&
+    pathParts.length === 2 &&
+    pathParts[1] === "read"
+  ) {
+    if (!(await hasPermission(env, auth.user.id, "news.view"))) {
+      return Response.json({ error: "Forbidden", permission: "news.view" }, { status: 403 })
+    }
+
+    const newsId = pathParts[0]
+    const existingNews = await env.DB.prepare(
+      "SELECT id FROM news WHERE id = ?",
+    ).bind(newsId).first<{ id: string }>()
+
+    if (!existingNews) {
+      return Response.json({ error: "News not found" }, { status: 404 })
+    }
+
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO news_read_receipts (news_id, user_id) VALUES (?, ?)",
+    ).bind(newsId, auth.user.id).run()
+
+    const receipt = await env.DB.prepare(
+      "SELECT read_at FROM news_read_receipts WHERE news_id = ? AND user_id = ?",
+    ).bind(newsId, auth.user.id).first<{ read_at: string }>()
+
+    return Response.json({ success: true, read_at: receipt?.read_at ?? null })
+  }
+
+  if (
+    request.method === "GET" &&
+    pathParts.length === 2 &&
+    pathParts[1] === "read-stats"
+  ) {
+    if (!(await hasPermission(env, auth.user.id, "news.read_stats.view"))) {
+      return Response.json({
+        error: "Forbidden",
+        permission: "news.read_stats.view",
+      }, { status: 403 })
+    }
+
+    const newsId = pathParts[0]
+    const existingNews = await env.DB.prepare(
+      "SELECT id FROM news WHERE id = ?",
+    ).bind(newsId).first<{ id: string }>()
+
+    if (!existingNews) {
+      return Response.json({ error: "News not found" }, { status: 404 })
+    }
+
+    const eligibleUserIds = await getUsersWithPermission(env, "news.view")
+    if (eligibleUserIds.length === 0) {
+      return Response.json({ read_count: 0, unread_count: 0, total_count: 0 })
+    }
+
+    const placeholders = eligibleUserIds.map(() => "?").join(", ")
+    const readResult = await env.DB.prepare(
+      "SELECT COUNT(DISTINCT user_id) AS count FROM news_read_receipts " +
+      "WHERE news_id = ? AND user_id IN (" + placeholders + ")",
+    ).bind(newsId, ...eligibleUserIds).first<{ count: number }>()
+
+    const readCount = readResult?.count ?? 0
+    const totalCount = eligibleUserIds.length
+
+    return Response.json({
+      read_count: readCount,
+      unread_count: Math.max(0, totalCount - readCount),
+      total_count: totalCount,
+    })
+  }
+
+  if (
+    request.method === "GET" &&
+    pathParts.length === 2 &&
+    pathParts[1] === "unread-users"
+  ) {
+    if (!(await hasPermission(env, auth.user.id, "news.unread_users.view"))) {
+      return Response.json({
+        error: "Forbidden",
+        permission: "news.unread_users.view",
+      }, { status: 403 })
+    }
+
+    const newsId = pathParts[0]
+    const existingNews = await env.DB.prepare(
+      "SELECT id FROM news WHERE id = ?",
+    ).bind(newsId).first<{ id: string }>()
+
+    if (!existingNews) {
+      return Response.json({ error: "News not found" }, { status: 404 })
+    }
+
+    const eligibleUserIds = await getUsersWithPermission(env, "news.view")
+    if (eligibleUserIds.length === 0) {
+      return Response.json({ users: [] })
+    }
+
+    const placeholders = eligibleUserIds.map(() => "?").join(", ")
+    const result = await env.DB.prepare(
+      "SELECT u.id, u.student_number, u.name, u.nickname " +
+      "FROM users u " +
+      "WHERE u.id IN (" + placeholders + ") " +
+      "AND NOT EXISTS (" +
+      "SELECT 1 FROM news_read_receipts r " +
+      "WHERE r.news_id = ? AND r.user_id = u.id" +
+      ") ORDER BY u.student_number ASC, u.name ASC",
+    ).bind(...eligibleUserIds, newsId).all<{
+      id: string
+      student_number: string
+      name: string
+      nickname: string | null
+    }>()
+
+    return Response.json({ users: result.results })
+  }
+
+  if (
+    request.method === "POST" &&
     pathParts.length === 0
   ) {
     if (!(await hasPermission(env, auth.user.id, "news.create"))) {
