@@ -1041,7 +1041,7 @@ export async function handleAccounting(
 
           if (reimbursementId && paidByUserId) {
             try {
-              const recipientUserIds = await getUsersWithPermission(env, "accounting.approve", createdBy)
+              const recipientUserIds = await getUsersWithPermission(env, "accounting.approve")
               await createNotificationsForUsers(env, {
                 recipientUserIds,
                 eventKey: "accounting.reimbursement_requested",

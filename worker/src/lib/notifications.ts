@@ -12,15 +12,14 @@ export interface CreateNotificationsInput {
   entityType?: string | null
   entityId?: string | null
   dedupeKey: string
-  includeActor?: boolean
 }
 
 export async function createNotificationsForUsers(
   env: Env,
   input: CreateNotificationsInput,
 ): Promise<number> {
-  const recipientIds = [...new Set(input.recipientUserIds)]
-    .filter(userId => userId && (input.includeActor === true || userId !== input.actorUserId))
+  // 受信対象に含まれる限り、通知を作成した本人も除外しない。
+  const recipientIds = [...new Set(input.recipientUserIds)].filter(Boolean)
 
   if (recipientIds.length === 0) return 0
 

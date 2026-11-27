@@ -125,11 +125,12 @@ async function createNews(): Promise<string> {
 
 async function getDelivery(newsId: string) {
   return env.DB.prepare(`
-    SELECT id, status, attempt_count, next_attempt_at, last_error
+    SELECT id, recipient_user_id, status, attempt_count, next_attempt_at, last_error
     FROM push_notification_deliveries
     WHERE news_id = ?
   `).bind(newsId).first<{
     id: string;
+    recipient_user_id: string;
     status: string;
     attempt_count: number;
     next_attempt_at: string;
@@ -276,6 +277,26 @@ describe("Web Push delivery queue", () => {
     expect(delivery?.status).toBe("sent")
     expect(delivery?.attempt_count).toBe(1)
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("includes the operator in news re-notifications when they can view news", async () => {
+    const subscriptionId = await createSubscription()
+    const newsId = await createNews()
+    const owner = await env.DB.prepare(
+      "SELECT user_id FROM push_subscriptions WHERE id = ?",
+    ).bind(subscriptionId).first<{ user_id: string }>()
+
+    expect(owner?.user_id).toBeTruthy()
+    const result = await reenqueueNewsPushDeliveries(
+      pushEnv,
+      { id: newsId },
+      owner!.user_id,
+    )
+
+    expect(result).toEqual({ configured: true, queued: 1 })
+    const delivery = await getDelivery(newsId)
+    expect(delivery?.recipient_user_id).toBe(owner!.user_id)
+    expect(delivery?.status).toBe("pending")
   })
 
   it("retries temporary failures after the configured delays and fails after four attempts", async () => {

@@ -3,6 +3,7 @@ declare const __D1_MIGRATIONS__: string
 import { applyD1Migrations, env } from "cloudflare:test"
 import { afterEach, beforeAll, describe, expect, it } from "vitest"
 import { createSession } from "../src/lib/session"
+import { createNotificationsForUsers } from "../src/lib/notifications"
 import { handleNotifications } from "../src/routes/notifications"
 
 const userIds: string[] = []
@@ -81,6 +82,35 @@ function request(method: string, path: string, cookie: string, body?: unknown): 
 }
 
 describe("Notification center API", () => {
+  it("creates notifications for the actor when they are in the recipient list", async () => {
+    const actor = await createUser()
+    const other = await createUser()
+    const dedupeKey = "test.actor-inclusive:" + crypto.randomUUID()
+
+    const createdCount = await createNotificationsForUsers(env, {
+      recipientUserIds: [actor.userId, other.userId, actor.userId],
+      eventKey: "test.actor_included",
+      category: "tasks",
+      title: "作成者にも届く通知",
+      actorUserId: actor.userId,
+      dedupeKey,
+    })
+
+    const rows = await env.DB.prepare(
+      "SELECT recipient_user_id FROM notifications WHERE dedupe_key = ? ORDER BY recipient_user_id",
+    ).bind(dedupeKey).all<{ recipient_user_id: string }>()
+
+    expect(createdCount).toBe(2)
+    expect(rows.results.map(row => row.recipient_user_id)).toContain(actor.userId)
+    expect(rows.results.map(row => row.recipient_user_id)).toContain(other.userId)
+    for (const row of rows.results) {
+      const notification = await env.DB.prepare(
+        "SELECT id FROM notifications WHERE recipient_user_id = ? AND dedupe_key = ?",
+      ).bind(row.recipient_user_id, dedupeKey).first<{ id: string }>()
+      if (notification) notificationIds.push(notification.id)
+    }
+  })
+
   it("requires authentication", async () => {
     const response = await handleNotifications(
       new Request("https://worker.example.com/api/notifications"),

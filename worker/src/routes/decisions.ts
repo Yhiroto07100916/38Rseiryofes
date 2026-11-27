@@ -328,7 +328,7 @@ export async function handleDecisions(
       const users = await env.DB.prepare("SELECT id FROM users").all<{ id: string }>()
       const eligible = await Promise.all(users.results.map(async user => ({
         id: user.id,
-        allowed: user.id !== userId && await hasPermission(env, user.id, "decisions.view"),
+        allowed: await hasPermission(env, user.id, "decisions.view"),
       })))
       await createNotificationsForUsers(env, {
         recipientUserIds: eligible.filter(user => user.allowed).map(user => user.id),
