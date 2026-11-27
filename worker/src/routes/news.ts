@@ -609,7 +609,7 @@ export async function handleNews(
     // お知らせを閲覧できるユーザーへ、アプリ内通知を作成する。
     // Pushは通知設定とアカウントに紐づくSubscriptionを確認して別キューから送信する。
     try {
-      const recipientUserIds = await getUsersWithPermission(env, "news.view", auth.user.id)
+      const recipientUserIds = await getUsersWithPermission(env, "news.view")
 
       await createNotificationsForUsers(env, {
         recipientUserIds,
