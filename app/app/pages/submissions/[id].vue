@@ -384,7 +384,17 @@
               :title="file.name"
               :subtitle="formatSize(file.size)"
               prepend-icon="mdi-file-outline"
-            />
+            >
+              <template #append>
+                <v-btn
+                  icon="mdi-close"
+                  variant="text"
+                  size="small"
+                  aria-label="添付予定から削除"
+                  @click="removeSelectedFile(file)"
+                />
+              </template>
+            </v-list-item>
           </v-list>
         </v-card-text>
         <v-card-actions class="px-5 pb-5">
@@ -674,6 +684,12 @@ const handleFileChange = (event: Event) => {
     ...additions.filter(file => !existingKeys.has(fileUploadKey(file))),
   ].slice(0, 20)
   target.value = ''
+}
+
+const removeSelectedFile = (file: File) => {
+  const key = fileUploadKey(file)
+  selectedFiles.value = selectedFiles.value.filter(item => fileUploadKey(item) !== key)
+  delete uploadTaskIds.value[key]
 }
 
 const uploadAttachments = async () => {
