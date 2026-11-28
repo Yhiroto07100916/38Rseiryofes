@@ -2098,7 +2098,10 @@ const openReceiptCreate = () => {
 
 const openReceiptEdit = (receipt: Receipt) => {
   editingReceipt.value = receipt
-  receiptUploadContextKey.value = `receipt:${receipt.id}`
+  const savedUploadContext = import.meta.client
+    ? sessionStorage.getItem(`38r:accounting:receipt-upload-context:${receipt.id}`)
+    : null
+  receiptUploadContextKey.value = savedUploadContext || `receipt:${receipt.id}`
   receiptImageFiles.value = []
   receiptUploadTaskIds.value = {}
 
@@ -2341,6 +2344,12 @@ const saveReceipt = async () => {
         throw new Error('購入記録は保存されましたが、記録IDを取得できませんでした。')
       }
 
+      if (import.meta.client) {
+        sessionStorage.setItem(
+          `38r:accounting:receipt-upload-context:${savedReceiptId}`,
+          receiptUploadContextKey.value,
+        )
+      }
       editingReceipt.value = result.receipt
     }
 
@@ -2352,6 +2361,9 @@ const saveReceipt = async () => {
     }
 
     queue.markLinked(stagedReceiptTasksToAttach.map(task => task.id))
+    if (savedReceiptId && import.meta.client) {
+      sessionStorage.removeItem(`38r:accounting:receipt-upload-context:${savedReceiptId}`)
+    }
     receiptImageFiles.value = []
     receiptUploadTaskIds.value = {}
     if (creatingReceipt) {
