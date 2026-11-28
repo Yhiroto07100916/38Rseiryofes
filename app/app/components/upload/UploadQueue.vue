@@ -150,11 +150,11 @@ const statusIcon = (status: UploadTaskStatus) => ({
 })[status]
 
 const statusColor = (status: UploadTaskStatus) => ({
-  queued: 'medium-emphasis',
+  queued: 'grey',
   uploading: 'primary',
   completed: 'success',
   failed: 'error',
-  cancelled: 'medium-emphasis',
+  cancelled: 'grey',
 })[status]
 
 const retry = (id: string) => {
