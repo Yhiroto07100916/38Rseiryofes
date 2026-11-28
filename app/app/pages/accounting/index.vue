@@ -2106,14 +2106,60 @@ const removeReceiptItem = (index: number) => {
   receiptForm.items.splice(index, 1)
 }
 
+const applyReceiptOcr = (result: any) => {
+  const ocr = result?.ocr
+  if (!ocr || typeof ocr !== 'object') {
+    throw new Error('OCR結果を取得できませんでした。')
+  }
+
+  if (typeof ocr.purchased_at === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(ocr.purchased_at)) {
+    receiptForm.purchased_at = ocr.purchased_at
+  }
+
+  if (typeof ocr.store_name === 'string' && ocr.store_name.trim()) {
+    receiptForm.store_name = ocr.store_name.trim()
+  }
+
+  if (Array.isArray(ocr.items) && ocr.items.length > 0) {
+    console.info('Receipt OCR items received:', ocr.items.length)
+    receiptForm.items = ocr.items.map((item: any) => {
+      const quantity =
+        Number.isFinite(item?.quantity) && item.quantity > 0
+          ? item.quantity
+          : 1
+      const unitPrice = Number.isFinite(item?.unit_price)
+        ? Math.max(0, Math.round(item.unit_price))
+        : Number.isFinite(item?.amount)
+          ? Math.max(0, Math.round(item.amount / quantity))
+          : 0
+
+      return {
+        localId: crypto.randomUUID(),
+        name: typeof item?.name === 'string' ? item.name : '',
+        unit_price: unitPrice,
+        quantity,
+        budget_item_id: null,
+        discount_rate: Number.isFinite(item?.discount_rate)
+          ? Math.min(100, Math.max(0, Math.round(item.discount_rate)))
+          : 0,
+        tax_rate: Number.isFinite(item?.tax_rate)
+          ? Math.min(100, Math.max(0, Math.round(item.tax_rate)))
+          : 10,
+        price_type: item?.price_type === 'tax_included' || item?.price_type === 'tax_excluded'
+          ? item.price_type
+          : 'unknown',
+      }
+    })
+  }
+}
+
 const recognizeReceipt = async () => {
   const file = receiptImageFiles.value[0]
-
   if (!file) {
     errorMessage.value = '先にレシート画像を選択してください。'
     return
   }
-
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
     errorMessage.value = 'JPEG・PNG・WebP形式の画像を選択してください。'
     return
@@ -2121,7 +2167,7 @@ const recognizeReceipt = async () => {
 
   const maxOcrFileSizeMb = Math.min(10, siteStatus.value?.upload_max_file_size_mb ?? 25)
   if (file.size > maxOcrFileSizeMb * 1024 * 1024) {
-    errorMessage.value = `画像は${maxOcrFileSizeMb}MB以下にしてください。`
+    errorMessage.value = `画像は${maxOcrFileSizeMb}MB以下のファイルを選択してください。`
     return
   }
 
@@ -2131,57 +2177,11 @@ const recognizeReceipt = async () => {
   errorMessage.value = ''
 
   try {
-    const handle = upload<any>(file, '/api/accounting/receipts/ocr', formData)
-    const result = await handle.promise
-    const ocr = result?.ocr
-
-    if (!ocr || typeof ocr !== 'object') {
-      throw new Error('OCR結果を取得できませんでした。')
-    }
-
-    if (typeof ocr.purchased_at === 'string' &&
-        /^\d{4}-\d{2}-\d{2}$/.test(ocr.purchased_at)) {
-      receiptForm.purchased_at = ocr.purchased_at
-    }
-
-    if (typeof ocr.store_name === 'string' && ocr.store_name.trim()) {
-      receiptForm.store_name = ocr.store_name.trim()
-    }
-
-    if (Array.isArray(ocr.items) && ocr.items.length > 0) {
-      console.info('Receipt OCR items received:', ocr.items.length)
-
-      receiptForm.items = ocr.items.map((item: any) => {
-        const quantity =
-          Number.isFinite(item?.quantity) && item.quantity > 0
-            ? item.quantity
-            : 1
-
-        const unitPrice = Number.isFinite(item?.unit_price)
-          ? Math.max(0, Math.round(item.unit_price))
-          : Number.isFinite(item?.amount)
-            ? Math.max(0, Math.round(item.amount / quantity))
-            : 0
-
-        return {
-          localId: crypto.randomUUID(),
-          name: typeof item?.name === 'string' ? item.name : '',
-          unit_price: unitPrice,
-          quantity,
-          budget_item_id: null,
-          discount_rate: Number.isFinite(item?.discount_rate)
-            ? Math.min(100, Math.max(0, Math.round(item.discount_rate)))
-            : 0,
-          tax_rate: Number.isFinite(item?.tax_rate)
-            ? Math.min(100, Math.max(0, Math.round(item.tax_rate)))
-            : 10,
-          price_type: item?.price_type === 'tax_included' || item?.price_type === 'tax_excluded'
-            ? item.price_type
-            : 'unknown',
-        }
-      })
-    }
-
+    const handle = upload<any>(file, '/api/accounting/receipts/ocr', formData, {
+      contextKey: 'receipt-ocr',
+      onSuccess: applyReceiptOcr,
+    })
+    await handle.promise
     errorMessage.value = ''
   } catch (error: any) {
     errorMessage.value =
