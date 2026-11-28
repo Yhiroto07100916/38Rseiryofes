@@ -1190,10 +1190,11 @@ const stagedReceiptTasks = computed(() =>
 )
 const uploadedReceiptImageCount = computed(() => stagedReceiptTasks.value.length)
 const receiptAttachmentsReady = computed(() =>
-  receiptUploadTasks.value.every(task => task.status === 'completed') &&
+  receiptUploadTasks.value.every(task => task.status === 'completed' && typeof task.resultId === 'string') &&
   receiptImageFiles.value.every(file => {
     const taskId = receiptUploadTaskIds.value[receiptFileUploadKey(file)]
-    return queue.tasks.find(task => task.id === taskId)?.status === 'completed'
+    const task = queue.tasks.find(item => item.id === taskId)
+    return task?.status === 'completed' && typeof task.resultId === 'string'
   }),
 )
 
