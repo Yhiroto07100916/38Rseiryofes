@@ -714,7 +714,7 @@
               </div>
 
               <v-alert
-                v-if="receiptImageFiles.length > 0"
+                v-if="receiptImageFiles.length > 0 || stagedReceiptTasks.length > 0"
                 type="info"
                 variant="tonal"
                 density="compact"
@@ -723,6 +723,16 @@
                 選択中 {{ receiptImageFiles.length }} 件。アップロード完了後に「保存」を押すと購入記録に添付されます。
                 <span v-if="receiptImageFiles.length">（{{ uploadedReceiptImageCount }} 件アップロード完了）</span>
               </v-alert>
+
+              <v-list v-if="stagedReceiptTasks.length" density="compact" class="mt-2">
+                <v-list-item
+                  v-for="task in stagedReceiptTasks"
+                  :key="task.id"
+                  :title="task.fileName"
+                  subtitle="アップロード完了・保存待ち"
+                  prepend-icon="mdi-check-circle"
+                />
+              </v-list>
 
               <template v-if="editingReceipt?.files?.length">
                 <v-divider class="my-3" />
@@ -1156,17 +1166,36 @@ const previewReceiptFiles = ref<ReceiptFile[]>([])
 const previewReceiptImageIndex = ref(0)
 const deletingReceiptFileId = ref<string | null>(null)
 const receiptImageFiles = ref<File[]>([])
+const receiptDraftStorageKey = '38r:accounting:receipt-draft-id'
+const receiptDraftKey = ref('')
+if (import.meta.client) {
+  receiptDraftKey.value = sessionStorage.getItem(receiptDraftStorageKey) || crypto.randomUUID()
+  sessionStorage.setItem(receiptDraftStorageKey, receiptDraftKey.value)
+}
 const receiptUploadTaskIds = ref<Record<string, string>>({})
 const uploadingReceiptImages = ref(false)
 const receiptOcrLoading = ref(false)
 
 const receiptFileUploadKey = (file: File) => `${file.name}:${file.size}:${file.lastModified}`
-const uploadedReceiptImageCount = computed(() => receiptImageFiles.value.filter(file => {
-  const taskId = receiptUploadTaskIds.value[receiptFileUploadKey(file)]
-  return queue.tasks.find(task => task.id === taskId)?.status === 'completed'
-}).length)
+const receiptUploadContextKey = computed(() =>
+  editingReceipt.value
+    ? `receipt:${editingReceipt.value.id}`
+    : `receipt-draft:${receiptDraftKey.value}`,
+)
+const stagedReceiptTasks = computed(() =>
+  queue.tasks.filter(task =>
+    task.contextKey === receiptUploadContextKey.value &&
+    task.status === 'completed' &&
+    !task.linked &&
+    typeof task.resultId === 'string',
+  ),
+)
+const uploadedReceiptImageCount = computed(() => stagedReceiptTasks.value.length)
 const receiptAttachmentsReady = computed(() =>
-  receiptImageFiles.value.length === 0 || uploadedReceiptImageCount.value === receiptImageFiles.value.length,
+  receiptImageFiles.value.every(file => {
+    const taskId = receiptUploadTaskIds.value[receiptFileUploadKey(file)]
+    return queue.tasks.find(task => task.id === taskId)?.status === 'completed'
+  }),
 )
 
 const budgetDialog = ref(false)
@@ -2219,7 +2248,9 @@ const uploadReceiptImages = async () => {
       const formData = new FormData()
       formData.append('file', file)
       formData.append('category', 'receipts')
-      const handle = upload<{ id: string }>(file, '/api/files', formData)
+      const handle = upload<{ id: string }>(file, '/api/files', formData, {
+        contextKey: receiptUploadContextKey.value,
+      })
       receiptUploadTaskIds.value[key] = handle.id
       return [handle]
     })
@@ -2306,11 +2337,9 @@ const saveReceipt = async () => {
       editingReceipt.value = result.receipt
     }
 
-    const uploadedFileIds = receiptImageFiles.value.map(file => {
-      const taskId = receiptUploadTaskIds.value[receiptFileUploadKey(file)]
-      const task = queue.tasks.find(item => item.id === taskId)
-      return (task?.result as { id?: string } | null)?.id
-    }).filter((value): value is string => typeof value === 'string')
+    const uploadedFileIds = stagedReceiptTasks.value
+      .map(task => task.resultId)
+      .filter((value): value is string => typeof value === 'string')
 
     if (savedReceiptId && uploadedFileIds.length > 0) {
       await apiFetch(`/api/accounting/receipts/${savedReceiptId}/files`, {
@@ -2319,8 +2348,13 @@ const saveReceipt = async () => {
       })
     }
 
+    queue.markLinked(stagedReceiptTasks.value.map(task => task.id))
     receiptImageFiles.value = []
     receiptUploadTaskIds.value = {}
+    if (!editingReceipt.value) {
+      receiptDraftKey.value = crypto.randomUUID()
+      if (import.meta.client) sessionStorage.setItem(receiptDraftStorageKey, receiptDraftKey.value)
+    }
     receiptDialog.value = false
     await loadAll()
   } catch (error: any) {
