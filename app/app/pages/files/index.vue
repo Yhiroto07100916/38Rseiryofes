@@ -571,7 +571,6 @@
             autofocus
             variant="outlined"
             :disabled="renamingFile"
-            @keydown.enter.prevent="renameFile"
           />
         </v-card-text>
         <v-card-actions class="px-6 pb-5">
