@@ -2042,6 +2042,7 @@ const exportReceiptsCsv = () => {
 
 const resetReceiptForm = () => {
   receiptImageFiles.value = []
+  receiptUploadTaskIds.value = {}
   receiptForm.purchased_at = jstDateKey(new Date())
   receiptForm.store_name = ''
   receiptForm.payment_method = 'budget'
@@ -2069,6 +2070,7 @@ const openReceiptCreate = () => {
 const openReceiptEdit = (receipt: Receipt) => {
   editingReceipt.value = receipt
   receiptImageFiles.value = []
+  receiptUploadTaskIds.value = {}
 
   receiptForm.purchased_at = receipt.purchased_at?.slice(0, 10) ?? ''
   receiptForm.store_name = receipt.store_name ?? ''
@@ -2195,17 +2197,17 @@ const recognizeReceipt = async () => {
 const uploadReceiptImages = async () => {
   if (receiptImageFiles.value.length === 0) return
 
-  const invalidFile = receiptImageFiles.value.find(file =>
-    !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
-    file.size <= 0 ||
-    file.size > 10 * 1024 * 1024,
-  )
-  if (invalidFile) {
-    throw new Error('JPEG・PNG・WebP形式、10MB以下の画像を選択してください。')
-  }
-
   uploadingReceiptImages.value = true
   try {
+    const invalidFile = receiptImageFiles.value.find(file =>
+      !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
+      file.size <= 0 ||
+      file.size > 10 * 1024 * 1024,
+    )
+    if (invalidFile) {
+      throw new Error('JPEG・PNG・WebP形式、10MB以下の画像を選択してください。')
+    }
+
     const handles = receiptImageFiles.value.flatMap(file => {
       const key = receiptFileUploadKey(file)
       const taskId = receiptUploadTaskIds.value[key]
@@ -2226,6 +2228,9 @@ const uploadReceiptImages = async () => {
     if (!receiptAttachmentsReady.value) {
       throw new Error('未完了の画像があります。共通アップロード一覧から失敗した画像を再試行してください。')
     }
+    errorMessage.value = ''
+  } catch (error: any) {
+    errorMessage.value = error?.message || '画像のアップロードに失敗しました。'
   } finally {
     uploadingReceiptImages.value = false
   }
