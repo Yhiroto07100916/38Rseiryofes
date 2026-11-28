@@ -1177,11 +1177,7 @@ const uploadingReceiptImages = ref(false)
 const receiptOcrLoading = ref(false)
 
 const receiptFileUploadKey = (file: File) => `${file.name}:${file.size}:${file.lastModified}`
-const receiptUploadContextKey = computed(() =>
-  editingReceipt.value
-    ? `receipt:${editingReceipt.value.id}`
-    : `receipt-draft:${receiptDraftKey.value}`,
-)
+const receiptUploadContextKey = ref('')
 const receiptUploadTasks = computed(() =>
   queue.tasks.filter(task =>
     task.contextKey === receiptUploadContextKey.value && !task.linked,
@@ -2095,12 +2091,14 @@ const resetReceiptForm = () => {
 
 const openReceiptCreate = () => {
   editingReceipt.value = null
+  receiptUploadContextKey.value = `receipt-draft:${receiptDraftKey.value}`
   resetReceiptForm()
   receiptDialog.value = true
 }
 
 const openReceiptEdit = (receipt: Receipt) => {
   editingReceipt.value = receipt
+  receiptUploadContextKey.value = `receipt:${receipt.id}`
   receiptImageFiles.value = []
   receiptUploadTaskIds.value = {}
 
@@ -2358,6 +2356,7 @@ const saveReceipt = async () => {
     receiptUploadTaskIds.value = {}
     if (creatingReceipt) {
       receiptDraftKey.value = crypto.randomUUID()
+      receiptUploadContextKey.value = `receipt-draft:${receiptDraftKey.value}`
       if (import.meta.client) sessionStorage.setItem(receiptDraftStorageKey, receiptDraftKey.value)
     }
     receiptDialog.value = false
