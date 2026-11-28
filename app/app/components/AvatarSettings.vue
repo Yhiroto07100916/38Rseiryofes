@@ -28,6 +28,7 @@ const auth = useAuthStore()
 const siteStatus = useSiteStatus()
 const snackbar = useSnackbar()
 const { apiFetch } = useApi()
+const { upload } = useUpload()
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const previewUrl = ref('')
@@ -64,7 +65,8 @@ const uploadAvatar = async () => {
   try {
     const form = new FormData()
     form.append('avatar', selectedFile.value)
-    const response = await apiFetch<{ avatar_key: string }>('/api/auth/avatar', { method: 'POST', body: form })
+    const handle = upload<{ avatar_key: string }>(selectedFile.value, '/api/auth/avatar', form)
+    const response = await handle.promise
     auth.user = { ...auth.user, avatar_key: response.avatar_key }
     clearPreview()
     if (fileInput.value) fileInput.value.value = ''
