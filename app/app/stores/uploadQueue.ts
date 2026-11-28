@@ -246,6 +246,15 @@ export const useUploadQueueStore = defineStore('uploadQueue', () => {
     }
   }
 
+  const dismiss = (id: string) => {
+    const task = tasks.value.find(item => item.id === id)
+    if (!task || !['failed', 'cancelled'].includes(task.status)) return
+    executors.delete(id)
+    deferreds.delete(id)
+    tasks.value = tasks.value.filter(item => item.id !== id)
+    saveHistory()
+  }
+
   const clearCompleted = () => {
     tasks.value = tasks.value.filter(task => task.status !== 'completed')
     saveHistory()
@@ -273,6 +282,7 @@ export const useUploadQueueStore = defineStore('uploadQueue', () => {
     cancel,
     cancelAll,
     clearCompleted,
+    dismiss,
     markLinked,
   }
 })
