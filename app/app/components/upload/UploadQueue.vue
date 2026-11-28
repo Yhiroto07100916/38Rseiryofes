@@ -67,6 +67,15 @@
                     @click="retry(task.id)"
                   />
                   <v-btn
+                    v-if="task.status === 'failed' || task.status === 'cancelled'"
+                    icon="mdi-delete-outline"
+                    variant="text"
+                    size="small"
+                    color="medium-emphasis"
+                    aria-label="一覧から削除"
+                    @click="queue.dismiss(task.id)"
+                  />
+                  <v-btn
                     v-if="task.status === 'queued' || task.status === 'uploading'"
                     icon="mdi-close"
                     variant="text"
