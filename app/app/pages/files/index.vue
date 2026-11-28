@@ -815,7 +815,8 @@ interface ManagedFile {
   access_scope?: 'all' | 'selected'
 }
 
-const { apiFetch } = useApi()\nconst { upload, queue } = useUpload()
+const { apiFetch } = useApi()
+const { upload, queue } = useUpload()
 const route = useRoute()
 const highlightedFileId = ref(typeof route.query.open === "string" ? route.query.open : "")
 const { confirm } = useConfirmDialog()
@@ -850,7 +851,8 @@ const visibilityUsers = ref<Array<{ id: string; name: string; nickname: string |
 const visibilityUsersLoading = ref(false)
 const notifyUpload = ref(false)
 const showArchived = ref(false)
-const selectedFiles = ref<File[]>([])\nconst uploadTaskIds = ref<Record<string, string>>({})
+const selectedFiles = ref<File[]>([])
+const uploadTaskIds = ref<Record<string, string>>({})
 const files = ref<ManagedFile[]>([])
 const folders = ref<FileFolder[]>([])
 const currentFolderId = ref<string | null>(null)
@@ -1810,7 +1812,9 @@ onMounted(async () => {
       ?.scrollIntoView({ behavior: "smooth", block: "center" })
   }
 })
-</script>\n\n
+</script>
+
+
 <style scoped>
 .folder-counts {
   display: flex;
