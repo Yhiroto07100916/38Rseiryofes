@@ -704,6 +704,14 @@ const sortedTasks = computed(() => {
   return filteredTasks.value
     .map((task, index) => ({ task, index }))
     .sort((a, b) => {
+      // 完了タスクは、選択した並び順にかかわらず未完了タスクの後ろに表示する
+      const aDone = a.task.status === 'done'
+      const bDone = b.task.status === 'done'
+
+      if (aDone !== bDone) {
+        return aDone ? 1 : -1
+      }
+
       if (sortOrder.value === 'due_asc' || sortOrder.value === 'due_desc') {
         const aDue = a.task.due_at ? new Date(a.task.due_at).getTime() : null
         const bDue = b.task.due_at ? new Date(b.task.due_at).getTime() : null
