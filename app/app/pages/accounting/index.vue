@@ -2290,6 +2290,12 @@ const saveReceipt = async () => {
   errorMessage.value = ''
 
   try {
+    const creatingReceipt = !editingReceipt.value
+    const stagedReceiptTasksToAttach = [...stagedReceiptTasks.value]
+    const uploadedFileIds = stagedReceiptTasksToAttach
+      .map(task => task.resultId)
+      .filter((value): value is string => typeof value === 'string')
+
     const body = {
       purchased_at: receiptForm.purchased_at,
       store_name: receiptForm.store_name.trim(),
@@ -2337,10 +2343,6 @@ const saveReceipt = async () => {
       editingReceipt.value = result.receipt
     }
 
-    const uploadedFileIds = stagedReceiptTasks.value
-      .map(task => task.resultId)
-      .filter((value): value is string => typeof value === 'string')
-
     if (savedReceiptId && uploadedFileIds.length > 0) {
       await apiFetch(`/api/accounting/receipts/${savedReceiptId}/files`, {
         method: 'POST',
@@ -2348,10 +2350,10 @@ const saveReceipt = async () => {
       })
     }
 
-    queue.markLinked(stagedReceiptTasks.value.map(task => task.id))
+    queue.markLinked(stagedReceiptTasksToAttach.map(task => task.id))
     receiptImageFiles.value = []
     receiptUploadTaskIds.value = {}
-    if (!editingReceipt.value) {
+    if (creatingReceipt) {
       receiptDraftKey.value = crypto.randomUUID()
       if (import.meta.client) sessionStorage.setItem(receiptDraftStorageKey, receiptDraftKey.value)
     }
