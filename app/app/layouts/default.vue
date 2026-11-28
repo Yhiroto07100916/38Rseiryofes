@@ -18,6 +18,7 @@
 
     <ToolRentalTimers />
     <PresenceTracker />
+    <UploadQueue />
   </v-app>
 </template>
 
@@ -29,6 +30,7 @@ import AppBottomNavigation from '~/components/layout/AppBottomNavigation.vue'
 import LegalLinks from '~/components/layout/LegalLinks.vue'
 import ToolRentalTimers from '~/components/tool-rental/ToolRentalTimers.vue'
 import PresenceTracker from '~/components/presence/PresenceTracker.vue'
+import UploadQueue from '~/components/upload/UploadQueue.vue'
 
 const drawerOpen = ref(false)
 </script>

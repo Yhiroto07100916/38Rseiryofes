@@ -690,6 +690,16 @@
               <div class="d-flex flex-wrap align-center ga-2 mt-3">
                 <v-btn
                   color="primary"
+                  variant="outlined"
+                  prepend-icon="mdi-cloud-upload-outline"
+                  :loading="uploadingReceiptImages"
+                  :disabled="receiptImageFiles.length === 0 || uploadingReceiptImages"
+                  @click="uploadReceiptImages"
+                >
+                  添付画像をアップロード
+                </v-btn>
+                <v-btn
+                  color="primary"
                   variant="tonal"
                   prepend-icon="mdi-text-recognition"
                   :loading="receiptOcrLoading"
@@ -704,14 +714,25 @@
               </div>
 
               <v-alert
-                v-if="receiptImageFiles.length > 0"
+                v-if="receiptImageFiles.length > 0 || stagedReceiptTasks.length > 0"
                 type="info"
                 variant="tonal"
                 density="compact"
                 class="mt-3"
               >
-                選択中 {{ receiptImageFiles.length }} 件。購入記録の保存時に添付します。
+                選択中 {{ receiptImageFiles.length }} 件。アップロード完了後に「保存」を押すと購入記録に添付されます。
+                （アップロード済み {{ uploadedReceiptImageCount }} 件）
               </v-alert>
+
+              <v-list v-if="stagedReceiptTasks.length" density="compact" class="mt-2">
+                <v-list-item
+                  v-for="task in stagedReceiptTasks"
+                  :key="task.id"
+                  :title="task.fileName"
+                  subtitle="アップロード完了・保存待ち"
+                  prepend-icon="mdi-check-circle"
+                />
+              </v-list>
 
               <template v-if="editingReceipt?.files?.length">
                 <v-divider class="my-3" />
@@ -972,6 +993,7 @@
             v-else
             color="primary"
             :loading="saving"
+            :disabled="!receiptAttachmentsReady"
             @click="saveReceipt"
           >
             保存
@@ -1111,6 +1133,7 @@ interface Reimbursement {
 
 const auth = useAuthStore()
 const { apiFetch } = useApi()
+const { upload, queue } = useUpload()
 const { confirm } = useConfirmDialog()
 
 const route = useRoute()
@@ -1143,7 +1166,37 @@ const previewReceiptFiles = ref<ReceiptFile[]>([])
 const previewReceiptImageIndex = ref(0)
 const deletingReceiptFileId = ref<string | null>(null)
 const receiptImageFiles = ref<File[]>([])
+const receiptDraftStorageKey = '38r:accounting:receipt-draft-id'
+const receiptDraftKey = ref('')
+if (import.meta.client) {
+  receiptDraftKey.value = sessionStorage.getItem(receiptDraftStorageKey) || crypto.randomUUID()
+  sessionStorage.setItem(receiptDraftStorageKey, receiptDraftKey.value)
+}
+const receiptUploadTaskIds = ref<Record<string, string>>({})
+const uploadingReceiptImages = ref(false)
 const receiptOcrLoading = ref(false)
+
+const receiptFileUploadKey = (file: File) => `${file.name}:${file.size}:${file.lastModified}`
+const receiptUploadContextKey = ref('')
+const receiptUploadTasks = computed(() =>
+  queue.tasks.filter(task =>
+    task.contextKey === receiptUploadContextKey.value && !task.linked,
+  ),
+)
+const stagedReceiptTasks = computed(() =>
+  receiptUploadTasks.value.filter(task =>
+    task.status === 'completed' && typeof task.resultId === 'string',
+  ),
+)
+const uploadedReceiptImageCount = computed(() => stagedReceiptTasks.value.length)
+const receiptAttachmentsReady = computed(() =>
+  receiptUploadTasks.value.every(task => task.status === 'completed' && typeof task.resultId === 'string') &&
+  receiptImageFiles.value.every(file => {
+    const taskId = receiptUploadTaskIds.value[receiptFileUploadKey(file)]
+    const task = queue.tasks.find(item => item.id === taskId)
+    return task?.status === 'completed' && typeof task.resultId === 'string'
+  }),
+)
 
 const budgetDialog = ref(false)
 const editingBudget = ref<BudgetItem | null>(null)
@@ -2018,6 +2071,7 @@ const exportReceiptsCsv = () => {
 
 const resetReceiptForm = () => {
   receiptImageFiles.value = []
+  receiptUploadTaskIds.value = {}
   receiptForm.purchased_at = jstDateKey(new Date())
   receiptForm.store_name = ''
   receiptForm.payment_method = 'budget'
@@ -2038,13 +2092,19 @@ const resetReceiptForm = () => {
 
 const openReceiptCreate = () => {
   editingReceipt.value = null
+  receiptUploadContextKey.value = `receipt-draft:${receiptDraftKey.value}`
   resetReceiptForm()
   receiptDialog.value = true
 }
 
 const openReceiptEdit = (receipt: Receipt) => {
   editingReceipt.value = receipt
+  const savedUploadContext = import.meta.client
+    ? sessionStorage.getItem(`38r:accounting:receipt-upload-context:${receipt.id}`)
+    : null
+  receiptUploadContextKey.value = savedUploadContext || `receipt:${receipt.id}`
   receiptImageFiles.value = []
+  receiptUploadTaskIds.value = {}
 
   receiptForm.purchased_at = receipt.purchased_at?.slice(0, 10) ?? ''
   receiptForm.store_name = receipt.store_name ?? ''
@@ -2080,14 +2140,60 @@ const removeReceiptItem = (index: number) => {
   receiptForm.items.splice(index, 1)
 }
 
+const applyReceiptOcr = (result: any) => {
+  const ocr = result?.ocr
+  if (!ocr || typeof ocr !== 'object') {
+    throw new Error('OCR結果を取得できませんでした。')
+  }
+
+  if (typeof ocr.purchased_at === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(ocr.purchased_at)) {
+    receiptForm.purchased_at = ocr.purchased_at
+  }
+
+  if (typeof ocr.store_name === 'string' && ocr.store_name.trim()) {
+    receiptForm.store_name = ocr.store_name.trim()
+  }
+
+  if (Array.isArray(ocr.items) && ocr.items.length > 0) {
+    console.info('Receipt OCR items received:', ocr.items.length)
+    receiptForm.items = ocr.items.map((item: any) => {
+      const quantity =
+        Number.isFinite(item?.quantity) && item.quantity > 0
+          ? item.quantity
+          : 1
+      const unitPrice = Number.isFinite(item?.unit_price)
+        ? Math.max(0, Math.round(item.unit_price))
+        : Number.isFinite(item?.amount)
+          ? Math.max(0, Math.round(item.amount / quantity))
+          : 0
+
+      return {
+        localId: crypto.randomUUID(),
+        name: typeof item?.name === 'string' ? item.name : '',
+        unit_price: unitPrice,
+        quantity,
+        budget_item_id: null,
+        discount_rate: Number.isFinite(item?.discount_rate)
+          ? Math.min(100, Math.max(0, Math.round(item.discount_rate)))
+          : 0,
+        tax_rate: Number.isFinite(item?.tax_rate)
+          ? Math.min(100, Math.max(0, Math.round(item.tax_rate)))
+          : 10,
+        price_type: item?.price_type === 'tax_included' || item?.price_type === 'tax_excluded'
+          ? item.price_type
+          : 'unknown',
+      }
+    })
+  }
+}
+
 const recognizeReceipt = async () => {
   const file = receiptImageFiles.value[0]
-
   if (!file) {
     errorMessage.value = '先にレシート画像を選択してください。'
     return
   }
-
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
     errorMessage.value = 'JPEG・PNG・WebP形式の画像を選択してください。'
     return
@@ -2095,7 +2201,7 @@ const recognizeReceipt = async () => {
 
   const maxOcrFileSizeMb = Math.min(10, siteStatus.value?.upload_max_file_size_mb ?? 25)
   if (file.size > maxOcrFileSizeMb * 1024 * 1024) {
-    errorMessage.value = `画像は${maxOcrFileSizeMb}MB以下にしてください。`
+    errorMessage.value = `画像は${maxOcrFileSizeMb}MB以下のファイルを選択してください。`
     return
   }
 
@@ -2105,59 +2211,11 @@ const recognizeReceipt = async () => {
   errorMessage.value = ''
 
   try {
-    const result: any = await apiFetch('/api/accounting/receipts/ocr', {
-      method: 'POST',
-      body: formData,
+    const handle = upload<any>(file, '/api/accounting/receipts/ocr', formData, {
+      contextKey: 'receipt-ocr',
+      onSuccess: applyReceiptOcr,
     })
-    const ocr = result?.ocr
-
-    if (!ocr || typeof ocr !== 'object') {
-      throw new Error('OCR結果を取得できませんでした。')
-    }
-
-    if (typeof ocr.purchased_at === 'string' &&
-        /^\d{4}-\d{2}-\d{2}$/.test(ocr.purchased_at)) {
-      receiptForm.purchased_at = ocr.purchased_at
-    }
-
-    if (typeof ocr.store_name === 'string' && ocr.store_name.trim()) {
-      receiptForm.store_name = ocr.store_name.trim()
-    }
-
-    if (Array.isArray(ocr.items) && ocr.items.length > 0) {
-      console.info('Receipt OCR items received:', ocr.items.length)
-
-      receiptForm.items = ocr.items.map((item: any) => {
-        const quantity =
-          Number.isFinite(item?.quantity) && item.quantity > 0
-            ? item.quantity
-            : 1
-
-        const unitPrice = Number.isFinite(item?.unit_price)
-          ? Math.max(0, Math.round(item.unit_price))
-          : Number.isFinite(item?.amount)
-            ? Math.max(0, Math.round(item.amount / quantity))
-            : 0
-
-        return {
-          localId: crypto.randomUUID(),
-          name: typeof item?.name === 'string' ? item.name : '',
-          unit_price: unitPrice,
-          quantity,
-          budget_item_id: null,
-          discount_rate: Number.isFinite(item?.discount_rate)
-            ? Math.min(100, Math.max(0, Math.round(item.discount_rate)))
-            : 0,
-          tax_rate: Number.isFinite(item?.tax_rate)
-            ? Math.min(100, Math.max(0, Math.round(item.tax_rate)))
-            : 10,
-          price_type: item?.price_type === 'tax_included' || item?.price_type === 'tax_excluded'
-            ? item.price_type
-            : 'unknown',
-        }
-      })
-    }
-
+    await handle.promise
     errorMessage.value = ''
   } catch (error: any) {
     errorMessage.value =
@@ -2170,45 +2228,56 @@ const recognizeReceipt = async () => {
   }
 }
 
-const uploadReceiptImages = async (receiptId: string) => {
+const uploadReceiptImages = async () => {
   if (receiptImageFiles.value.length === 0) return
 
-  const uploadedIds: string[] = []
-
-  for (const file of receiptImageFiles.value) {
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      throw new Error('JPEG・PNG・WebP形式以外の画像は添付できません。')
+  uploadingReceiptImages.value = true
+  try {
+    const invalidFile = receiptImageFiles.value.find(file =>
+      !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
+      file.size <= 0 ||
+      file.size > 10 * 1024 * 1024,
+    )
+    if (invalidFile) {
+      throw new Error('JPEG・PNG・WebP形式、10MB以下の画像を選択してください。')
     }
 
-    if (file.size <= 0 || file.size > 10 * 1024 * 1024) {
-      throw new Error('画像は10MB以下のファイルを選択してください。')
-    }
+    const handles = receiptImageFiles.value.flatMap(file => {
+      const key = receiptFileUploadKey(file)
+      const taskId = receiptUploadTaskIds.value[key]
+      const existingTask = taskId
+        ? queue.tasks.find(task => task.id === taskId)
+        : undefined
+      if (existingTask) return []
 
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('category', 'receipts')
-
-    const uploaded: any = await apiFetch('/api/files', {
-      method: 'POST',
-      body: formData,
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('category', 'receipts')
+      const handle = upload<{ id: string }>(file, '/api/files', formData, {
+        contextKey: receiptUploadContextKey.value,
+      })
+      receiptUploadTaskIds.value[key] = handle.id
+      return [handle]
     })
 
-    if (typeof uploaded?.id !== 'string') {
-      throw new Error('画像のアップロード結果を確認できませんでした。')
+    await Promise.allSettled(handles.map(handle => handle.promise))
+    if (!receiptAttachmentsReady.value) {
+      throw new Error('未完了の画像があります。共通アップロード一覧から失敗した画像を再試行してください。')
     }
-
-    uploadedIds.push(uploaded.id)
+    errorMessage.value = ''
+  } catch (error: any) {
+    errorMessage.value = error?.message || '画像のアップロードに失敗しました。'
+  } finally {
+    uploadingReceiptImages.value = false
   }
-
-  await apiFetch(`/api/accounting/receipts/${receiptId}/files`, {
-    method: 'POST',
-    body: { file_ids: uploadedIds },
-  })
-
-  receiptImageFiles.value = []
 }
 
 const saveReceipt = async () => {
+  if (!receiptAttachmentsReady.value) {
+    errorMessage.value = '添付画像をすべてアップロードしてから保存してください。'
+    return
+  }
+
   if (!receiptForm.purchased_at || !receiptForm.store_name.trim()) {
     errorMessage.value = '購入日と購入先を入力してください。'
     return
@@ -2226,6 +2295,12 @@ const saveReceipt = async () => {
   errorMessage.value = ''
 
   try {
+    const creatingReceipt = !editingReceipt.value
+    const stagedReceiptTasksToAttach = [...stagedReceiptTasks.value]
+    const uploadedFileIds = stagedReceiptTasksToAttach
+      .map(task => task.resultId)
+      .filter((value): value is string => typeof value === 'string')
+
     const body = {
       purchased_at: receiptForm.purchased_at,
       store_name: receiptForm.store_name.trim(),
@@ -2270,13 +2345,33 @@ const saveReceipt = async () => {
         throw new Error('購入記録は保存されましたが、記録IDを取得できませんでした。')
       }
 
+      if (import.meta.client) {
+        sessionStorage.setItem(
+          `38r:accounting:receipt-upload-context:${savedReceiptId}`,
+          receiptUploadContextKey.value,
+        )
+      }
       editingReceipt.value = result.receipt
     }
 
-    if (savedReceiptId && receiptImageFiles.value.length > 0) {
-      await uploadReceiptImages(savedReceiptId)
+    if (savedReceiptId && uploadedFileIds.length > 0) {
+      await apiFetch(`/api/accounting/receipts/${savedReceiptId}/files`, {
+        method: 'POST',
+        body: { file_ids: uploadedFileIds },
+      })
     }
 
+    queue.markLinked(stagedReceiptTasksToAttach.map(task => task.id))
+    if (savedReceiptId && import.meta.client) {
+      sessionStorage.removeItem(`38r:accounting:receipt-upload-context:${savedReceiptId}`)
+    }
+    receiptImageFiles.value = []
+    receiptUploadTaskIds.value = {}
+    if (creatingReceipt) {
+      receiptDraftKey.value = crypto.randomUUID()
+      receiptUploadContextKey.value = `receipt-draft:${receiptDraftKey.value}`
+      if (import.meta.client) sessionStorage.setItem(receiptDraftStorageKey, receiptDraftKey.value)
+    }
     receiptDialog.value = false
     await loadAll()
   } catch (error: any) {
