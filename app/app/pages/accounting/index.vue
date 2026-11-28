@@ -690,6 +690,16 @@
               <div class="d-flex flex-wrap align-center ga-2 mt-3">
                 <v-btn
                   color="primary"
+                  variant="outlined"
+                  prepend-icon="mdi-cloud-upload-outline"
+                  :loading="uploadingReceiptImages"
+                  :disabled="receiptImageFiles.length === 0 || uploadingReceiptImages"
+                  @click="uploadReceiptImages"
+                >
+                  添付画像をアップロード
+                </v-btn>
+                <v-btn
+                  color="primary"
                   variant="tonal"
                   prepend-icon="mdi-text-recognition"
                   :loading="receiptOcrLoading"
@@ -710,7 +720,8 @@
                 density="compact"
                 class="mt-3"
               >
-                選択中 {{ receiptImageFiles.length }} 件。購入記録の保存時に添付します。
+                選択中 {{ receiptImageFiles.length }} 件。アップロード完了後に「保存」を押すと購入記録に添付されます。
+                <span v-if="receiptImageFiles.length">（{{ uploadedReceiptImageCount }} 件アップロード完了）</span>
               </v-alert>
 
               <template v-if="editingReceipt?.files?.length">
@@ -972,6 +983,7 @@
             v-else
             color="primary"
             :loading="saving"
+            :disabled="receiptImageFiles.length > 0 && !receiptAttachmentsReady"
             @click="saveReceipt"
           >
             保存
@@ -1111,6 +1123,7 @@ interface Reimbursement {
 
 const auth = useAuthStore()
 const { apiFetch } = useApi()
+const { upload, queue } = useUpload()
 const { confirm } = useConfirmDialog()
 
 const route = useRoute()
@@ -1143,7 +1156,18 @@ const previewReceiptFiles = ref<ReceiptFile[]>([])
 const previewReceiptImageIndex = ref(0)
 const deletingReceiptFileId = ref<string | null>(null)
 const receiptImageFiles = ref<File[]>([])
+const receiptUploadTaskIds = ref<Record<string, string>>({})
+const uploadingReceiptImages = ref(false)
 const receiptOcrLoading = ref(false)
+
+const receiptFileUploadKey = (file: File) => `${file.name}:${file.size}:${file.lastModified}`
+const uploadedReceiptImageCount = computed(() => receiptImageFiles.value.filter(file => {
+  const taskId = receiptUploadTaskIds.value[receiptFileUploadKey(file)]
+  return queue.tasks.find(task => task.id === taskId)?.status === 'completed'
+}).length)
+const receiptAttachmentsReady = computed(() =>
+  receiptImageFiles.value.length === 0 || uploadedReceiptImageCount.value === receiptImageFiles.value.length,
+)
 
 const budgetDialog = ref(false)
 const editingBudget = ref<BudgetItem | null>(null)
@@ -2105,10 +2129,8 @@ const recognizeReceipt = async () => {
   errorMessage.value = ''
 
   try {
-    const result: any = await apiFetch('/api/accounting/receipts/ocr', {
-      method: 'POST',
-      body: formData,
-    })
+    const handle = upload<any>(file, '/api/accounting/receipts/ocr', formData)
+    const result = await handle.promise
     const ocr = result?.ocr
 
     if (!ocr || typeof ocr !== 'object') {
@@ -2170,45 +2192,51 @@ const recognizeReceipt = async () => {
   }
 }
 
-const uploadReceiptImages = async (receiptId: string) => {
+const uploadReceiptImages = async () => {
   if (receiptImageFiles.value.length === 0) return
 
-  const uploadedIds: string[] = []
-
-  for (const file of receiptImageFiles.value) {
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      throw new Error('JPEG・PNG・WebP形式以外の画像は添付できません。')
-    }
-
-    if (file.size <= 0 || file.size > 10 * 1024 * 1024) {
-      throw new Error('画像は10MB以下のファイルを選択してください。')
-    }
-
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('category', 'receipts')
-
-    const uploaded: any = await apiFetch('/api/files', {
-      method: 'POST',
-      body: formData,
-    })
-
-    if (typeof uploaded?.id !== 'string') {
-      throw new Error('画像のアップロード結果を確認できませんでした。')
-    }
-
-    uploadedIds.push(uploaded.id)
+  const invalidFile = receiptImageFiles.value.find(file =>
+    !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
+    file.size <= 0 ||
+    file.size > 10 * 1024 * 1024,
+  )
+  if (invalidFile) {
+    throw new Error('JPEG・PNG・WebP形式、10MB以下の画像を選択してください。')
   }
 
-  await apiFetch(`/api/accounting/receipts/${receiptId}/files`, {
-    method: 'POST',
-    body: { file_ids: uploadedIds },
-  })
+  uploadingReceiptImages.value = true
+  try {
+    const handles = receiptImageFiles.value.flatMap(file => {
+      const key = receiptFileUploadKey(file)
+      const taskId = receiptUploadTaskIds.value[key]
+      const existingTask = taskId
+        ? queue.tasks.find(task => task.id === taskId)
+        : undefined
+      if (existingTask) return []
 
-  receiptImageFiles.value = []
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('category', 'receipts')
+      const handle = upload<{ id: string }>(file, '/api/files', formData)
+      receiptUploadTaskIds.value[key] = handle.id
+      return [handle]
+    })
+
+    await Promise.allSettled(handles.map(handle => handle.promise))
+    if (!receiptAttachmentsReady.value) {
+      throw new Error('未完了の画像があります。共通アップロード一覧から失敗した画像を再試行してください。')
+    }
+  } finally {
+    uploadingReceiptImages.value = false
+  }
 }
 
 const saveReceipt = async () => {
+  if (receiptImageFiles.value.length > 0 && !receiptAttachmentsReady.value) {
+    errorMessage.value = '添付画像をすべてアップロードしてから保存してください。'
+    return
+  }
+
   if (!receiptForm.purchased_at || !receiptForm.store_name.trim()) {
     errorMessage.value = '購入日と購入先を入力してください。'
     return
@@ -2273,10 +2301,21 @@ const saveReceipt = async () => {
       editingReceipt.value = result.receipt
     }
 
-    if (savedReceiptId && receiptImageFiles.value.length > 0) {
-      await uploadReceiptImages(savedReceiptId)
+    const uploadedFileIds = receiptImageFiles.value.map(file => {
+      const taskId = receiptUploadTaskIds.value[receiptFileUploadKey(file)]
+      const task = queue.tasks.find(item => item.id === taskId)
+      return (task?.result as { id?: string } | null)?.id
+    }).filter((value): value is string => typeof value === 'string')
+
+    if (savedReceiptId && uploadedFileIds.length > 0) {
+      await apiFetch(`/api/accounting/receipts/${savedReceiptId}/files`, {
+        method: 'POST',
+        body: { file_ids: uploadedFileIds },
+      })
     }
 
+    receiptImageFiles.value = []
+    receiptUploadTaskIds.value = {}
     receiptDialog.value = false
     await loadAll()
   } catch (error: any) {
