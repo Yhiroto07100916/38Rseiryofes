@@ -668,10 +668,11 @@ const stagedSubmissionTasks = computed(() =>
 const uploadedAttachmentCount = computed(() => stagedSubmissionTasks.value.length)
 
 const attachmentsReady = computed(() =>
-  submissionUploadTasks.value.every(task => task.status === 'completed') &&
+  submissionUploadTasks.value.every(task => task.status === 'completed' && typeof task.resultId === 'string') &&
   selectedFiles.value.every(file => {
     const taskId = uploadTaskIds.value[fileUploadKey(file)]
-    return queue.tasks.find(task => task.id === taskId)?.status === 'completed'
+    const task = queue.tasks.find(item => item.id === taskId)
+    return task?.status === 'completed' && typeof task.resultId === 'string'
   }),
 )
 
