@@ -643,18 +643,22 @@ const saveEdit = async () => {
 
 const fileUploadKey = (file: File) => `${file.name}:${file.size}:${file.lastModified}`
 
-const stagedSubmissionTasks = computed(() =>
+const submissionUploadTasks = computed(() =>
   queue.tasks.filter(task =>
-    task.contextKey === `submission:${id}` &&
-    task.status === 'completed' &&
-    !task.linked &&
-    typeof task.resultId === 'string',
+    task.contextKey === `submission:${id}` && !task.linked,
+  ),
+)
+
+const stagedSubmissionTasks = computed(() =>
+  submissionUploadTasks.value.filter(task =>
+    task.status === 'completed' && typeof task.resultId === 'string',
   ),
 )
 
 const uploadedAttachmentCount = computed(() => stagedSubmissionTasks.value.length)
 
 const attachmentsReady = computed(() =>
+  submissionUploadTasks.value.every(task => task.status === 'completed') &&
   selectedFiles.value.every(file => {
     const taskId = uploadTaskIds.value[fileUploadKey(file)]
     return queue.tasks.find(task => task.id === taskId)?.status === 'completed'
