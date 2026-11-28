@@ -13,6 +13,9 @@ export interface UploadTask {
   createdAt: number
   finishedAt: number | null
   result: unknown
+  resultId: string | null
+  contextKey: string | null
+  linked: boolean
 }
 
 type UploadExecutor = (
@@ -93,7 +96,12 @@ export const useUploadQueueStore = defineStore('uploadQueue', () => {
             item.status === 'completed' &&
             typeof item.finishedAt === 'number',
           )
-          tasks.value = history.map(task => ({ ...task, result: null }))
+          tasks.value = history.map(task => ({
+            ...task,
+            result: task.resultId ? { id: task.resultId } : null,
+            contextKey: typeof task.contextKey === 'string' ? task.contextKey : null,
+            linked: Boolean(task.linked),
+          }))
         }
       }
     } catch (error) {
@@ -130,6 +138,9 @@ export const useUploadQueueStore = defineStore('uploadQueue', () => {
         controller.signal,
       )
       task.result = result
+      task.resultId = result && typeof result === 'object' && 'id' in result && typeof (result as { id?: unknown }).id === 'string'
+        ? (result as { id: string }).id
+        : null
       task.progress = 100
       task.status = 'completed'
       task.finishedAt = Date.now()
@@ -165,6 +176,7 @@ export const useUploadQueueStore = defineStore('uploadQueue', () => {
   const enqueue = (
     file: File,
     executor: UploadExecutor,
+    metadata: { contextKey?: string } = {},
   ): { id: string; promise: Promise<unknown> } => {
     initialize()
     const id = crypto.randomUUID()
@@ -179,6 +191,9 @@ export const useUploadQueueStore = defineStore('uploadQueue', () => {
       createdAt: Date.now(),
       finishedAt: null,
       result: null,
+      resultId: null,
+      contextKey: metadata.contextKey ?? null,
+      linked: false,
     }
     tasks.value.unshift(task)
     executors.set(id, executor)
@@ -197,6 +212,7 @@ export const useUploadQueueStore = defineStore('uploadQueue', () => {
     task.error = ''
     task.finishedAt = null
     task.result = null
+    task.resultId = null
     const promise = createTaskPromise(id)
     pump()
     return promise
@@ -235,6 +251,14 @@ export const useUploadQueueStore = defineStore('uploadQueue', () => {
     saveHistory()
   }
 
+  const markLinked = (ids: string[]) => {
+    const idSet = new Set(ids)
+    for (const task of tasks.value) {
+      if (idSet.has(task.id)) task.linked = true
+    }
+    saveHistory()
+  }
+
   return {
     tasks,
     initialized,
@@ -248,5 +272,6 @@ export const useUploadQueueStore = defineStore('uploadQueue', () => {
     cancel,
     cancelAll,
     clearCompleted,
+    markLinked,
   }
 })
