@@ -116,17 +116,6 @@ export const useSubmissionApi = () => {
       body: data,
     })
 
-  const uploadSubmissionFile = (file: File) => {
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('category', 'uploads')
-
-    return apiFetch<UploadedSubmissionFile>('/api/files', {
-      method: 'POST',
-      body: formData,
-    })
-  }
-
   const submitSubmission = (
     id: string,
     data: {
@@ -189,7 +178,6 @@ export const useSubmissionApi = () => {
     getSubmission,
     createSubmission,
     updateSubmission,
-    uploadSubmissionFile,
     submitSubmission,
     updateSubmissionStatus,
     downloadSubmissionFile,
