@@ -1363,7 +1363,11 @@ const loadFiles = async () => {
 const fileUploadKey = (file: File) => `${file.name}:${file.size}:${file.lastModified}`
 
 const addSelectedFiles = (value: File[] | File | null) => {
-  const additions = Array.isArray(value) ? value : value ? [value] : []
+  if (!value) {
+    selectedFiles.value = []
+    return
+  }
+  const additions = Array.isArray(value) ? value : [value]
   const existingKeys = new Set(selectedFiles.value.map(fileUploadKey))
   selectedFiles.value = [
     ...selectedFiles.value,
