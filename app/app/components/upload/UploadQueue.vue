@@ -100,14 +100,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useUploadQueueStore, type UploadTaskStatus } from '~/stores/uploadQueue'
 
 const queue = useUploadQueueStore()
 const dialog = ref(false)
 const tasks = computed(() => queue.tasks)
 
-onMounted(queue.initialize)
+let historyCleanupTimer: ReturnType<typeof setInterval> | null = null
+
+onMounted(() => {
+  queue.initialize()
+  historyCleanupTimer = setInterval(queue.pruneHistory, 60 * 60 * 1000)
+})
+
+onUnmounted(() => {
+  if (historyCleanupTimer) clearInterval(historyCleanupTimer)
+})
 
 const formatSize = (size: number) => {
   if (size < 1024) return `${size} B`
