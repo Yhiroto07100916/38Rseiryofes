@@ -721,7 +721,7 @@
                 class="mt-3"
               >
                 選択中 {{ receiptImageFiles.length }} 件。アップロード完了後に「保存」を押すと購入記録に添付されます。
-                <span v-if="receiptImageFiles.length">（{{ uploadedReceiptImageCount }} 件アップロード完了）</span>
+                （アップロード済み {{ uploadedReceiptImageCount }} 件）
               </v-alert>
 
               <v-list v-if="stagedReceiptTasks.length" density="compact" class="mt-2">
@@ -993,7 +993,7 @@
             v-else
             color="primary"
             :loading="saving"
-            :disabled="receiptImageFiles.length > 0 && !receiptAttachmentsReady"
+            :disabled="!receiptAttachmentsReady"
             @click="saveReceipt"
           >
             保存
@@ -1182,16 +1182,19 @@ const receiptUploadContextKey = computed(() =>
     ? `receipt:${editingReceipt.value.id}`
     : `receipt-draft:${receiptDraftKey.value}`,
 )
-const stagedReceiptTasks = computed(() =>
+const receiptUploadTasks = computed(() =>
   queue.tasks.filter(task =>
-    task.contextKey === receiptUploadContextKey.value &&
-    task.status === 'completed' &&
-    !task.linked &&
-    typeof task.resultId === 'string',
+    task.contextKey === receiptUploadContextKey.value && !task.linked,
+  ),
+)
+const stagedReceiptTasks = computed(() =>
+  receiptUploadTasks.value.filter(task =>
+    task.status === 'completed' && typeof task.resultId === 'string',
   ),
 )
 const uploadedReceiptImageCount = computed(() => stagedReceiptTasks.value.length)
 const receiptAttachmentsReady = computed(() =>
+  receiptUploadTasks.value.every(task => task.status === 'completed') &&
   receiptImageFiles.value.every(file => {
     const taskId = receiptUploadTaskIds.value[receiptFileUploadKey(file)]
     return queue.tasks.find(task => task.id === taskId)?.status === 'completed'
@@ -2268,7 +2271,7 @@ const uploadReceiptImages = async () => {
 }
 
 const saveReceipt = async () => {
-  if (receiptImageFiles.value.length > 0 && !receiptAttachmentsReady.value) {
+  if (!receiptAttachmentsReady.value) {
     errorMessage.value = '添付画像をすべてアップロードしてから保存してください。'
     return
   }
