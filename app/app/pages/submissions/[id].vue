@@ -351,8 +351,32 @@
             @change="handleFileChange"
           >
           <div class="text-caption text-medium-emphasis mt-2">
-            1回の提出につき最大20ファイル。アップロード後に提出記録へ紐付けます。
+            1回の提出につき最大20ファイル。先に添付をアップロードし、完了後に提出を確定します。
           </div>
+          <v-btn
+            v-if="selectedFiles.length"
+            class="mt-3"
+            color="primary"
+            variant="tonal"
+            prepend-icon="mdi-cloud-upload-outline"
+            :loading="uploadingAttachments"
+            :disabled="uploadingAttachments"
+            @click="uploadAttachments"
+          >
+            添付ファイルをアップロード
+          </v-btn>
+          <div v-if="selectedFiles.length || stagedSubmissionTasks.length" class="text-caption text-medium-emphasis mt-2">
+            アップロード済み {{ uploadedAttachmentCount }} 件
+          </div>
+          <v-list v-if="stagedSubmissionTasks.length" density="compact" class="mt-2">
+            <v-list-item
+              v-for="task in stagedSubmissionTasks"
+              :key="task.id"
+              :title="task.fileName"
+              subtitle="アップロード完了・提出待ち"
+              prepend-icon="mdi-check-circle"
+            />
+          </v-list>
           <v-list v-if="selectedFiles.length" density="compact" class="mt-3">
             <v-list-item
               v-for="(file, index) in selectedFiles"
@@ -360,7 +384,17 @@
               :title="file.name"
               :subtitle="formatSize(file.size)"
               prepend-icon="mdi-file-outline"
-            />
+            >
+              <template #append>
+                <v-btn
+                  icon="mdi-close"
+                  variant="text"
+                  size="small"
+                  aria-label="添付予定から削除"
+                  @click="removeSelectedFile(file)"
+                />
+              </template>
+            </v-list-item>
           </v-list>
         </v-card-text>
         <v-card-actions class="px-5 pb-5">
@@ -369,7 +403,7 @@
           <v-btn
             color="primary"
             :loading="processing"
-            :disabled="selectedFiles.length > 20"
+            :disabled="selectedFiles.length > 20 || !attachmentsReady || uploadingAttachments"
             @click="submit"
           >
             提出する
@@ -434,6 +468,7 @@ import {
   type SubmissionFile,
   type SubmissionRecord,
   type SubmissionStatus,
+  type UploadedSubmissionFile,
 } from '~/composables/useSubmissionApi'
 import { useSnackbar } from '~/composables/useSnackbar'
 import { useAuthStore } from '~/stores/auth'
@@ -448,6 +483,7 @@ const id = String(route.params.id)
 const auth = useAuthStore()
 const snackbar = useSnackbar()
 const api = useSubmissionApi()
+const { upload, queue } = useUpload()
 
 const detail = ref<SubmissionDetailResponse | null>(null)
 const loading = ref(false)
@@ -461,6 +497,8 @@ const cancelDialog = ref(false)
 const submitNote = ref('')
 const reviewNote = ref('')
 const selectedFiles = ref<File[]>([])
+const uploadTaskIds = ref<Record<string, string>>({})
+const uploadingAttachments = ref(false)
 const submissionRoles = ref<{ id: string; name: string }[]>([])
 const rolesLoading = ref(false)
 
@@ -613,9 +651,80 @@ const saveEdit = async () => {
   }
 }
 
+const fileUploadKey = (file: File) => `${file.name}:${file.size}:${file.lastModified}`
+
+const submissionUploadTasks = computed(() =>
+  queue.tasks.filter(task =>
+    task.contextKey === `submission:${id}` && !task.linked,
+  ),
+)
+
+const stagedSubmissionTasks = computed(() =>
+  submissionUploadTasks.value.filter(task =>
+    task.status === 'completed' && typeof task.resultId === 'string',
+  ),
+)
+
+const uploadedAttachmentCount = computed(() => stagedSubmissionTasks.value.length)
+
+const attachmentsReady = computed(() =>
+  submissionUploadTasks.value.every(task => task.status === 'completed' && typeof task.resultId === 'string') &&
+  selectedFiles.value.every(file => {
+    const taskId = uploadTaskIds.value[fileUploadKey(file)]
+    const task = queue.tasks.find(item => item.id === taskId)
+    return task?.status === 'completed' && typeof task.resultId === 'string'
+  }),
+)
+
 const handleFileChange = (event: Event) => {
   const target = event.target as HTMLInputElement
-  selectedFiles.value = Array.from(target.files || [])
+  const additions = Array.from(target.files || [])
+  const existingKeys = new Set(selectedFiles.value.map(fileUploadKey))
+  selectedFiles.value = [
+    ...selectedFiles.value,
+    ...additions.filter(file => !existingKeys.has(fileUploadKey(file))),
+  ].slice(0, 20)
+  target.value = ''
+}
+
+const removeSelectedFile = (file: File) => {
+  const key = fileUploadKey(file)
+  selectedFiles.value = selectedFiles.value.filter(item => fileUploadKey(item) !== key)
+  delete uploadTaskIds.value[key]
+}
+
+const uploadAttachments = async () => {
+  if (selectedFiles.value.length === 0 || selectedFiles.value.length > 20) return
+  uploadingAttachments.value = true
+
+  try {
+    const handles = selectedFiles.value.flatMap(file => {
+      const key = fileUploadKey(file)
+      const taskId = uploadTaskIds.value[key]
+      const existingTask = taskId
+        ? queue.tasks.find(task => task.id === taskId)
+        : undefined
+      if (existingTask) return []
+
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('category', 'uploads')
+      const handle = upload<UploadedSubmissionFile>(file, '/api/files', formData, {
+        contextKey: `submission:${id}`,
+      })
+      uploadTaskIds.value[key] = handle.id
+      return [handle]
+    })
+
+    await Promise.allSettled(handles.map(handle => handle.promise))
+    if (attachmentsReady.value) {
+      snackbar.success('添付ファイルのアップロードが完了しました。内容を確認して提出してください。')
+    } else {
+      snackbar.error('未完了のファイルがあります。共通アップロード一覧から再試行してください。')
+    }
+  } finally {
+    uploadingAttachments.value = false
+  }
 }
 
 const submit = async () => {
@@ -624,24 +733,27 @@ const submit = async () => {
     snackbar.error('添付ファイルは20件以内にしてください')
     return
   }
+  if (!attachmentsReady.value) {
+    snackbar.error('添付ファイルをすべてアップロードしてから提出してください。')
+    return
+  }
 
   processing.value = true
   try {
-    const uploadedIds: string[] = []
-
-    for (const file of selectedFiles.value) {
-      const uploaded = await api.uploadSubmissionFile(file)
-      uploadedIds.push(uploaded.id)
-    }
+    const uploadedIds = stagedSubmissionTasks.value
+      .map(task => task.resultId)
+      .filter((value): value is string => typeof value === 'string')
 
     await api.submitSubmission(id, {
       note: submitNote.value.trim() || undefined,
       file_ids: uploadedIds,
     })
 
+    queue.markLinked(stagedSubmissionTasks.value.map(task => task.id))
     submitDialog.value = false
     submitNote.value = ''
     selectedFiles.value = []
+    uploadTaskIds.value = {}
     snackbar.success('提出を記録しました')
     await load()
   } catch (error) {

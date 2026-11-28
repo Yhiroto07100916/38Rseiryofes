@@ -227,7 +227,7 @@
             color="primary"
             prepend-icon="mdi-upload"
             :loading="uploading"
-            :disabled="uploading || !selectedFile"
+            :disabled="uploading || !selectedFiles.length"
             @click="uploadFile"
           >
             アップロード
@@ -260,14 +260,14 @@
           </v-col>
           <v-col cols="12" sm="4">
             <v-file-input
-              v-model="selectedFile"
+              :model-value="selectedFiles"
               label="ファイルを選択"
+              @update:model-value="addSelectedFiles"
               prepend-icon="mdi-paperclip"
               variant="outlined"
               density="comfortable"
               :show-size="true"
-              :multiple="false"
-              :disabled="uploading"
+              multiple
               hide-details
               clearable
             />
@@ -816,6 +816,7 @@ interface ManagedFile {
 }
 
 const { apiFetch } = useApi()
+const { upload, queue } = useUpload()
 const route = useRoute()
 const highlightedFileId = ref(typeof route.query.open === "string" ? route.query.open : "")
 const { confirm } = useConfirmDialog()
@@ -850,7 +851,8 @@ const visibilityUsers = ref<Array<{ id: string; name: string; nickname: string |
 const visibilityUsersLoading = ref(false)
 const notifyUpload = ref(false)
 const showArchived = ref(false)
-const selectedFile = ref<File | File[] | null>(null)
+const selectedFiles = ref<File[]>([])
+const uploadTaskIds = ref<Record<string, string>>({})
 const files = ref<ManagedFile[]>([])
 const folders = ref<FileFolder[]>([])
 const currentFolderId = ref<string | null>(null)
@@ -1358,16 +1360,29 @@ const loadFiles = async () => {
   }
 }
 
-const uploadFile = async () => {
-  const file = Array.isArray(selectedFile.value)
-    ? selectedFile.value[0]
-    : selectedFile.value
+const fileUploadKey = (file: File) => `${file.name}:${file.size}:${file.lastModified}`
 
-  if (!file) return
+const addSelectedFiles = (value: File[] | File | null) => {
+  if (!value) {
+    selectedFiles.value = []
+    return
+  }
+  const additions = Array.isArray(value) ? value : [value]
+  const existingKeys = new Set(selectedFiles.value.map(fileUploadKey))
+  selectedFiles.value = [
+    ...selectedFiles.value,
+    ...additions.filter(file => !existingKeys.has(fileUploadKey(file))),
+  ]
+}
+
+const uploadFile = async () => {
+  const filesToUpload = [...selectedFiles.value]
+  if (filesToUpload.length === 0) return
 
   const maxFileSizeMb = siteStatus.value?.upload_max_file_size_mb ?? 25
-  if (file.size > maxFileSizeMb * 1024 * 1024) {
-    errorMessage.value = `ファイルサイズは${maxFileSizeMb} MiB以下にしてください。`
+  const oversized = filesToUpload.find(file => file.size > maxFileSizeMb * 1024 * 1024)
+  if (oversized) {
+    errorMessage.value = `「${oversized.name}」はファイルサイズが上限の${maxFileSizeMb} MiBを超えています。`
     return
   }
 
@@ -1384,31 +1399,54 @@ const uploadFile = async () => {
   errorMessage.value = ''
 
   try {
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('category', uploadCategory.value)
-    formData.append('notify', notifyUpload.value ? 'true' : 'false')
-    formData.append('access_scope', uploadAccessScope.value)
-    if (uploadAccessScope.value === 'selected') {
-      for (const userId of uploadVisibleUserIds.value) formData.append('visible_user_ids', userId)
-    }
-    const destinationFolderId = uploadFolderId.value === '__current__'
-      ? currentFolderId.value
-      : uploadFolderId.value === '__root__'
-        ? null
-        : uploadFolderId.value
-    if (destinationFolderId) formData.append('folder_id', destinationFolderId)
+    const handles = filesToUpload.flatMap(file => {
+      const key = fileUploadKey(file)
+      const existingId = uploadTaskIds.value[key]
+      const existingTask = existingId
+        ? queue.tasks.find(task => task.id === existingId)
+        : undefined
 
-    await apiFetch('/api/files', {
-      method: 'POST',
-      body: formData,
+      if (existingTask) return []
+
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('category', uploadCategory.value)
+      formData.append('notify', notifyUpload.value ? 'true' : 'false')
+      formData.append('access_scope', uploadAccessScope.value)
+      if (uploadAccessScope.value === 'selected') {
+        for (const userId of uploadVisibleUserIds.value) formData.append('visible_user_ids', userId)
+      }
+      const destinationFolderId = uploadFolderId.value === '__current__'
+        ? currentFolderId.value
+        : uploadFolderId.value === '__root__'
+          ? null
+          : uploadFolderId.value
+      if (destinationFolderId) formData.append('folder_id', destinationFolderId)
+
+      const handle = upload<{ id: string }>(file, '/api/files', formData)
+      uploadTaskIds.value[key] = handle.id
+      return [handle]
     })
 
-    selectedFile.value = null
+    await Promise.allSettled(handles.map(handle => handle.promise))
+    const taskStates = filesToUpload.map(file => {
+      const taskId = uploadTaskIds.value[fileUploadKey(file)]
+      return queue.tasks.find(task => task.id === taskId)
+    })
+    const allCompleted = taskStates.every(task => task?.status === 'completed')
+
+    if (!allCompleted) {
+      errorMessage.value = '一部のファイルが未完了です。共通アップロード一覧から失敗したファイルを再試行してください。'
+      return
+    }
+
+    const completedKeys = new Set(filesToUpload.map(fileUploadKey))
+    selectedFiles.value = selectedFiles.value.filter(file => !completedKeys.has(fileUploadKey(file)))
+    for (const key of completedKeys) delete uploadTaskIds.value[key]
     notifyUpload.value = false
     uploadAccessScope.value = 'all'
     uploadVisibleUserIds.value = []
-    snackbarMessage.value = 'アップロードしました。'
+    snackbarMessage.value = `${filesToUpload.length}件のファイルをアップロードしました。`
     snackbar.value = true
     await Promise.all([loadFiles(), loadFolders()])
   } catch (error) {
@@ -1788,7 +1826,9 @@ onMounted(async () => {
       ?.scrollIntoView({ behavior: "smooth", block: "center" })
   }
 })
-</script>\n\n
+</script>
+
+
 <style scoped>
 .folder-counts {
   display: flex;

@@ -28,6 +28,7 @@ const auth = useAuthStore()
 const siteStatus = useSiteStatus()
 const snackbar = useSnackbar()
 const { apiFetch } = useApi()
+const { upload } = useUpload()
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const previewUrl = ref('')
@@ -64,11 +65,21 @@ const uploadAvatar = async () => {
   try {
     const form = new FormData()
     form.append('avatar', selectedFile.value)
-    const response = await apiFetch<{ avatar_key: string }>('/api/auth/avatar', { method: 'POST', body: form })
-    auth.user = { ...auth.user, avatar_key: response.avatar_key }
-    clearPreview()
-    if (fileInput.value) fileInput.value.value = ''
-    snackbar.success('プロフィール画像を変更しました。')
+    const handle = upload<{ avatar_key: string }>(
+      selectedFile.value,
+      '/api/auth/avatar',
+      form,
+      {
+        contextKey: `avatar:${auth.user.id}`,
+        onSuccess: response => {
+          if (auth.user) auth.user = { ...auth.user, avatar_key: response.avatar_key }
+          clearPreview()
+          if (fileInput.value) fileInput.value.value = ''
+          snackbar.success('プロフィール画像を変更しました。')
+        },
+      },
+    )
+    await handle.promise
   } catch (error: any) {
     snackbar.error(error?.data?.error || error?.message || '画像のアップロードに失敗しました。')
   } finally {
