@@ -267,6 +267,7 @@ export const useUploadQueueStore = defineStore('uploadQueue', () => {
     failedCount,
     hasActiveTasks,
     initialize,
+    pruneHistory,
     enqueue,
     retry,
     cancel,
