@@ -935,8 +935,8 @@ export async function handleFiles(
     if (request.method === "PATCH" && pathParts.length === 2 && pathParts[1] === "rename") {
       const fileId = decodeURIComponent(pathParts[0])
       const file = await env.DB.prepare(`
-        SELECT id, object_key, original_name, uploaded_by, archived_at,
-               access_scope, ai_status, ai_search_item_id
+        SELECT id, object_key, original_name, content_type, size, category,
+               uploaded_by, archived_at, access_scope, ai_search_item_id
         FROM files
         WHERE id = ?
         LIMIT 1
@@ -944,10 +944,12 @@ export async function handleFiles(
         id: string
         object_key: string
         original_name: string
+        content_type: string
+        size: number
+        category: string
         uploaded_by: string
         archived_at: string | null
         access_scope: 'all' | 'selected'
-        ai_status: string
         ai_search_item_id: string | null
       }>()
       if (!file) return json({ error: "File not found" }, 404)
@@ -979,7 +981,7 @@ export async function handleFiles(
         originalName.length > 255 ||
         originalName === "." ||
         originalName === ".." ||
-        /[\\u0000-\\u001f\\u007f/\\\\]/.test(originalName)
+        /[\u0000-\u001f\u007f/\\]/.test(originalName)
       ) {
         return json({ error: "ファイル名は1〜255文字で入力してください。使用できない文字が含まれています。" }, 400)
       }
@@ -1006,15 +1008,9 @@ export async function handleFiles(
           id: file.id,
           object_key: file.object_key,
           original_name: originalName,
-          content_type: (await env.DB.prepare(
-            "SELECT content_type FROM files WHERE id = ? LIMIT 1",
-          ).bind(fileId).first<{ content_type: string }>())?.content_type ?? "application/octet-stream",
-          size: (await env.DB.prepare(
-            "SELECT size FROM files WHERE id = ? LIMIT 1",
-          ).bind(fileId).first<{ size: number }>())?.size ?? 0,
-          category: (await env.DB.prepare(
-            "SELECT category FROM files WHERE id = ? LIMIT 1",
-          ).bind(fileId).first<{ category: string }>())?.category ?? "uploads",
+          content_type: file.content_type,
+          size: file.size,
+          category: file.category,
           uploaded_by: file.uploaded_by,
           ai_search_item_id: file.ai_search_item_id,
         }, ctx)
