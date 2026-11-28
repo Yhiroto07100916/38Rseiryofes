@@ -30,6 +30,14 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function contentDispositionInline(filename: string): string {
+  const fallback = filename.replace(/[^\x20-\x7E]|["\\]/g, "_")
+  const encoded = encodeURIComponent(filename).replace(/[!'()*]/g, char =>
+    `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  )
+  return `inline; filename="${fallback}"; filename*=UTF-8''${encoded}`
+}
+
 async function normalizeCategory(
   env: Env,
   value: unknown,
@@ -924,6 +932,95 @@ export async function handleFiles(
       })
     }
 
+    if (request.method === "PATCH" && pathParts.length === 2 && pathParts[1] === "rename") {
+      const fileId = decodeURIComponent(pathParts[0])
+      const file = await env.DB.prepare(`
+        SELECT id, object_key, original_name, content_type, size, category,
+               uploaded_by, archived_at, access_scope, ai_search_item_id
+        FROM files
+        WHERE id = ?
+        LIMIT 1
+      `).bind(fileId).first<{
+        id: string
+        object_key: string
+        original_name: string
+        content_type: string
+        size: number
+        category: string
+        uploaded_by: string
+        archived_at: string | null
+        access_scope: 'all' | 'selected'
+        ai_search_item_id: string | null
+      }>()
+      if (!file) return json({ error: "File not found" }, 404)
+      if (file.archived_at) return json({ error: "Archived files cannot be renamed" }, 409)
+
+      const canRename = await hasPermission(env, auth.user.id, "files.move")
+      if (!canRename && file.uploaded_by !== auth.user.id) {
+        return json({ error: "Forbidden", permission: "files.move" }, 403)
+      }
+
+      const [canViewLinked, canViewScope] = await Promise.all([
+        canViewLinkedFile(env, auth.user.id, file.id),
+        canViewFileAccess(env, auth.user.id, file),
+      ])
+      if (!canViewLinked || !canViewScope) return json({ error: "Forbidden" }, 403)
+
+      let body: { original_name?: unknown }
+      try {
+        body = await request.json()
+      } catch {
+        return json({ error: "Invalid JSON" }, 400)
+      }
+
+      const originalName = typeof body.original_name === "string"
+        ? body.original_name.trim()
+        : ""
+      if (
+        !originalName ||
+        originalName.length > 255 ||
+        originalName === "." ||
+        originalName === ".." ||
+        /[\u0000-\u001f\u007f/\\]/.test(originalName)
+      ) {
+        return json({ error: "ファイル名は1〜255文字で入力してください。使用できない文字が含まれています。" }, 400)
+      }
+
+      const currentExtension = sanitizeExtension(file.original_name)
+      const nextExtension = sanitizeExtension(originalName)
+      if (currentExtension !== nextExtension) {
+        return json({ error: "拡張子は変更できません。" }, 400)
+      }
+      if (originalName === file.original_name) {
+        return json({ success: true, id: fileId, original_name: file.original_name })
+      }
+
+      await env.DB.prepare(
+        "UPDATE files SET original_name = ? WHERE id = ? AND archived_at IS NULL",
+      ).bind(originalName, fileId).run()
+
+      // AI Searchには元のファイル名がメタデータとして登録されているため、既存の項目を再登録する。
+      if (file.ai_search_item_id) {
+        await env.DB.prepare(
+          "UPDATE files SET ai_status = 'processing', ai_error = NULL WHERE id = ?",
+        ).bind(fileId).run()
+        const reindexing = indexFileForAiSearch(env, {
+          id: file.id,
+          object_key: file.object_key,
+          original_name: originalName,
+          content_type: file.content_type,
+          size: file.size,
+          category: file.category,
+          uploaded_by: file.uploaded_by,
+          ai_search_item_id: file.ai_search_item_id,
+        }, ctx)
+        if (ctx) ctx.waitUntil(reindexing)
+        else await reindexing
+      }
+
+      return json({ success: true, id: fileId, original_name: originalName })
+    }
+
     if (request.method === "PATCH" && pathParts.length === 2 && pathParts[1] === "move") {
       const fileId = decodeURIComponent(pathParts[0])
       const file = await env.DB.prepare(
@@ -1230,6 +1327,7 @@ export async function handleFiles(
 
         const headers = new Headers()
         object.writeHttpMetadata(headers)
+        headers.set("Content-Disposition", contentDispositionInline(file.original_name))
         headers.set("etag", object.httpEtag)
         headers.set(
           "Cache-Control",

@@ -465,6 +465,12 @@
                   </template>
                   <v-list density="compact" min-width="190">
                     <v-list-item
+                      v-if="!showArchived && (canMoveFiles || file.uploaded_by === auth.user?.id)"
+                      prepend-icon="mdi-rename-box"
+                      title="ファイル名を変更"
+                      @click="openRenameDialog(file)"
+                    />
+                    <v-list-item
                       v-if="canMoveFiles || file.uploaded_by === auth.user?.id"
                       prepend-icon="mdi-folder-move-outline"
                       title="フォルダへ移動"
@@ -546,6 +552,32 @@
           <v-spacer />
           <v-btn variant="text" :disabled="movingFile" @click="moveDialog = false">キャンセル</v-btn>
           <v-btn color="primary" :loading="movingFile" @click="moveFile">移動</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="renameDialog" max-width="480" persistent>
+      <v-card rounded="xl">
+        <v-card-title class="pt-5">ファイル名を変更</v-card-title>
+        <v-card-text>
+          <div class="text-body-2 text-medium-emphasis mb-3">
+            拡張子は変更できません。
+          </div>
+          <v-text-field
+            v-model="renameName"
+            label="ファイル名"
+            maxlength="255"
+            counter
+            autofocus
+            variant="outlined"
+            :disabled="renamingFile"
+            @keydown.enter.prevent="renameFile"
+          />
+        </v-card-text>
+        <v-card-actions class="px-6 pb-5">
+          <v-spacer />
+          <v-btn variant="text" :disabled="renamingFile" @click="renameDialog = false">キャンセル</v-btn>
+          <v-btn color="primary" :loading="renamingFile" :disabled="!renameName.trim()" @click="renameFile">保存</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -869,6 +901,10 @@ const moveTarget = ref<ManagedFile | null>(null)
 const moveFolderId = ref('__root__')
 const moveFolders = ref<FileFolder[]>([])
 const movingFile = ref(false)
+const renameDialog = ref(false)
+const renameTarget = ref<ManagedFile | null>(null)
+const renameName = ref('')
+const renamingFile = ref(false)
 const categories = ref<FileCategory[]>([])
 const errorMessage = ref('')
 const snackbar = ref(false)
@@ -1488,6 +1524,39 @@ const moveFile = async () => {
     errorMessage.value = 'ファイルを移動できませんでした。'
   } finally {
     movingFile.value = false
+  }
+}
+
+const openRenameDialog = (file: ManagedFile) => {
+  renameTarget.value = file
+  renameName.value = file.original_name
+  renameDialog.value = true
+}
+
+const renameFile = async () => {
+  const file = renameTarget.value
+  const originalName = renameName.value.trim()
+  if (!file || !originalName || renamingFile.value) return
+
+  renamingFile.value = true
+  errorMessage.value = ''
+  try {
+    await apiFetch<{ success: boolean; original_name: string }>(
+      '/api/files/' + encodeURIComponent(file.id) + '/rename',
+      {
+        method: 'PATCH',
+        body: { original_name: originalName },
+      },
+    )
+    renameDialog.value = false
+    snackbarMessage.value = 'ファイル名を変更しました。'
+    snackbar.value = true
+    await loadFiles()
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = 'ファイル名を変更できませんでした。拡張子を維持し、使用できない文字が含まれていないか確認してください。'
+  } finally {
+    renamingFile.value = false
   }
 }
 
