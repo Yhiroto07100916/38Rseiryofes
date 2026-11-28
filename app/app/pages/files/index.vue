@@ -260,14 +260,14 @@
           </v-col>
           <v-col cols="12" sm="4">
             <v-file-input
-              v-model="selectedFiles"
+              :model-value="selectedFiles"
               label="ファイルを選択"
+              @update:model-value="addSelectedFiles"
               prepend-icon="mdi-paperclip"
               variant="outlined"
               density="comfortable"
               :show-size="true"
               multiple
-              :disabled="uploading"
               hide-details
               clearable
             />
@@ -1362,6 +1362,15 @@ const loadFiles = async () => {
 
 const fileUploadKey = (file: File) => `${file.name}:${file.size}:${file.lastModified}`
 
+const addSelectedFiles = (value: File[] | File | null) => {
+  const additions = Array.isArray(value) ? value : value ? [value] : []
+  const existingKeys = new Set(selectedFiles.value.map(fileUploadKey))
+  selectedFiles.value = [
+    ...selectedFiles.value,
+    ...additions.filter(file => !existingKeys.has(fileUploadKey(file))),
+  ]
+}
+
 const uploadFile = async () => {
   const filesToUpload = [...selectedFiles.value]
   if (filesToUpload.length === 0) return
@@ -1427,8 +1436,9 @@ const uploadFile = async () => {
       return
     }
 
-    selectedFiles.value = []
-    uploadTaskIds.value = {}
+    const completedKeys = new Set(filesToUpload.map(fileUploadKey))
+    selectedFiles.value = selectedFiles.value.filter(file => !completedKeys.has(fileUploadKey(file)))
+    for (const key of completedKeys) delete uploadTaskIds.value[key]
     notifyUpload.value = false
     uploadAccessScope.value = 'all'
     uploadVisibleUserIds.value = []
