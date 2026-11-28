@@ -73,13 +73,13 @@ const uploadAvatar = async () => {
         contextKey: `avatar:${auth.user.id}`,
         onSuccess: response => {
           if (auth.user) auth.user = { ...auth.user, avatar_key: response.avatar_key }
+          clearPreview()
+          if (fileInput.value) fileInput.value.value = ''
+          snackbar.success('プロフィール画像を変更しました。')
         },
       },
     )
     await handle.promise
-    clearPreview()
-    if (fileInput.value) fileInput.value.value = ''
-    snackbar.success('プロフィール画像を変更しました。')
   } catch (error: any) {
     snackbar.error(error?.data?.error || error?.message || '画像のアップロードに失敗しました。')
   } finally {
