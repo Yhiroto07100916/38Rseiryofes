@@ -65,9 +65,18 @@ const uploadAvatar = async () => {
   try {
     const form = new FormData()
     form.append('avatar', selectedFile.value)
-    const handle = upload<{ avatar_key: string }>(selectedFile.value, '/api/auth/avatar', form)
-    const response = await handle.promise
-    auth.user = { ...auth.user, avatar_key: response.avatar_key }
+    const handle = upload<{ avatar_key: string }>(
+      selectedFile.value,
+      '/api/auth/avatar',
+      form,
+      {
+        contextKey: `avatar:${auth.user.id}`,
+        onSuccess: response => {
+          if (auth.user) auth.user = { ...auth.user, avatar_key: response.avatar_key }
+        },
+      },
+    )
+    await handle.promise
     clearPreview()
     if (fileInput.value) fileInput.value.value = ''
     snackbar.success('プロフィール画像を変更しました。')
