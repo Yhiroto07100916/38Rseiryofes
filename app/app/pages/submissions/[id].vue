@@ -365,9 +365,18 @@
           >
             添付ファイルをアップロード
           </v-btn>
-          <div v-if="selectedFiles.length" class="text-caption text-medium-emphasis mt-2">
-            {{ uploadedAttachmentCount }} / {{ selectedFiles.length }} 件アップロード完了
+          <div v-if="selectedFiles.length || stagedSubmissionTasks.length" class="text-caption text-medium-emphasis mt-2">
+            アップロード済み {{ uploadedAttachmentCount }} 件
           </div>
+          <v-list v-if="stagedSubmissionTasks.length" density="compact" class="mt-2">
+            <v-list-item
+              v-for="task in stagedSubmissionTasks"
+              :key="task.id"
+              :title="task.fileName"
+              subtitle="アップロード完了・提出待ち"
+              prepend-icon="mdi-check-circle"
+            />
+          </v-list>
           <v-list v-if="selectedFiles.length" density="compact" class="mt-3">
             <v-list-item
               v-for="(file, index) in selectedFiles"
@@ -634,15 +643,22 @@ const saveEdit = async () => {
 
 const fileUploadKey = (file: File) => `${file.name}:${file.size}:${file.lastModified}`
 
-const uploadedAttachmentCount = computed(() =>
-  selectedFiles.value.filter(file => {
-    const taskId = uploadTaskIds.value[fileUploadKey(file)]
-    return queue.tasks.find(task => task.id === taskId)?.status === 'completed'
-  }).length,
+const stagedSubmissionTasks = computed(() =>
+  queue.tasks.filter(task =>
+    task.contextKey === `submission:${id}` &&
+    task.status === 'completed' &&
+    !task.linked &&
+    typeof task.resultId === 'string',
+  ),
 )
 
+const uploadedAttachmentCount = computed(() => stagedSubmissionTasks.value.length)
+
 const attachmentsReady = computed(() =>
-  selectedFiles.value.length === 0 || uploadedAttachmentCount.value === selectedFiles.value.length,
+  selectedFiles.value.every(file => {
+    const taskId = uploadTaskIds.value[fileUploadKey(file)]
+    return queue.tasks.find(task => task.id === taskId)?.status === 'completed'
+  }),
 )
 
 const handleFileChange = (event: Event) => {
@@ -672,7 +688,9 @@ const uploadAttachments = async () => {
       const formData = new FormData()
       formData.append('file', file)
       formData.append('category', 'uploads')
-      const handle = upload<UploadedSubmissionFile>(file, '/api/files', formData)
+      const handle = upload<UploadedSubmissionFile>(file, '/api/files', formData, {
+        contextKey: `submission:${id}`,
+      })
       uploadTaskIds.value[key] = handle.id
       return [handle]
     })
@@ -701,17 +719,16 @@ const submit = async () => {
 
   processing.value = true
   try {
-    const uploadedIds = selectedFiles.value.map(file => {
-      const taskId = uploadTaskIds.value[fileUploadKey(file)]
-      const task = queue.tasks.find(item => item.id === taskId)
-      return (task?.result as UploadedSubmissionFile | null)?.id
-    }).filter((value): value is string => typeof value === 'string')
+    const uploadedIds = stagedSubmissionTasks.value
+      .map(task => task.resultId)
+      .filter((value): value is string => typeof value === 'string')
 
     await api.submitSubmission(id, {
       note: submitNote.value.trim() || undefined,
       file_ids: uploadedIds,
     })
 
+    queue.markLinked(stagedSubmissionTasks.value.map(task => task.id))
     submitDialog.value = false
     submitNote.value = ''
     selectedFiles.value = []
